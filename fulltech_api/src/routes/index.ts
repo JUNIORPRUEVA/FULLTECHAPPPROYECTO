@@ -11,8 +11,13 @@ import { crmRouter } from '../modules/crm/crm.routes';
 import { customersRouter } from '../modules/customers/customers.routes';
 import { salesRouter } from '../modules/sales/sales.routes';
 import { adminRouter } from '../modules/webhooks/admin.routes';
+import { webhooksRouter } from '../modules/webhooks/webhooks.routes';
 
 export const apiRouter = Router();
+
+// Webhook alias (some reverse proxies only forward /api/*)
+// Canonical public path is mounted at /webhooks/* in src/index.ts
+apiRouter.use('/webhooks', webhooksRouter);
 
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/auth', authRouter);
