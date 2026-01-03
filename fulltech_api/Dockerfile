@@ -1,8 +1,13 @@
 # syntax=docker/dockerfile:1
 
 # ---------- Build stage ----------
-FROM node:20-alpine AS build
+FROM node:20-bookworm-slim AS build
 WORKDIR /app
+
+# Prisma needs OpenSSL at build/runtime
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends openssl ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
 
 # Install deps first (better layer caching)
 COPY package*.json ./
@@ -19,9 +24,14 @@ RUN npm run build
 
 
 # ---------- Runtime stage ----------
-FROM node:20-alpine AS runtime
+FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Prisma needs OpenSSL at runtime
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends openssl ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
 
 # Only production deps
 COPY package*.json ./
