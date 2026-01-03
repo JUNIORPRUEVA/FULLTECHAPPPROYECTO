@@ -164,7 +164,11 @@ export async function sendTextMessage(req: Request, res: Response) {
 
     emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
 
-    throw new ApiError(502, 'Evolution send failed', { error: e?.message ?? String(e) });
+    // Return the failed message to the client so the UI can keep working.
+    res.status(201).json({
+      item: updated,
+      warning: 'Evolution send failed',
+    });
   }
 }
 
@@ -238,7 +242,11 @@ export async function sendMediaMessage(req: Request, res: Response) {
 
     emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
 
-    throw new ApiError(502, 'Evolution send failed', { error: e?.message ?? String(e) });
+    // Return the failed message to the client so the UI can keep working.
+    res.status(201).json({
+      item: updated,
+      warning: 'Evolution send failed',
+    });
   }
 }
 
