@@ -13,7 +13,7 @@ webhooksRouter.use(express.text({ type: '*/*', limit: '10mb' }));
 // PING ENDPOINT - Test connectivity from browser/curl
 // ==============================================================
 webhooksRouter.get('/evolution/ping', (_req, res) => {
-	res.json({ ok: true, message: 'Evolution webhook is reachable', timestamp: new Date().toISOString() });
+	res.status(200).send('ok');
 });
 
 // ==============================================================
