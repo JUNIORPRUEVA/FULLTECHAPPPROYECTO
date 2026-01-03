@@ -9,8 +9,8 @@ import { usersRouter } from '../modules/users/users.routes';
 import { companySettingsRouter } from '../modules/company_settings/company_settings.routes';
 import { crmRouter } from '../modules/crm/crm.routes';
 import { customersRouter } from '../modules/customers/customers.routes';
-import { webhooksRouter } from '../modules/webhooks/webhooks.routes';
 import { salesRouter } from '../modules/sales/sales.routes';
+import { adminRouter } from '../modules/webhooks/admin.routes';
 
 export const apiRouter = Router();
 
@@ -24,7 +24,7 @@ apiRouter.use('/users', usersRouter);
 apiRouter.use('/company-settings', companySettingsRouter);
 apiRouter.use('/crm', crmRouter);
 apiRouter.use('/customers', customersRouter);
-apiRouter.use('/webhooks', webhooksRouter);
 apiRouter.use('/sales', salesRouter);
+apiRouter.use('/admin', adminRouter);
 
 // TODO: Montar módulos restantes (operaciones, garantía, nómina, rrhh, guagua, etc.)

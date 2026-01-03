@@ -18,26 +18,6 @@ function safeJson(obj: unknown): string {
   }
 }
 
-function computeEventId(req: Request): string {
-  const headerId =
-    (req.header('x-event-id') ?? req.header('x-evolution-event-id') ?? '').trim();
-  if (headerId) return headerId;
-
-  const raw = safeJson(req.body);
-  return crypto.createHash('sha256').update(raw).digest('hex');
-}
-
-function checkWebhookSecret(req: Request) {
-  const secret = (env.WEBHOOK_SECRET ?? '').trim();
-  if (!secret) return;
-
-  const got = (req.header('x-evolution-webhook-secret') ?? req.header('x-webhook-secret') ?? '').trim();
-  if (!got || got !== secret) {
-    // IMPORTANT: still respond 200 to avoid infinite retries; just ignore.
-    throw new Error('Invalid webhook secret');
-  }
-}
-
 function monthFolder(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -57,7 +37,10 @@ function publicUrlForSavedFile(absPath: string): string {
   return `${env.PUBLIC_BASE_URL.replace(/\/$/, '')}/uploads/${rel}`;
 }
 
-async function maybeDownloadMedia(url: string, mimeHint?: string | null): Promise<{
+async function maybeDownloadMedia(
+  url: string,
+  mimeHint?: string | null,
+): Promise<{
   mediaUrl: string;
   mediaMime: string | null;
   mediaSize: number | null;
@@ -66,8 +49,10 @@ async function maybeDownloadMedia(url: string, mimeHint?: string | null): Promis
   try {
     if (!/^https?:\/\//i.test(url)) return null;
 
-    // If already pointing to our own uploads, keep it.
-    if (env.PUBLIC_BASE_URL && url.startsWith(env.PUBLIC_BASE_URL.replace(/\/$/, '') + '/uploads/')) {
+    if (
+      env.PUBLIC_BASE_URL &&
+      url.startsWith(env.PUBLIC_BASE_URL.replace(/\/$/, '') + '/uploads/')
+    ) {
       return { mediaUrl: url, mediaMime: mimeHint ?? null, mediaSize: null, mediaName: null };
     }
 
@@ -77,7 +62,8 @@ async function maybeDownloadMedia(url: string, mimeHint?: string | null): Promis
       maxContentLength: Math.max(1, Number(env.MAX_UPLOAD_MB ?? 25)) * 1024 * 1024,
     });
 
-    const contentType = (res.headers?.['content-type'] as string | undefined) ?? mimeHint ?? null;
+    const contentType =
+      (res.headers?.['content-type'] as string | undefined) ?? mimeHint ?? null;
 
     const extFromType = (() => {
       if (!contentType) return '';
@@ -108,58 +94,145 @@ async function maybeDownloadMedia(url: string, mimeHint?: string | null): Promis
   }
 }
 
-export async function evolutionWebhook(req: Request, res: Response) {
-  const eventId = computeEventId(req);
-  const now = new Date();
-
-  // Always log receipt so deployment logs clearly show whether Evolution is hitting us.
+function detectEventType(body: any): string | null {
   try {
-    const contentType = (req.header('content-type') ?? '').trim();
-    const contentLength = (req.header('content-length') ?? '').trim();
-    const bodyShape =
-      typeof req.body === 'string'
-        ? `string:${req.body.length}`
-        : req.body && typeof req.body === 'object'
-          ? `object_keys:${Object.keys(req.body as any).slice(0, 12).join(',')}`
-          : typeof req.body;
-    // eslint-disable-next-line no-console
-    console.log('[webhook:evolution] received', { eventId, contentType, contentLength, bodyShape });
-  } catch {
-    // ignore logging failures
-  }
+    if (body && typeof body === 'object') {
+      const eventType = body.event || body.type || body.event_type || null;
 
-  // Always 200 to avoid retries loops. We still do best-effort processing.
-  try {
-    checkWebhookSecret(req);
-  } catch (e) {
-    console.warn('[webhook:evolution] ignored (secret mismatch)', { eventId });
-    res.json({ ok: true, ignored: true });
-    return;
-  }
+      if (!eventType) {
+        if (body.key?.remoteJid || body.remoteJid) {
+          return body.key?.fromMe || body.fromMe ? 'message.sent' : 'message.received';
+        } else if (body.status || body.ack) {
+          return 'message.status';
+        } else if (body.action === 'update' || body.action === 'upsert') {
+          return `message.${body.action}`;
+        }
+      }
 
-  // Idempotency: store raw event (or ignore duplicates)
-  try {
-    await prisma.crmWebhookEvent.create({
-      data: {
-        event_id: eventId,
-        payload: req.body as any,
-      },
-    });
-  } catch (e: any) {
-    if (e?.code === 'P2002') {
-      res.json({ ok: true, deduped: true, event_id: eventId });
-      return;
+      return eventType;
     }
-    // non-fatal
-    console.warn('[webhook:evolution] could not store event', { eventId, err: e?.message });
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export async function evolutionWebhook(req: Request, res: Response) {
+  const now = new Date();
+  const ipAddress = (req.ip || req.socket.remoteAddress || 'unknown').replace('::ffff:', '');
+  const userAgent = req.get('user-agent') || 'unknown';
+
+  // ========================================================
+  // STRONG LOGGING - Always log webhook receipt
+  // ========================================================
+  const contentType = req.get('content-type') || 'none';
+  const contentLength = req.get('content-length') || 'none';
+  const bodyShape =
+    typeof req.body === 'string'
+      ? `string:${req.body.length}`
+      : req.body && typeof req.body === 'object'
+        ? `object_keys:[${Object.keys(req.body as any).slice(0, 8).join(',')}]`
+        : typeof req.body;
+
+  const eventType = detectEventType(req.body);
+
+  console.log('========================================');
+  console.log('[WEBHOOK] HIT /webhooks/evolution');
+  console.log('[WEBHOOK] Timestamp:', now.toISOString());
+  console.log('[WEBHOOK] IP:', ipAddress);
+  console.log('[WEBHOOK] User-Agent:', userAgent);
+  console.log('[WEBHOOK] Content-Type:', contentType);
+  console.log('[WEBHOOK] Content-Length:', contentLength);
+  console.log('[WEBHOOK] Body Shape:', bodyShape);
+  console.log('[WEBHOOK] Event Type:', eventType || 'unknown');
+
+  const bodyPreview =
+    typeof req.body === 'string'
+      ? req.body.substring(0, 300)
+      : safeJson(req.body).substring(0, 300);
+  console.log('[WEBHOOK] Body Preview:', bodyPreview);
+  console.log('========================================');
+
+  // ========================================================
+  // SAVE EVENT TO DATABASE - ALWAYS, NEVER THROW
+  // ========================================================
+  let eventId: string | null = null;
+  try {
+    const headers = {
+      'content-type': contentType,
+      'content-length': contentLength,
+      'user-agent': userAgent,
+      'x-forwarded-for': req.get('x-forwarded-for') || null,
+      'x-real-ip': req.get('x-real-ip') || null,
+    };
+
+    const rawBody = typeof req.body === 'string' ? req.body : safeJson(req.body);
+
+    const event = await prisma.crmWebhookEvent.create({
+      data: {
+        created_at: now,
+        headers: headers as any,
+        ip_address: ipAddress,
+        user_agent: userAgent,
+        payload: req.body as any,
+        event_type: eventType,
+        source: 'evolution',
+        raw_body:
+          rawBody.length > 10000 ? rawBody.substring(0, 10000) + '...[truncated]' : rawBody,
+      } as any,
+    });
+
+    eventId = event.id;
+    console.log('[WEBHOOK] Event saved to database:', eventId);
+  } catch (e: any) {
+    console.error('[WEBHOOK] CRITICAL: Could not save event to database:', e?.message || e);
   }
 
-  const parsed = parseEvolutionWebhook(req.body as any);
+  // ========================================================
+  // ALWAYS RESPOND 200 IMMEDIATELY
+  // ========================================================
+  res.status(200).json({
+    ok: true,
+    received: true,
+    event_id: eventId,
+    event_type: eventType,
+    timestamp: now.toISOString(),
+  });
+
+  // ========================================================
+  // PROCESS EVENT (best effort, non-blocking)
+  // ========================================================
+  setImmediate(async () => {
+    try {
+      await processWebhookEvent(req.body, eventId);
+    } catch (e: any) {
+      console.error('[WEBHOOK] Error processing event:', e?.message || e);
+
+      if (eventId) {
+        try {
+          await prisma.crmWebhookEvent.update({
+            where: { id: eventId },
+            data: {
+              processed: true,
+              processed_at: new Date(),
+              processing_error: e?.message || String(e),
+            } as any,
+          });
+        } catch (dbError) {
+          console.error('[WEBHOOK] Could not update event processing status:', dbError);
+        }
+      }
+    }
+  });
+}
+
+async function processWebhookEvent(body: any, eventId: string | null) {
+  const now = new Date();
+  const parsed = parseEvolutionWebhook(body);
 
   if (parsed.kind === 'status') {
-    // Update message status if present
     if (!parsed.messageId || !parsed.status) {
-      res.json({ ok: true, ignored: true, event_id: eventId });
+      console.log('[WEBHOOK] Status update ignored - missing messageId or status');
       return;
     }
 
@@ -171,9 +244,13 @@ export async function evolutionWebhook(req: Request, res: Response) {
       },
     });
 
-    // Best-effort: emit status update to clients.
+    console.log('[WEBHOOK] Status updated:', {
+      messageId: parsed.messageId,
+      status: parsed.status,
+      count: updated.count,
+    });
+
     if (updated.count > 0) {
-      // Find chat id for emitting.
       const msg = await prisma.crmChatMessage.findFirst({
         where: { remote_message_id: parsed.messageId },
         select: { chat_id: true },
@@ -188,13 +265,30 @@ export async function evolutionWebhook(req: Request, res: Response) {
       }
     }
 
-    res.json({ ok: true, event_id: eventId, status_updated: updated.count });
+    if (eventId) {
+      await prisma.crmWebhookEvent.update({
+        where: { id: eventId },
+        data: { processed: true, processed_at: new Date() } as any,
+      });
+    }
+
     return;
   }
 
   if (parsed.kind !== 'message') {
-    console.warn('[webhook:evolution] unknown payload shape', { eventId });
-    res.json({ ok: true, ignored: true, event_id: eventId });
+    console.log('[WEBHOOK] Unknown payload shape - kind:', parsed.kind);
+
+    if (eventId) {
+      await prisma.crmWebhookEvent.update({
+        where: { id: eventId },
+        data: {
+          processed: true,
+          processed_at: new Date(),
+          processing_error: `Unknown event kind: ${parsed.kind}`,
+        } as any,
+      });
+    }
+
     return;
   }
 
@@ -202,8 +296,19 @@ export async function evolutionWebhook(req: Request, res: Response) {
   const phone = parsed.phoneNumber ?? null;
 
   if (!waId && !phone) {
-    console.warn('[webhook:evolution] missing waId/phone', { eventId });
-    res.json({ ok: true, ignored: true, event_id: eventId });
+    console.log('[WEBHOOK] Message ignored - missing waId and phone');
+
+    if (eventId) {
+      await prisma.crmWebhookEvent.update({
+        where: { id: eventId },
+        data: {
+          processed: true,
+          processed_at: new Date(),
+          processing_error: 'Missing waId and phone',
+        } as any,
+      });
+    }
+
     return;
   }
 
@@ -221,12 +326,23 @@ export async function evolutionWebhook(req: Request, res: Response) {
   } | null = null;
 
   if (hasMedia) {
+    console.log('[WEBHOOK] Downloading media:', parsed.mediaUrl);
     storedMedia = await maybeDownloadMedia(parsed.mediaUrl!.trim(), parsed.mediaMime);
+    if (storedMedia) {
+      console.log('[WEBHOOK] Media downloaded:', storedMedia.mediaUrl);
+    } else {
+      console.warn('[WEBHOOK] Media download failed');
+    }
   }
 
   const messageType = (() => {
     const t = (parsed.type ?? 'text').toLowerCase();
-    if (['text', 'image', 'video', 'audio', 'document', 'sticker', 'location', 'contact'].includes(t)) return t;
+    if (
+      ['text', 'image', 'video', 'audio', 'document', 'sticker', 'location', 'contact'].includes(
+        t,
+      )
+    )
+      return t;
     return hasMedia ? 'document' : 'text';
   })();
 
@@ -238,6 +354,15 @@ export async function evolutionWebhook(req: Request, res: Response) {
     : hasMedia
       ? `[${messageType}]`
       : '[message]';
+
+  console.log('[WEBHOOK] Processing message:', {
+    waId: normalizedWaId,
+    direction,
+    messageType,
+    hasText,
+    hasMedia,
+    fromMe: parsed.fromMe,
+  });
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const chat = await tx.crmChat.upsert({
@@ -259,12 +384,12 @@ export async function evolutionWebhook(req: Request, res: Response) {
       },
     });
 
-    // Dedup by remote_message_id (WhatsApp message id) if present
     if (parsed.messageId && parsed.messageId.trim()) {
       const existing = await tx.crmChatMessage.findFirst({
         where: { remote_message_id: parsed.messageId.trim() },
       });
       if (existing) {
+        console.log('[WEBHOOK] Duplicate message ignored:', parsed.messageId);
         return { chat, message: existing, deduped: true };
       }
     }
@@ -285,11 +410,20 @@ export async function evolutionWebhook(req: Request, res: Response) {
       },
     });
 
+    console.log('[WEBHOOK] Message saved:', { chatId: chat.id, messageId: message.id });
+
     return { chat, message, deduped: false };
   });
 
   emitCrmEvent({ type: 'message.new', chatId: result.chat.id, messageId: result.message.id });
   emitCrmEvent({ type: 'chat.updated', chatId: result.chat.id });
 
-  res.json({ ok: true, event_id: eventId, deduped: result.deduped });
+  if (eventId) {
+    await prisma.crmWebhookEvent.update({
+      where: { id: eventId },
+      data: { processed: true, processed_at: new Date() } as any,
+    });
+  }
+
+  console.log('[WEBHOOK] Processing complete');
 }

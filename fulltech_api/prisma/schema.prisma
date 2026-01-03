@@ -406,10 +406,29 @@ model CrmChatMessage {
 }
 
 model CrmWebhookEvent {
-  id         String   @id @default(uuid()) @db.Uuid
-  event_id   String   @unique
-  payload    Json     @db.JsonB
-  created_at DateTime @default(now())
-
+  id          String    @id @default(uuid()) @db.Uuid
+  created_at  DateTime  @default(now())
+  
+  // Request metadata
+  headers     Json?     @db.JsonB
+  ip_address  String?
+  user_agent  String?
+  
+  // Event data
+  payload     Json      @db.JsonB
+  event_type  String?
+  source      String    @default("evolution")
+  
+  // Processing info
+  processed   Boolean   @default(false)
+  processed_at DateTime?
+  processing_error String?
+  
+  // For debugging
+  raw_body    String?
+  
+  @@index([created_at(sort: Desc)])
+  @@index([event_type])
+  @@index([processed])
   @@map("crm_webhook_events")
 }
