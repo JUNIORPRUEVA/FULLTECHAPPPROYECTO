@@ -115,19 +115,29 @@ class _ThreadChatPanelState extends ConsumerState<ThreadChatPanel> {
                 if (state.loading) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (state.error != null) {
-                  return Center(child: Text(state.error!));
-                }
-                if (state.items.isEmpty) {
-                  return const Center(child: Text('Sin mensajes'));
-                }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: state.items.length,
-                  itemBuilder: (context, i) {
-                    return MessageBubble(message: state.items[i]);
-                  },
+                return Column(
+                  children: [
+                    if (state.error != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                        child: Text(
+                          state.error!,
+                          style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        ),
+                      ),
+                    Expanded(
+                      child: state.items.isEmpty
+                          ? const Center(child: Text('Sin mensajes'))
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(12),
+                              itemCount: state.items.length,
+                              itemBuilder: (context, i) {
+                                return MessageBubble(message: state.items[i]);
+                              },
+                            ),
+                    ),
+                  ],
                 );
               },
             ),

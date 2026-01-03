@@ -23,6 +23,7 @@ class CrmMessagesController extends StateNotifier<CrmMessagesState> {
         loading: false,
         items: page.items,
         nextBefore: page.nextBefore,
+        error: null,
       );
     } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
@@ -58,9 +59,15 @@ class CrmMessagesController extends StateNotifier<CrmMessagesState> {
         sending: false,
         items: page.items,
         nextBefore: page.nextBefore,
+        error: null,
       );
     } catch (e) {
+      // Keep showing any existing messages; just report the error.
       state = state.copyWith(sending: false, error: e.toString());
+      try {
+        final page = await _repo.listMessages(threadId: _threadId);
+        state = state.copyWith(items: page.items, nextBefore: page.nextBefore);
+      } catch (_) {}
     }
   }
 
@@ -73,9 +80,14 @@ class CrmMessagesController extends StateNotifier<CrmMessagesState> {
         sending: false,
         items: page.items,
         nextBefore: page.nextBefore,
+        error: null,
       );
     } catch (e) {
       state = state.copyWith(sending: false, error: e.toString());
+      try {
+        final page = await _repo.listMessages(threadId: _threadId);
+        state = state.copyWith(items: page.items, nextBefore: page.nextBefore);
+      } catch (_) {}
     }
   }
 }
