@@ -1,0 +1,415 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  // Legacy values may exist in DB/JWT. API validation restricts inputs.
+  admin
+  administrador
+  vendedor
+  tecnico
+  tecnico_fijo
+  contratista
+  asistente_administrativo
+}
+
+model Empresa {
+  id         String   @id @default(uuid()) @db.Uuid
+  nombre     String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  usuarios            Usuario[]
+  company_settings    CompanySettings?
+  clientes            Cliente[]
+  ventas              Venta[]
+  categorias_producto CategoriaProducto[]
+  productos           Producto[]
+
+  customers    Customer[]
+  sales        Sale[]
+  crm_threads  CrmThread[]
+  crm_messages CrmMessage[]
+  crm_tasks    CrmTask[]
+}
+
+model Usuario {
+  id              String   @id @default(uuid()) @db.Uuid
+  empresa_id      String   @db.Uuid
+  email           String   @unique
+  nombre_completo String   @map("name")
+  password_hash   String
+  rol             UserRole @default(vendedor) @map("role")
+
+  // --- Datos extendidos (RRHH / Usuarios registrados) ---
+  posicion String?
+
+  // Datos personales / contacto
+  telefono         String?
+  direccion        String?
+  ubicacion_mapa   String?
+  fecha_nacimiento DateTime? @db.Date
+  edad             Int?
+  lugar_nacimiento String?
+  cedula_numero    String?
+
+  // Familiar / patrimonio
+  es_casado         Boolean @default(false)
+  cantidad_hijos    Int     @default(0)
+  tiene_casa_propia Boolean @default(false)
+  tiene_vehiculo    Boolean @default(false)
+  tipo_vehiculo     String?
+  placa_vehiculo    String?
+
+  // Laboral
+  ultimo_trabajo               String?
+  motivo_salida_ultimo_trabajo String?
+  fecha_ingreso_empresa        DateTime? @db.Date
+  salario_mensual              Decimal?  @db.Decimal(12, 2)
+  beneficios                   String?
+
+  // Licencias
+  es_tecnico_con_licencia             Boolean   @default(false)
+  numero_licencia_tecnica             String?
+  licencia_conducir_numero            String?
+  licencia_conducir_fecha_vencimiento DateTime? @db.Date
+
+  // Documentos
+  foto_perfil_url            String?
+  cedula_foto_frontal_url    String?
+  cedula_foto_posterior_url  String?
+  licencia_conducir_foto_url String?
+  carta_ultimo_trabajo_url   String?
+  otros_documentos_url       String[] @default([])
+
+  // Control
+  estado         String @default("activo")
+  token_version  Int    @default(0)
+  metadata       Json?  @db.JsonB
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+
+  crm_threads_asigned CrmThread[] @relation("CrmThreadAssignedUser")
+  crm_tasks_assigned  CrmTask[]   @relation("CrmTaskAssignedUser")
+}
+
+model CompanySettings {
+  id                   String   @id @default(uuid()) @db.Uuid
+  empresa_id           String   @unique @db.Uuid
+  nombre_empresa       String
+  nombre_comercial     String?
+  rnc                  String
+  telefono             String
+  direccion            String
+  ciudad               String?
+  provincia            String?
+  pais                 String?
+  email                String?
+  sitio_web            String?
+  nombre_representante String?
+  cargo_representante  String?
+  otros_detalles       String?
+  logo_url             String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+
+  @@map("company_settings")
+}
+
+model Cliente {
+  id                 String    @id @default(uuid()) @db.Uuid
+  empresa_id         String    @db.Uuid
+  nombre             String
+  telefono           String
+  email              String?
+  estado             String    @default("pendiente")
+  ultimo_mensaje     String?
+  ultima_interaccion DateTime?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+  ventas  Venta[]
+
+  @@index([empresa_id])
+}
+
+model Venta {
+  id         String   @id @default(uuid()) @db.Uuid
+  empresa_id String   @db.Uuid
+  cliente_id String   @db.Uuid
+  numero     String
+  monto      Decimal  @db.Decimal(12, 2)
+  estado     String   @default("pendiente")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+  cliente Cliente @relation(fields: [cliente_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([cliente_id])
+}
+
+model CategoriaProducto {
+  id          String   @id @default(uuid()) @db.Uuid
+  empresa_id  String   @db.Uuid
+  nombre      String
+  descripcion String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  empresa   Empresa    @relation(fields: [empresa_id], references: [id])
+  productos Producto[]
+
+  @@unique([empresa_id, nombre])
+  @@index([empresa_id])
+  @@index([is_active])
+}
+
+model Producto {
+  id            String   @id @default(uuid()) @db.Uuid
+  empresa_id    String   @db.Uuid
+  nombre        String
+  precio_compra Decimal  @db.Decimal(12, 2)
+  precio_venta  Decimal  @db.Decimal(12, 2)
+  product_type  String   @default("simple")
+  total_cost    Decimal  @default(0) @db.Decimal(12, 2)
+  total_price   Decimal  @default(0) @db.Decimal(12, 2)
+  imagen_url    String
+  categoria_id  String   @db.Uuid
+  search_count  Int      @default(0)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  empresa   Empresa           @relation(fields: [empresa_id], references: [id])
+  categoria CategoriaProducto @relation(fields: [categoria_id], references: [id])
+
+  items_as_parent ProductoItem[] @relation("ParentProducto")
+  items_as_child  ProductoItem[] @relation("ChildProducto")
+
+  @@index([empresa_id])
+  @@index([categoria_id])
+  @@index([search_count])
+  @@index([product_type])
+}
+
+model ProductoItem {
+  id                 String   @id @default(uuid()) @db.Uuid
+  parent_producto_id String   @db.Uuid
+  child_producto_id  String   @db.Uuid
+  cantidad           Decimal  @default(1) @db.Decimal(12, 2)
+  costo_unitario     Decimal  @db.Decimal(12, 2)
+  precio_unitario    Decimal  @db.Decimal(12, 2)
+  created_at         DateTime @default(now())
+
+  parent_producto Producto @relation("ParentProducto", fields: [parent_producto_id], references: [id])
+  child_producto  Producto @relation("ChildProducto", fields: [child_producto_id], references: [id])
+
+  @@unique([parent_producto_id, child_producto_id])
+  @@index([parent_producto_id])
+  @@index([child_producto_id])
+}
+
+// =====================
+// CRM (Leads/Chats) + Customers
+// =====================
+
+model Customer {
+  id             String   @id @default(uuid()) @db.Uuid
+  empresa_id     String   @db.Uuid
+  nombre         String
+  telefono       String
+  email          String?
+  direccion      String?
+  ubicacion_mapa String?
+  tags           String[] @default([])
+  notas          String?
+  origen         String   @default("whatsapp")
+
+  sync_version Int      @default(1)
+  deleted_at   DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  empresa  Empresa     @relation(fields: [empresa_id], references: [id])
+  threads  CrmThread[]
+  sales    Sale[]
+
+  @@unique([empresa_id, telefono])
+  @@index([empresa_id])
+  @@index([telefono])
+  @@map("customers_legacy")
+}
+
+model CrmThread {
+  id                   String   @id @default(uuid()) @db.Uuid
+  empresa_id            String   @db.Uuid
+  phone_number          String
+  display_name          String?
+  canal                 String   @default("whatsapp")
+  customer_id           String?  @db.Uuid
+  estado_crm            String   @default("pendiente")
+  assigned_user_id      String?  @db.Uuid
+  last_message_preview  String?
+  last_message_at       DateTime?
+  pinned               Boolean  @default(false)
+  primary_interest      String?
+
+  sync_version Int      @default(1)
+  deleted_at   DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  empresa       Empresa    @relation(fields: [empresa_id], references: [id])
+  customer      Customer?  @relation(fields: [customer_id], references: [id])
+  assigned_user Usuario?   @relation("CrmThreadAssignedUser", fields: [assigned_user_id], references: [id])
+  messages      CrmMessage[]
+  tasks         CrmTask[]
+  sales         Sale[]
+
+  @@unique([empresa_id, phone_number])
+  @@index([empresa_id, phone_number])
+  @@index([empresa_id, estado_crm])
+  @@index([empresa_id, assigned_user_id])
+  @@index([empresa_id, last_message_at])
+  @@map("crm_threads_legacy")
+}
+
+model Sale {
+  id                 String   @id @default(uuid()) @db.Uuid
+  empresa_id         String   @db.Uuid
+  thread_id          String?  @db.Uuid
+  customer_id        String?  @db.Uuid
+  total              Decimal  @db.Decimal(12, 2)
+  detalles           Json?
+  created_by_user_id String?
+
+  sync_version Int      @default(1)
+  deleted_at   DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  empresa   Empresa    @relation(fields: [empresa_id], references: [id])
+  thread    CrmThread? @relation(fields: [thread_id], references: [id])
+  customer  Customer?  @relation(fields: [customer_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([thread_id])
+  @@index([customer_id])
+  @@map("sales_legacy")
+}
+
+model CrmMessage {
+  id         String   @id @default(uuid()) @db.Uuid
+  empresa_id String   @db.Uuid
+  thread_id  String   @db.Uuid
+  message_id String?  @unique
+  from_me    Boolean
+  type       String   @default("text")
+  body       String?
+  media_url  String?
+
+  sync_version Int      @default(1)
+  deleted_at   DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  empresa Empresa   @relation(fields: [empresa_id], references: [id])
+  thread  CrmThread @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+
+  @@index([thread_id, created_at])
+  @@index([empresa_id])
+  @@map("crm_messages_legacy")
+}
+
+model CrmTask {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresa_id       String   @db.Uuid
+  thread_id        String   @db.Uuid
+  assigned_user_id String   @db.Uuid
+  tipo             String
+  fecha_hora       DateTime
+  status           String   @default("pendiente")
+  nota             String?
+
+  sync_version Int      @default(1)
+  deleted_at   DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  empresa       Empresa    @relation(fields: [empresa_id], references: [id])
+  thread        CrmThread  @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+  assigned_user Usuario   @relation("CrmTaskAssignedUser", fields: [assigned_user_id], references: [id])
+
+  @@index([assigned_user_id, fecha_hora])
+  @@index([empresa_id, status])
+  @@index([empresa_id, fecha_hora])
+  @@map("crm_tasks_legacy")
+}
+
+// =====================
+// WhatsApp CRM (Single-tenant)
+// =====================
+
+model CrmChat {
+  id                   String   @id @default(uuid()) @db.Uuid
+  wa_id                String
+  display_name          String?
+  phone                String?
+  last_message_preview  String?
+  last_message_at       DateTime?
+  unread_count          Int      @default(0)
+  status                String   @default("activo")
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  messages CrmChatMessage[]
+
+  @@unique([wa_id])
+  @@index([last_message_at])
+  @@map("crm_chats")
+}
+
+model CrmChatMessage {
+  id                String   @id @default(uuid()) @db.Uuid
+  chat_id           String   @db.Uuid
+  direction         String
+  message_type      String
+  text              String?
+  media_url         String?
+  media_mime        String?
+  media_size        Int?
+  media_name        String?
+  remote_message_id String?  @unique
+  quoted_message_id String?
+  status            String   @default("received")
+  error             String?
+  timestamp         DateTime
+  created_at        DateTime @default(now())
+
+  chat CrmChat @relation(fields: [chat_id], references: [id], onDelete: Cascade)
+
+  @@index([chat_id, timestamp(sort: Desc)])
+  @@map("crm_messages")
+}
+
+model CrmWebhookEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  event_id   String   @unique
+  payload    Json     @db.JsonB
+  created_at DateTime @default(now())
+
+  @@map("crm_webhook_events")
+}
