@@ -112,6 +112,22 @@ export async function evolutionWebhook(req: Request, res: Response) {
   const eventId = computeEventId(req);
   const now = new Date();
 
+  // Always log receipt so deployment logs clearly show whether Evolution is hitting us.
+  try {
+    const contentType = (req.header('content-type') ?? '').trim();
+    const contentLength = (req.header('content-length') ?? '').trim();
+    const bodyShape =
+      typeof req.body === 'string'
+        ? `string:${req.body.length}`
+        : req.body && typeof req.body === 'object'
+          ? `object_keys:${Object.keys(req.body as any).slice(0, 12).join(',')}`
+          : typeof req.body;
+    // eslint-disable-next-line no-console
+    console.log('[webhook:evolution] received', { eventId, contentType, contentLength, bodyShape });
+  } catch {
+    // ignore logging failures
+  }
+
   // Always 200 to avoid retries loops. We still do best-effort processing.
   try {
     checkWebhookSecret(req);
