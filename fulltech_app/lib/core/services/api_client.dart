@@ -11,9 +11,13 @@ class ApiClient {
   ApiClient._(this.dio, this.db);
 
   static Future<ApiClient> create(LocalDb db) async {
+    return forBaseUrl(db, AppConfig.apiBaseUrl);
+  }
+
+  static ApiClient forBaseUrl(LocalDb db, String baseUrl) {
     final dio = Dio(
       BaseOptions(
-        baseUrl: AppConfig.apiBaseUrl,
+        baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 20),
         headers: {
@@ -43,7 +47,7 @@ class ApiClient {
             // Notify app layers (router/state) to force logout.
             AuthEvents.unauthorized(error.response?.statusCode);
           }
-          
+
           handler.next(error);
         },
       ),

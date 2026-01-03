@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/state/auth_providers.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/app_config.dart';
 import '../data/datasources/crm_remote_datasource.dart';
 import '../data/datasources/customers_remote_datasource.dart';
 import '../data/repositories/crm_repository.dart';
@@ -14,8 +16,12 @@ import 'customer_detail_state.dart';
 import 'customers_controller.dart';
 import 'customers_state.dart';
 
+final crmApiClientProvider = Provider<ApiClient>((ref) {
+  return ApiClient.forBaseUrl(ref.watch(localDbProvider), AppConfig.crmApiBaseUrl);
+});
+
 final crmRemoteDataSourceProvider = Provider<CrmRemoteDataSource>((ref) {
-  return CrmRemoteDataSource(ref.watch(apiClientProvider).dio);
+  return CrmRemoteDataSource(ref.watch(crmApiClientProvider).dio);
 });
 
 final crmRepositoryProvider = Provider<CrmRepository>((ref) {
@@ -40,7 +46,7 @@ final crmMessagesControllerProvider = StateNotifierProvider.family<
 });
 
 final customersRemoteDataSourceProvider = Provider<CustomersRemoteDataSource>((ref) {
-  return CustomersRemoteDataSource(ref.watch(apiClientProvider).dio);
+  return CustomersRemoteDataSource(ref.watch(crmApiClientProvider).dio);
 });
 
 final customersRepositoryProvider = Provider<CustomersRepository>((ref) {
