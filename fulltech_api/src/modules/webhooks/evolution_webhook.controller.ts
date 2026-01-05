@@ -423,6 +423,26 @@ async function processWebhookEvent(body: any, eventId: string | null) {
   });
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // DEDUPE FIRST: Evolution/Baileys can emit two events for the same message id
+    // (e.g., one with "@s.whatsapp.net" and another with "@lid").
+    // If we upsert the chat first, we may create a bogus "@lid" chat and then
+    // ignore the real one. Always check for an existing message before touching chats.
+    if (parsed.messageId && parsed.messageId.trim()) {
+      const existing = await tx.crmChatMessage.findFirst({
+        where: { remote_message_id: parsed.messageId.trim() },
+      });
+      if (existing) {
+        console.log('[WEBHOOK] Duplicate message ignored:', parsed.messageId);
+        const existingChat = await tx.crmChat.findUnique({
+          where: { id: existing.chat_id },
+        });
+        if (!existingChat) {
+          throw new Error('Duplicate message references missing chat');
+        }
+        return { chat: existingChat, message: existing, deduped: true };
+      }
+    }
+
     const chat = await tx.crmChat.upsert({
       where: { wa_id: normalizedWaId },
       create: {
@@ -441,16 +461,6 @@ async function processWebhookEvent(body: any, eventId: string | null) {
         ...(direction === 'in' ? { unread_count: { increment: 1 } } : null),
       },
     });
-
-    if (parsed.messageId && parsed.messageId.trim()) {
-      const existing = await tx.crmChatMessage.findFirst({
-        where: { remote_message_id: parsed.messageId.trim() },
-      });
-      if (existing) {
-        console.log('[WEBHOOK] Duplicate message ignored:', parsed.messageId);
-        return { chat, message: existing, deduped: true };
-      }
-    }
 
     const message = await tx.crmChatMessage.create({
       data: {

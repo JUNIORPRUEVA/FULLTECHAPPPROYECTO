@@ -178,23 +178,31 @@ export function parseEvolutionWebhook(body: AnyObj): ParsedEvolutionWebhook {
       (body as any)?.phone_number,
   );
 
-  const phoneHintRaw = fromMe
-    ? asString(
-        data.destination ??
-          (body as any)?.destination ??
-          data.to ??
-          (body as any)?.to ??
-          remoteJidRaw,
-      )
-    : asString(
-        data.sender ??
-          (body as any)?.sender ??
-          data.from ??
-          (body as any)?.from ??
-          remoteJidRaw,
-      );
+  const pickPhoneFrom = (candidates: Array<any>): string | null => {
+    for (const c of candidates) {
+      const s = asString(c);
+      if (!s) continue;
+      // If the value itself is a LID JID, skip it as a "phone" hint.
+      if (/@lid$/i.test(s.trim())) continue;
+      const p = normalizePhone(s);
+      if (p) return p;
+    }
+    return null;
+  };
 
-  const phoneNumber = normalizePhone(phoneHintRaw);
+  const phoneNumber = fromMe
+    ? (pickPhoneFrom([
+        data.destination,
+        (body as any)?.destination,
+        data.to,
+        (body as any)?.to,
+      ]) ?? normalizePhone(remoteJidRaw))
+    : (pickPhoneFrom([
+        data.sender,
+        (body as any)?.sender,
+        data.from,
+        (body as any)?.from,
+      ]) ?? normalizePhone(remoteJidRaw));
 
   // Canonicalize waId: if Evolution sends "@lid" ids, but we do have a phone number,
   // use the stable WhatsApp JID format so the chat is consistent.

@@ -6,18 +6,43 @@ export type EvolutionSendResult = {
   raw: any;
 };
 
+function applyDefaultCountryCode(digitsOnly: string): string {
+  const d = String(digitsOnly ?? '').replace(/\D+/g, '');
+  if (!d) return d;
+  // If it already looks like E.164 without '+', keep it.
+  // For NANP destinations, if we have 10 digits, prefix with default country code.
+  if (d.length === 10) {
+    const cc = (env.EVOLUTION_DEFAULT_COUNTRY_CODE ?? '1').replace(/\D+/g, '') || '1';
+    return `${cc}${d}`;
+  }
+  return d;
+}
+
 function normalizeDestNumber(opts: { toPhone?: string; toWaId?: string }): string {
+  const phone = (opts.toPhone ?? '').trim();
   const wa = (opts.toWaId ?? '').trim();
-  if (wa) {
-    // Typical WhatsApp IDs: "809xxxxxxx@s.whatsapp.net" or "809xxxxxxx@c.us"
-    const at = wa.indexOf('@');
-    const base = at >= 0 ? wa.slice(0, at) : wa;
-    return base.replace(/[^0-9]/g, '') || base;
+
+  // IMPORTANT: "@lid" is not a stable/routeable destination for most Evolution deployments.
+  // If we have a phone number, prefer it over the LID value.
+  if (wa && /@lid$/i.test(wa) && phone) {
+    const digits = phone.replace(/[^0-9]/g, '') || phone;
+    const normalized = applyDefaultCountryCode(digits);
+    return env.EVOLUTION_NUMBER_AS_JID ? `${normalized}@s.whatsapp.net` : normalized;
   }
 
-  const phone = (opts.toPhone ?? '').trim();
+  if (wa) {
+    // Typical WhatsApp IDs: "809xxxxxxx@s.whatsapp.net" or "809xxxxxxx@c.us" or "1203...@g.us"
+    const at = wa.indexOf('@');
+    const base = at >= 0 ? wa.slice(0, at) : wa;
+    const digits = base.replace(/[^0-9]/g, '') || base;
+    const normalized = applyDefaultCountryCode(digits);
+    return env.EVOLUTION_NUMBER_AS_JID ? `${normalized}@s.whatsapp.net` : normalized;
+  }
+
   if (!phone) throw new Error('Missing destination (toPhone or toWaId)');
-  return phone.replace(/[^0-9]/g, '') || phone;
+  const digits = phone.replace(/[^0-9]/g, '') || phone;
+  const normalized = applyDefaultCountryCode(digits);
+  return env.EVOLUTION_NUMBER_AS_JID ? `${normalized}@s.whatsapp.net` : normalized;
 }
 
 export class EvolutionClient {

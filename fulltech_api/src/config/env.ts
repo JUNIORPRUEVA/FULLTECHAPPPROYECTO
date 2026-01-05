@@ -50,6 +50,15 @@ export const env = {
     process.env.EVOLUTION_API_INSTANCE_NAME ??
     '',
 
+  // Evolution destination formatting
+  // For DR/US (NANP) numbers, a common requirement is to send 11 digits (e.g. 1 + 829xxxxxxx).
+  EVOLUTION_DEFAULT_COUNTRY_CODE: (process.env.EVOLUTION_DEFAULT_COUNTRY_CODE ?? '1').trim(),
+  // Some Evolution deployments accept JIDs as the destination in the "number" field.
+  // Keep default false to avoid breaking deployments expecting digits only.
+  EVOLUTION_NUMBER_AS_JID: ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.EVOLUTION_NUMBER_AS_JID ?? '').trim().toLowerCase(),
+  ),
+
   // Public URL of this backend (used to build absolute media URLs).
   PUBLIC_BASE_URL:
     stripWrappingQuotes(process.env.PUBLIC_BASE_URL ?? '') ||
