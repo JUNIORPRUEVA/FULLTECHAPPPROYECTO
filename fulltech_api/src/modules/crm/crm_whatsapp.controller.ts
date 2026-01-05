@@ -529,6 +529,14 @@ export async function sendTextMessage(req: Request, res: Response) {
 
     res.status(201).json({ item: updated });
   } catch (e: any) {
+    // Log full context so we can diagnose Evolution connectivity/auth issues in EasyPanel logs.
+    console.error('[CRM] sendTextMessage: Evolution send failed', {
+      chatId,
+      waId: chat.wa_id,
+      phone: chat.phone,
+      error: e?.message ?? String(e),
+    });
+
     const updated = await prisma.crmChatMessage.update({
       where: { id: pending.id },
       data: {
@@ -546,13 +554,13 @@ export async function sendTextMessage(req: Request, res: Response) {
         `,
         auditId,
         chatId,
-        // Log full context so we can diagnose Evolution connectivity/auth issues in EasyPanel logs.
-        console.error('[CRM] sendTextMessage: Evolution send failed', {
-          chatId,
-          waId: chat.wa_id,
-          phone: chat.phone,
-          error: e?.message ?? String(e),
-        });
+        updated.id,
+        aiSuggestionId,
+        aiSuggestedText,
+        parsed.data.text.trim(),
+        JSON.stringify(aiUsedKnowledge ?? []),
+      );
+    }
 
     emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
 
@@ -624,6 +632,13 @@ export async function sendMediaMessage(req: Request, res: Response) {
 
     res.status(201).json({ item: updated });
   } catch (e: any) {
+    console.error('[CRM] sendMediaMessage: Evolution send failed', {
+      chatId,
+      waId: chat.wa_id,
+      phone: chat.phone,
+      error: e?.message ?? String(e),
+    });
+
     const updated = await prisma.crmChatMessage.update({
       where: { id: msg.id },
       data: {
@@ -658,12 +673,13 @@ export async function markChatRead(req: Request, res: Response) {
   res.json({ ok: true });
 }
 
-        console.error('[CRM] sendMediaMessage: Evolution send failed', {
-          chatId,
-          waId: chat.wa_id,
-          phone: chat.phone,
-          error: e?.message ?? String(e),
-        });
+export async function sseStream(req: Request, res: Response) {
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  // Send a first ping so proxies open the stream.
   res.write(`event: ping\ndata: ${JSON.stringify({ ok: true })}\n\n`);
 
   const { onCrmEvent } = await import('./crm_stream');
