@@ -105,11 +105,13 @@ export class EvolutionClient {
 
     const number = normalizeDestNumber({ toPhone, toWaId });
 
+    const trimmed = String(text ?? '').trim();
+    if (!trimmed) throw new Error('Text message is empty');
+
     const payload = {
       number,
-      textMessage: {
-        text,
-      },
+      // Evolution deployments commonly expect a root-level "text".
+      text: trimmed,
     };
 
     const res = await this._postWithInstanceFallback(url, payload);

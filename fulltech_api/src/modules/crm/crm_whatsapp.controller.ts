@@ -113,9 +113,37 @@ function isMissingTableError(err: unknown, tableName: string): boolean {
   );
 }
 
+let crmChatMetaExistsCache: boolean | null = null;
+let crmChatMetaExistsAtMs = 0;
+async function crmChatMetaExists(): Promise<boolean> {
+  const now = Date.now();
+  if (crmChatMetaExistsCache != null && now - crmChatMetaExistsAtMs < 60_000) {
+    return crmChatMetaExistsCache;
+  }
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
+      'SELECT to_regclass($1) as regclass',
+      'public.crm_chat_meta',
+    );
+
+    const exists = Boolean(rows?.[0]?.regclass);
+    crmChatMetaExistsCache = exists;
+    crmChatMetaExistsAtMs = now;
+    return exists;
+  } catch {
+    // Be conservative: if we can't check, assume it doesn't exist to avoid runtime noise.
+    crmChatMetaExistsCache = false;
+    crmChatMetaExistsAtMs = now;
+    return false;
+  }
+}
+
 async function fetchChatMeta(chatIds: string[]): Promise<Map<string, any>> {
   const map = new Map<string, any>();
   if (chatIds.length === 0) return map;
+
+  if (!(await crmChatMetaExists())) return map;
 
   // Safe, parameterized query.
   let rows: any[] = [];
@@ -149,6 +177,8 @@ async function upsertChatMeta(
     assigned_user_id?: string | null;
   },
 ): Promise<void> {
+  if (!(await crmChatMetaExists())) return;
+
   const important = data.important ?? false;
   const productId = data.product_id ?? null;
   const internalNote = data.internal_note ?? null;
@@ -264,6 +294,12 @@ export async function listChats(req: Request, res: Response) {
 
   const effectiveProductId = (productId ?? product_id ?? '').trim();
   if (effectiveProductId.length > 0) {
+    if (!(await crmChatMetaExists())) {
+      // If meta table doesn't exist, product filtering can't be applied.
+      res.json({ items: [], total: 0, page, limit });
+      return;
+    }
+
     let rows: { chat_id: string }[] = [];
     try {
       rows = await prisma.$queryRawUnsafe<{ chat_id: string }[]>(
@@ -376,13 +412,11 @@ export async function listChatStats(_req: Request, res: Response) {
 
   // Important flag lives in crm_chat_meta.
   let importantCount = 0;
-  try {
+  if (await crmChatMetaExists()) {
     const importantRows = await prisma.$queryRawUnsafe<{ count: number }[]>(
       `SELECT COUNT(*)::int as count FROM crm_chat_meta WHERE important = TRUE`,
     );
     importantCount = importantRows?.[0]?.count ?? 0;
-  } catch (e) {
-    if (!isMissingTableError(e, 'crm_chat_meta')) throw e;
   }
 
   const byStatus: Record<string, number> = {};

@@ -7,6 +7,30 @@ import { AiSuggestService } from '../../services/aiSuggestService';
 import { AiLetterService } from '../../services/aiLetterService';
 import { aiGenerateLetterSchema, aiSettingsUpsertSchema, aiSuggestSchema } from './ai.schema';
 
+let aiSettingsExistsCache: boolean | null = null;
+let aiSettingsExistsAtMs = 0;
+async function aiSettingsTableExists(): Promise<boolean> {
+  const now = Date.now();
+  if (aiSettingsExistsCache != null && now - aiSettingsExistsAtMs < 60_000) {
+    return aiSettingsExistsCache;
+  }
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
+      'SELECT to_regclass($1) as regclass',
+      'public.ai_settings',
+    );
+    const exists = Boolean(rows?.[0]?.regclass);
+    aiSettingsExistsCache = exists;
+    aiSettingsExistsAtMs = now;
+    return exists;
+  } catch {
+    aiSettingsExistsCache = false;
+    aiSettingsExistsAtMs = now;
+    return false;
+  }
+}
+
 function normalizeText(input: string): string {
   return input
     .toLowerCase()
@@ -28,6 +52,19 @@ function parseKeywords(v: any): string[] {
 }
 
 async function loadSettings() {
+  if (!(await aiSettingsTableExists())) {
+    return {
+      enabled: true,
+      quickRepliesEnabled: true,
+      systemPrompt: null,
+      tone: 'Ejecutivo',
+      rules: null,
+      businessData: {},
+      promptVersion: 1,
+      updatedAt: null,
+    };
+  }
+
   const rows = await prisma.$queryRawUnsafe<any[]>(
     `SELECT id, enabled, quick_replies_enabled, system_prompt, tone, rules, business_data, prompt_version, updated_at
      FROM ai_settings
@@ -110,6 +147,13 @@ export async function getAiSettings(_req: Request, res: Response) {
 }
 
 export async function patchAiSettings(req: Request, res: Response) {
+  if (!(await aiSettingsTableExists())) {
+    throw new ApiError(
+      503,
+      'AI settings are not initialized (missing ai_settings table). Run the AI settings SQL migration first.',
+    );
+  }
+
   const parsed = aiSettingsUpsertSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
 
