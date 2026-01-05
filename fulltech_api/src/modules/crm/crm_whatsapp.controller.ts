@@ -96,19 +96,43 @@ function toChatApiItem(chat: any) {
   };
 }
 
+function isMissingTableError(err: unknown, tableName: string): boolean {
+  const lower = tableName.toLowerCase();
+  const message = String((err as any)?.message ?? '');
+  const metaMessage = String((err as any)?.meta?.message ?? '');
+  const metaCode = String((err as any)?.meta?.code ?? '');
+
+  // Postgres undefined_table
+  if (metaCode === '42P01') return true;
+
+  const haystack = `${message}\n${metaMessage}`.toLowerCase();
+  return (
+    haystack.includes(`relation "${lower}" does not exist`) ||
+    haystack.includes(`table "${lower}" does not exist`) ||
+    haystack.includes(`no such table: ${lower}`)
+  );
+}
+
 async function fetchChatMeta(chatIds: string[]): Promise<Map<string, any>> {
   const map = new Map<string, any>();
   if (chatIds.length === 0) return map;
 
   // Safe, parameterized query.
-  const rows = await prisma.$queryRawUnsafe<any[]>(
-    `
-      SELECT chat_id, important, product_id, internal_note, assigned_user_id
-      FROM crm_chat_meta
-      WHERE chat_id = ANY($1::uuid[])
-    `,
-    chatIds,
-  );
+  let rows: any[] = [];
+  try {
+    rows = await prisma.$queryRawUnsafe<any[]>(
+      `
+        SELECT chat_id, important, product_id, internal_note, assigned_user_id
+        FROM crm_chat_meta
+        WHERE chat_id = ANY($1::uuid[])
+      `,
+      chatIds,
+    );
+  } catch (e) {
+    // If meta table doesn't exist yet, treat as no meta instead of 500.
+    if (isMissingTableError(e, 'crm_chat_meta')) return map;
+    throw e;
+  }
 
   for (const r of rows) {
     map.set(String(r.chat_id), r);
@@ -130,24 +154,30 @@ async function upsertChatMeta(
   const internalNote = data.internal_note ?? null;
   const assignedUserId = data.assigned_user_id ?? null;
 
-  await prisma.$executeRawUnsafe(
-    `
-      INSERT INTO crm_chat_meta (chat_id, important, product_id, internal_note, assigned_user_id, updated_at)
-      VALUES ($1::uuid, $2::boolean, $3::text, $4::text, $5::uuid, now())
-      ON CONFLICT (chat_id)
-      DO UPDATE SET
-        important = EXCLUDED.important,
-        product_id = EXCLUDED.product_id,
-        internal_note = EXCLUDED.internal_note,
-        assigned_user_id = EXCLUDED.assigned_user_id,
-        updated_at = now()
-    `,
-    chatId,
-    important,
-    productId,
-    internalNote,
-    assignedUserId,
-  );
+  try {
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO crm_chat_meta (chat_id, important, product_id, internal_note, assigned_user_id, updated_at)
+        VALUES ($1::uuid, $2::boolean, $3::text, $4::text, $5::uuid, now())
+        ON CONFLICT (chat_id)
+        DO UPDATE SET
+          important = EXCLUDED.important,
+          product_id = EXCLUDED.product_id,
+          internal_note = EXCLUDED.internal_note,
+          assigned_user_id = EXCLUDED.assigned_user_id,
+          updated_at = now()
+      `,
+      chatId,
+      important,
+      productId,
+      internalNote,
+      assignedUserId,
+    );
+  } catch (e) {
+    // If meta table doesn't exist yet, ignore instead of 500.
+    if (isMissingTableError(e, 'crm_chat_meta')) return;
+    throw e;
+  }
 }
 
 function toMessageApiItem(m: any) {
@@ -234,10 +264,21 @@ export async function listChats(req: Request, res: Response) {
 
   const effectiveProductId = (productId ?? product_id ?? '').trim();
   if (effectiveProductId.length > 0) {
-    const rows = await prisma.$queryRawUnsafe<{ chat_id: string }[]>(
-      `SELECT chat_id FROM crm_chat_meta WHERE product_id = $1::text`,
-      effectiveProductId,
-    );
+    let rows: { chat_id: string }[] = [];
+    try {
+      rows = await prisma.$queryRawUnsafe<{ chat_id: string }[]>(
+        `SELECT chat_id FROM crm_chat_meta WHERE product_id = $1::text`,
+        effectiveProductId,
+      );
+    } catch (e) {
+      // If meta table doesn't exist, product filtering can't be applied.
+      // Return empty instead of 500 for safety.
+      if (isMissingTableError(e, 'crm_chat_meta')) {
+        res.json({ items: [], total: 0, page, limit });
+        return;
+      }
+      throw e;
+    }
     const ids = rows.map((r) => String(r.chat_id));
     // If no matches, return empty quickly.
     if (ids.length === 0) {
@@ -334,10 +375,15 @@ export async function listChatStats(_req: Request, res: Response) {
   ]);
 
   // Important flag lives in crm_chat_meta.
-  const importantRows = await prisma.$queryRawUnsafe<{ count: number }[]>(
-    `SELECT COUNT(*)::int as count FROM crm_chat_meta WHERE important = TRUE`,
-  );
-  const importantCount = importantRows?.[0]?.count ?? 0;
+  let importantCount = 0;
+  try {
+    const importantRows = await prisma.$queryRawUnsafe<{ count: number }[]>(
+      `SELECT COUNT(*)::int as count FROM crm_chat_meta WHERE important = TRUE`,
+    );
+    importantCount = importantRows?.[0]?.count ?? 0;
+  } catch (e) {
+    if (!isMissingTableError(e, 'crm_chat_meta')) throw e;
+  }
 
   const byStatus: Record<string, number> = {};
   for (const r of byStatusRows) {
