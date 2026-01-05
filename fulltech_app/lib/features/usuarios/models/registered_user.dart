@@ -38,6 +38,9 @@ class RegisteredUser {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  /// Meta de ventas (quincenal). Puede venir como `meta_ventas` o dentro de `metadata.meta_ventas`.
+  final num? metaVentas;
+
   const RegisteredUser({
     required this.id,
     required this.empresaId,
@@ -70,6 +73,7 @@ class RegisteredUser {
     this.estado,
     this.createdAt,
     this.updatedAt,
+    this.metaVentas,
   });
 
   static DateTime? _parseDate(dynamic v) {
@@ -84,6 +88,21 @@ class RegisteredUser {
   }
 
   factory RegisteredUser.fromJson(Map<String, dynamic> json) {
+    num? readMetaVentas() {
+      final direct = json['meta_ventas'];
+      if (direct is num) return direct;
+      if (direct is String) return num.tryParse(direct);
+
+      final metadata = json['metadata'];
+      if (metadata is Map) {
+        final mv = metadata['meta_ventas'];
+        if (mv is num) return mv;
+        if (mv is String) return num.tryParse(mv);
+      }
+
+      return null;
+    }
+
     return RegisteredUser(
       id: json['id'] as String,
       empresaId: (json['empresa_id'] ?? json['empresaId']) as String,
@@ -116,6 +135,7 @@ class RegisteredUser {
       estado: json['estado'] as String?,
       createdAt: _parseDate(json['created_at']),
       updatedAt: _parseDate(json['updated_at']),
+      metaVentas: readMetaVentas(),
     );
   }
 }

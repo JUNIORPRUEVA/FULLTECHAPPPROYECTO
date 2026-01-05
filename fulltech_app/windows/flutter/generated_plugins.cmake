@@ -5,6 +5,9 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   geolocator_windows
+  just_audio_windows
+  printing
+  record_windows
   url_launcher_windows
 )
 

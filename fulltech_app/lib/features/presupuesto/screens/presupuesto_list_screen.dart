@@ -1,64 +1,109 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/routing/app_routes.dart';
 import '../../../core/widgets/module_page.dart';
-import '../models/presupuesto.dart';
-import 'presupuesto_detail_screen.dart';
+import '../models/quotation_models.dart';
+import '../state/quotation_builder_controller.dart';
 
-class PresupuestoListScreen extends StatefulWidget {
+class PresupuestoListScreen extends ConsumerStatefulWidget {
   const PresupuestoListScreen({super.key});
 
   @override
-  State<PresupuestoListScreen> createState() => _PresupuestoListScreenState();
+  ConsumerState<PresupuestoListScreen> createState() =>
+      _PresupuestoListScreenState();
 }
 
-class _PresupuestoListScreenState extends State<PresupuestoListScreen> {
-  final _items = <Presupuesto>[
-    const Presupuesto(id: '1', numero: 'P-0001', cliente: 'Juan Pérez', monto: 25000, estado: 'pendiente'),
-    const Presupuesto(id: '2', numero: 'P-0002', cliente: 'María Gómez', monto: 12000, estado: 'aprobado'),
-  ];
+class _PresupuestoListScreenState extends ConsumerState<PresupuestoListScreen> {
+  bool _loading = false;
+  String? _error;
+  List<QuotationSummary> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final api = ref.read(quotationApiProvider);
+      final raw = await api.listQuotations(limit: 20, offset: 0);
+      final items = raw.map(QuotationSummary.fromJson).toList();
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return ModulePage(
       title: 'Presupuesto',
       actions: [
+        IconButton(
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Actualizar',
+        ),
         FilledButton.icon(
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PresupuestoDetailScreen()),
-            );
+            context.go('${AppRoutes.presupuesto}/new');
           },
           icon: const Icon(Icons.add),
-          label: const Text('Nuevo'),
+          label: const Text('Nueva cotización'),
         ),
       ],
       child: Card(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            columns: const [
-              DataColumn(label: Text('Número')),
-              DataColumn(label: Text('Cliente')),
-              DataColumn(label: Text('Monto')),
-              DataColumn(label: Text('Estado')),
-            ],
-            rows: [
-              for (final p in _items)
-                DataRow(
-                  onSelectChanged: (_) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => PresupuestoDetailScreen(presupuestoId: p.id)),
-                    );
-                  },
-                  cells: [
-                    DataCell(Text(p.numero)),
-                    DataCell(Text(p.cliente)),
-                    DataCell(Text(p.monto.toStringAsFixed(2))),
-                    DataCell(Text(p.estado)),
-                  ],
+        child: Column(
+          children: [
+            if (_loading) const LinearProgressIndicator(),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 ),
-            ],
-          ),
+              ),
+            Expanded(
+              child: _items.isEmpty
+                  ? const Center(child: Text('Sin cotizaciones aún'))
+                  : ListView.separated(
+                      itemCount: _items.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final q = _items[i];
+                        return ListTile(
+                          title: Text('${q.numero} • ${q.customerName}'),
+                          subtitle: Text(
+                            'Total: ${q.total.toStringAsFixed(2)}',
+                          ),
+                          trailing: Text(
+                            '${q.createdAt.day.toString().padLeft(2, '0')}/${q.createdAt.month.toString().padLeft(2, '0')}/${q.createdAt.year}',
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );

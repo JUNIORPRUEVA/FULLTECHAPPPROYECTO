@@ -81,6 +81,12 @@ class CatalogApi {
   Future<List<Producto>> listProductos({
     String? q,
     String? categoryId,
+    int? page,
+    int? limit,
+    String? order,
+    double? minPrice,
+    double? maxPrice,
+    String? productType,
     bool includeInactive = false,
   }) async {
     try {
@@ -89,6 +95,12 @@ class CatalogApi {
         queryParameters: {
           if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
           if (categoryId != null && categoryId.trim().isNotEmpty) 'category_id': categoryId.trim(),
+          if (page != null && page > 0) 'page': page,
+          if (limit != null && limit > 0) 'limit': limit,
+          if (order != null && order.trim().isNotEmpty) 'order': order.trim(),
+          if (minPrice != null) 'min_price': minPrice,
+          if (maxPrice != null) 'max_price': maxPrice,
+          if (productType != null && productType.trim().isNotEmpty) 'product_type': productType.trim(),
           if (includeInactive) 'include_inactive': 'true',
         },
       );

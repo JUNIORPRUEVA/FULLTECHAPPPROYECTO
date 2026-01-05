@@ -27,6 +27,9 @@ class UserModel {
   final num? salarioMensual;
   final String? beneficios;
 
+  /// Meta de ventas (quincenal), usada por el módulo de Ventas.
+  final num? metaVentas;
+
   final String? licenciaConducirNumero;
   final DateTime? licenciaConducirVencimiento;
 
@@ -67,6 +70,7 @@ class UserModel {
     this.fechaIngreso,
     this.salarioMensual,
     this.beneficios,
+    this.metaVentas,
     this.licenciaConducirNumero,
     this.licenciaConducirVencimiento,
     this.fotoPerfilUrl,
@@ -126,6 +130,20 @@ class UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json) {
     final otros = _stringList(json['otros_documentos'] ?? json['otros_documentos_url']);
 
+    num? readMetaVentas() {
+      final direct = json['meta_ventas'];
+      if (direct is num) return direct;
+      if (direct is String) return num.tryParse(direct);
+
+      final metadata = json['metadata'];
+      if (metadata is Map) {
+        final mv = metadata['meta_ventas'];
+        if (mv is num) return mv;
+        if (mv is String) return num.tryParse(mv);
+      }
+      return null;
+    }
+
     return UserModel(
       id: json['id'] as String,
       empresaId: (json['empresa_id'] ?? json['empresaId']) as String,
@@ -154,6 +172,7 @@ class UserModel {
       fechaIngreso: _parseDate(json['fecha_ingreso'] ?? json['fecha_ingreso_empresa']),
       salarioMensual: json['salario_mensual'] as num?,
       beneficios: _str(json['beneficios']),
+      metaVentas: readMetaVentas(),
 
       licenciaConducirNumero: _str(json['licencia_conducir_numero']),
       licenciaConducirVencimiento: _parseDate(json['licencia_conducir_fecha_vencimiento']),

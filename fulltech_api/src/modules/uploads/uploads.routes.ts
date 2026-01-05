@@ -3,8 +3,12 @@ import expressAsyncHandler from 'express-async-handler';
 import { authMiddleware } from '../../middleware/auth';
 import { requireRole } from '../../middleware/requireRole';
 import {
+  postUploadSalesEvidence,
+  postUploadOperationsMedia,
   postUploadProductImage,
   postUploadUserDocs,
+  uploadSalesEvidence,
+  uploadOperationsMedia,
   uploadProductImage,
   uploadUserDocs,
 } from './uploads.controller';
@@ -29,4 +33,22 @@ uploadsRouter.post(
   requireRole(['admin', 'administrador']),
   uploadUserDocs,
   expressAsyncHandler(postUploadUserDocs),
+);
+
+// Subida de evidencias de ventas
+// multipart/form-data: field "file"
+uploadsRouter.post(
+  '/sales',
+  requireRole(['admin', 'administrador', 'vendedor']),
+  uploadSalesEvidence,
+  expressAsyncHandler(postUploadSalesEvidence),
+);
+
+// Subida de media para Operaciones (levantamientos/instalaciones)
+// multipart/form-data: field "file"
+uploadsRouter.post(
+  '/operations',
+  requireRole(['admin', 'administrador', 'tecnico']),
+  uploadOperationsMedia,
+  expressAsyncHandler(postUploadOperationsMedia),
 );

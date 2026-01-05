@@ -14,10 +14,12 @@ import '../../auth/state/auth_state.dart';
 import '../../usuarios/data/models/user_model.dart';
 import '../../usuarios/presentation/widgets/document_preview.dart';
 import '../../usuarios/state/users_providers.dart';
+import '../../nomina/screens/my_payroll_screen.dart';
 
-final _perfilUserByIdProvider = FutureProvider.autoDispose.family<UserModel, String>((ref, userId) async {
-  return ref.read(usersRepositoryProvider).getUser(userId);
-});
+final _perfilUserByIdProvider = FutureProvider.autoDispose
+    .family<UserModel, String>((ref, userId) async {
+      return ref.read(usersRepositoryProvider).getUser(userId);
+    });
 
 class PerfilScreen extends ConsumerStatefulWidget {
   const PerfilScreen({super.key});
@@ -47,7 +49,8 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     if (url == null) return null;
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+      return trimmed;
     if (trimmed.startsWith('/')) return '${_publicBase()}$trimmed';
     return '${_publicBase()}/$trimmed';
   }
@@ -101,7 +104,8 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     );
     final f = res?.files.single;
     if (f == null) return null;
-    if (f.bytes == null && (f.path == null || f.path!.trim().isEmpty)) return null;
+    if (f.bytes == null && (f.path == null || f.path!.trim().isEmpty))
+      return null;
     return _PickedDoc(path: f.path, bytes: f.bytes);
   }
 
@@ -112,12 +116,18 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     return MultipartFile.fromFileSync(doc.path!);
   }
 
-  void _viewPdfInApp({required String userId, required String title, required String kind}) {
+  void _viewPdfInApp({
+    required String userId,
+    required String title,
+    required String kind,
+  }) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PdfViewerPage(
           title: title,
-          loadFilePath: () => ref.read(usersRepositoryProvider).downloadUserPdfToTempFile(id: userId, kind: kind),
+          loadFilePath: () => ref
+              .read(usersRepositoryProvider)
+              .downloadUserPdfToTempFile(id: userId, kind: kind),
         ),
       ),
     );
@@ -145,7 +155,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final path = await ref.read(usersRepositoryProvider).downloadUserPdfToDownloadsFile(
+      final path = await ref
+          .read(usersRepositoryProvider)
+          .downloadUserPdfToDownloadsFile(
             id: userId,
             kind: kind,
             fileName: fileName,
@@ -162,7 +174,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('No se pudo descargar el PDF: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo descargar el PDF: $e')),
+      );
     }
   }
 
@@ -184,7 +198,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     final pass2 = _password2Ctrl.text;
 
     if (nombre.isEmpty) {
-      messenger.showSnackBar(const SnackBar(content: Text('El nombre es requerido.')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('El nombre es requerido.')),
+      );
       return;
     }
     if (email.isEmpty || !email.contains('@')) {
@@ -194,11 +210,17 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     final wantsPassword = pass.trim().isNotEmpty || pass2.trim().isNotEmpty;
     if (wantsPassword) {
       if (pass.trim().length < 6) {
-        messenger.showSnackBar(const SnackBar(content: Text('La contraseña debe tener al menos 6 caracteres.')));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('La contraseña debe tener al menos 6 caracteres.'),
+          ),
+        );
         return;
       }
       if (pass != pass2) {
-        messenger.showSnackBar(const SnackBar(content: Text('Las contraseñas no coinciden.')));
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Las contraseñas no coinciden.')),
+        );
         return;
       }
     }
@@ -207,9 +229,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     try {
       String? fotoPerfilUrl;
       if (_newFotoPerfil != null) {
-        final upload = await ref.read(usersRepositoryProvider).uploadUserDocuments(
-              fotoPerfil: _toMultipart(_newFotoPerfil!),
-            );
+        final upload = await ref
+            .read(usersRepositoryProvider)
+            .uploadUserDocuments(fotoPerfil: _toMultipart(_newFotoPerfil!));
         final raw = upload['foto_perfil_url'];
         if (raw is String && raw.trim().isNotEmpty) {
           fotoPerfilUrl = raw.trim();
@@ -234,12 +256,20 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
       });
 
       if (wantsPassword) {
-        messenger.showSnackBar(const SnackBar(content: Text('Contraseña actualizada. Debes iniciar sesión de nuevo.')));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Contraseña actualizada. Debes iniciar sesión de nuevo.',
+            ),
+          ),
+        );
         ref.read(authControllerProvider.notifier).logout();
         return;
       }
 
-      messenger.showSnackBar(const SnackBar(content: Text('Perfil actualizado.')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Perfil actualizado.')),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -291,7 +321,11 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     );
   }
 
-  Widget _buildProfileContent(BuildContext context, {required String userId, required UserModel user}) {
+  Widget _buildProfileContent(
+    BuildContext context, {
+    required String userId,
+    required UserModel user,
+  }) {
     final isDesktop = MediaQuery.of(context).size.width > 900;
 
     final fotoUrl = _resolvePublicUrl(user.fotoPerfilUrl);
@@ -309,8 +343,8 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
 
     final ImageProvider? previewFoto = _newFotoPerfil != null
         ? (_newFotoPerfil!.bytes != null
-        ? MemoryImage(Uint8List.fromList(_newFotoPerfil!.bytes!))
-            : FileImage(File(_newFotoPerfil!.path!)) as ImageProvider)
+              ? MemoryImage(Uint8List.fromList(_newFotoPerfil!.bytes!))
+              : FileImage(File(_newFotoPerfil!.path!)) as ImageProvider)
         : (fotoUrl != null ? NetworkImage(fotoUrl) : null);
 
     return SingleChildScrollView(
@@ -325,15 +359,36 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                 child: CircleAvatar(
                   radius: 54,
                   backgroundImage: previewFoto,
-                  child: previewFoto == null ? const Icon(Icons.person_outline, size: 54) : null,
+                  child: previewFoto == null
+                      ? const Icon(Icons.person_outline, size: 54)
+                      : null,
                 ),
               ),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.payments_outlined),
+                  title: const Text('Mis Nóminas'),
+                  subtitle: const Text('Historial, detalles y recibos PDF'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const MyPayrollScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
               const SizedBox(height: 12),
               Center(
                 child: Text(
                   user.nombre,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -343,10 +398,19 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    Chip(label: Text(user.rol), visualDensity: VisualDensity.compact),
-                    Chip(label: Text(user.estado), visualDensity: VisualDensity.compact),
+                    Chip(
+                      label: Text(user.rol),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    Chip(
+                      label: Text(user.estado),
+                      visualDensity: VisualDensity.compact,
+                    ),
                     if ((user.posicion ?? '').trim().isNotEmpty)
-                      Chip(label: Text(user.posicion!), visualDensity: VisualDensity.compact),
+                      Chip(
+                        label: Text(user.posicion!),
+                        visualDensity: VisualDensity.compact,
+                      ),
                   ],
                 ),
               ),
@@ -356,7 +420,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                 const Divider(height: 18),
                 Text(
                   'Editar (solo nombre, email, contraseña y foto de perfil)',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -382,7 +448,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                       width: 420,
                       child: TextField(
                         controller: _passwordCtrl,
-                        decoration: const InputDecoration(labelText: 'Nueva contraseña'),
+                        decoration: const InputDecoration(
+                          labelText: 'Nueva contraseña',
+                        ),
                         obscureText: true,
                       ),
                     ),
@@ -390,7 +458,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                       width: 420,
                       child: TextField(
                         controller: _password2Ctrl,
-                        decoration: const InputDecoration(labelText: 'Confirmar contraseña'),
+                        decoration: const InputDecoration(
+                          labelText: 'Confirmar contraseña',
+                        ),
                         obscureText: true,
                       ),
                     ),
@@ -413,9 +483,15 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                       label: const Text('Cambiar foto de perfil'),
                     ),
                     FilledButton.icon(
-                      onPressed: _saving ? null : () => _saveEdits(userId: userId),
+                      onPressed: _saving
+                          ? null
+                          : () => _saveEdits(userId: userId),
                       icon: _saving
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Icon(Icons.save),
                       label: const Text('Guardar cambios'),
                     ),
@@ -429,8 +505,17 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                 spacing: 24,
                 children: [
                   SizedBox(width: 520, child: _KV('Email', user.email)),
-                  SizedBox(width: 360, child: _KV('Teléfono', user.telefono ?? 'N/A')),
-                  SizedBox(width: 360, child: _KV('Fecha ingreso', _formatDateOrNA(user.fechaIngreso))),
+                  SizedBox(
+                    width: 360,
+                    child: _KV('Teléfono', user.telefono ?? 'N/A'),
+                  ),
+                  SizedBox(
+                    width: 360,
+                    child: _KV(
+                      'Fecha ingreso',
+                      _formatDateOrNA(user.fechaIngreso),
+                    ),
+                  ),
                 ],
               ),
 
@@ -440,12 +525,20 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                 runSpacing: 12,
                 children: [
                   FilledButton.icon(
-                    onPressed: () => _viewPdfInApp(userId: userId, title: 'Ficha (PDF)', kind: 'profile-pdf'),
+                    onPressed: () => _viewPdfInApp(
+                      userId: userId,
+                      title: 'Ficha (PDF)',
+                      kind: 'profile-pdf',
+                    ),
                     icon: const Icon(Icons.picture_as_pdf),
                     label: const Text('Ficha PDF'),
                   ),
                   FilledButton.icon(
-                    onPressed: () => _viewPdfInApp(userId: userId, title: 'Contrato (PDF)', kind: 'contract-pdf'),
+                    onPressed: () => _viewPdfInApp(
+                      userId: userId,
+                      title: 'Contrato (PDF)',
+                      kind: 'contract-pdf',
+                    ),
                     icon: const Icon(Icons.visibility),
                     label: const Text('Ver contrato PDF'),
                   ),
@@ -470,7 +563,10 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                 children: [
                   _KV('Nombre', user.nombre),
                   _KV('Cédula', user.cedulaNumero ?? 'N/A'),
-                  _KV('Fecha nacimiento', _formatDateOrNA(user.fechaNacimiento)),
+                  _KV(
+                    'Fecha nacimiento',
+                    _formatDateOrNA(user.fechaNacimiento),
+                  ),
                   _KV('Edad', user.edad != null ? '${user.edad}' : 'N/A'),
                   _KV('Lugar nacimiento', user.lugarNacimiento ?? 'N/A'),
                 ],
@@ -513,7 +609,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
               const SizedBox(height: 8),
               Text(
                 'Galería de documentos',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 10),
               LayoutBuilder(
@@ -528,7 +626,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                         label: label,
                         imageUrl: url,
                         previewHeight: thumbHeight,
-                        onTapPreview: url != null ? () => _viewImageFullScreen(title: label, url: url) : null,
+                        onTapPreview: url != null
+                            ? () => _viewImageFullScreen(title: label, url: url)
+                            : null,
                       ),
                     );
                   }
@@ -543,7 +643,8 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
                       item('Licencia conducir', licenciaConducirUrl),
                       item('Carta trabajo', cartaTrabajoUrl),
                       item('Currículum', curriculumUrl),
-                      for (var i = 0; i < otrosDocs.length; i++) item('Otro ${i + 1}', otrosDocs[i]),
+                      for (var i = 0; i < otrosDocs.length; i++)
+                        item('Otro ${i + 1}', otrosDocs[i]),
                     ],
                   );
                 },
@@ -588,14 +689,18 @@ class _Section extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 10),
           if (isDesktop)
             Wrap(
               runSpacing: 10,
               spacing: 24,
-              children: children.map((kv) => SizedBox(width: 360, child: kv)).toList(),
+              children: children
+                  .map((kv) => SizedBox(width: 360, child: kv))
+                  .toList(),
             )
           else
             Column(
@@ -629,7 +734,9 @@ class _KV extends StatelessWidget {
           width: 150,
           child: Text(
             k,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
         const SizedBox(width: 8),
@@ -690,4 +797,3 @@ class _PickedDoc {
 
   const _PickedDoc({required this.path, required this.bytes});
 }
-

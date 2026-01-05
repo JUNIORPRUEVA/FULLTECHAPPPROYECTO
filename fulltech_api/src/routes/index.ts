@@ -8,10 +8,20 @@ import { uploadsRouter } from '../modules/uploads/uploads.routes';
 import { usersRouter } from '../modules/users/users.routes';
 import { companySettingsRouter } from '../modules/company_settings/company_settings.routes';
 import { crmRouter } from '../modules/crm/crm.routes';
-import { customersRouter } from '../modules/customers/customers.routes';
+import { customersRouter, crmProductsRouter } from '../modules/customers/customers.routes';
 import { salesRouter } from '../modules/sales/sales.routes';
 import { adminRouter } from '../modules/webhooks/admin.routes';
 import { webhooksRouter } from '../modules/webhooks/webhooks.routes';
+import { integrationsRouter } from '../modules/integrations/integrations.routes';
+import { aiRouter } from '../modules/ai/ai.routes';
+import punchesRouter from '../modules/punches/punches.routes';
+import attendanceRouter from '../modules/attendance/attendance.routes';
+import maintenanceRouter from '../modules/maintenance/maintenance.routes';
+import payrollRouter from '../modules/payroll/payroll.routes';
+import { quotationsRouter } from '../modules/quotations/quotations.routes';
+import { lettersRouter } from '../modules/letters/letters.routes';
+import { operationsRouter } from '../modules/operations/operations.routes';
+import { rulesRouter } from '../modules/rules/rules.routes';
 
 export const apiRouter = Router();
 
@@ -29,7 +39,18 @@ apiRouter.use('/users', usersRouter);
 apiRouter.use('/company-settings', companySettingsRouter);
 apiRouter.use('/crm', crmRouter);
 apiRouter.use('/customers', customersRouter);
+apiRouter.use('/crm/products', crmProductsRouter); // /api/crm/products/lookup
 apiRouter.use('/sales', salesRouter);
+apiRouter.use('/integrations', integrationsRouter);
+apiRouter.use('/ai', aiRouter);
+apiRouter.use('/punches', punchesRouter);
+apiRouter.use('/attendance', attendanceRouter);
+apiRouter.use('/', maintenanceRouter); // maintenance, warranty, inventory-audits
+apiRouter.use('/', payrollRouter); // payroll (admin) + my/payroll (employee)
+apiRouter.use('/quotations', quotationsRouter);
+apiRouter.use('/letters', lettersRouter);
+apiRouter.use('/operations', operationsRouter);
+apiRouter.use('/rules', rulesRouter);
 apiRouter.use('/admin', adminRouter);
 
-// TODO: Montar módulos restantes (operaciones, garantía, nómina, rrhh, guagua, etc.)
+// TODO: Montar módulos restantes (operaciones, nómina, rrhh, guagua, etc.)

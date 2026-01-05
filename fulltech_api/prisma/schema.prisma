@@ -18,6 +18,114 @@ enum UserRole {
   asistente_administrativo
 }
 
+enum RulesCategory {
+  VISION
+  MISSION
+  VALUES
+  POLICY
+  ROLE_RESPONSIBILITIES
+  PROCEDURE
+  GENERAL
+}
+
+enum PayrollPeriodHalf {
+  FIRST
+  SECOND
+}
+
+enum PayrollPeriodStatus {
+  OPEN
+  LOCKED
+  CLOSED
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PAID
+  CLOSED
+}
+
+enum PayrollEmployeeStatus {
+  READY
+  NEEDS_REVIEW
+  LOCKED
+}
+
+enum PayrollLineItemType {
+  EARNING
+  DEDUCTION
+}
+
+enum PayrollMovementType {
+  EARNING
+  DEDUCTION
+}
+
+enum PayrollMovementSource {
+  MANUAL
+  SALES_COMMISSION
+  ADVANCE
+  LOAN
+  ADJUSTMENT
+  OTHER
+}
+
+enum PayrollMovementStatus {
+  PENDING
+  APPLIED
+  VOIDED
+}
+
+enum LetterType {
+  GARANTIA
+  AGRADECIMIENTO
+  SEGUIMIENTO
+  CONFIRMACION_INSTALACION
+  RECORDATORIO_PAGO
+  RECHAZO
+  PERSONALIZADA
+}
+
+enum LetterStatus {
+  DRAFT
+  SENT
+}
+
+enum LetterExportFormat {
+  PDF
+}
+
+enum SalesPaymentMethod {
+  cash
+  card
+  transfer
+  other
+}
+
+enum SalesChannel {
+  whatsapp
+  instagram
+  facebook
+  call
+  walkin
+  other
+}
+
+enum SalesStatus {
+  confirmed
+  pending
+  cancelled
+}
+
+enum SalesEvidenceType {
+  image
+  pdf
+  link
+  text
+}
+
 model Empresa {
   id         String   @id @default(uuid()) @db.Uuid
   nombre     String
@@ -31,11 +139,34 @@ model Empresa {
   categorias_producto CategoriaProducto[]
   productos           Producto[]
 
-  customers    Customer[]
-  sales        Sale[]
-  crm_threads  CrmThread[]
-  crm_messages CrmMessage[]
-  crm_tasks    CrmTask[]
+  customers     Customer[]
+  sales         Sale[]
+  sales_records SalesRecord[]
+  crm_threads   CrmThread[]
+  crm_messages  CrmMessage[]
+  crm_tasks     CrmTask[]
+  punch_records PunchRecord[]
+
+  // Maintenance & Warranty
+  product_maintenances ProductMaintenance[]
+  warranty_cases       WarrantyCase[]
+  inventory_audits     InventoryAudit[]
+
+  quotations Quotation[]
+
+  letters Letter[]
+
+  rules_contents RulesContent[] @relation("RulesContentEmpresa")
+
+  // Operations (work orders)
+  operations_jobs OperationsJob[]
+
+  // Payroll
+  payroll_periods   PayrollPeriod[]
+  payroll_runs      PayrollRun[]
+  payroll_movements PayrollMovement[]
+  statutory_configs StatutoryConfig[]
+  audit_logs        AuditLog[]
 }
 
 model Usuario {
@@ -74,10 +205,12 @@ model Usuario {
   beneficios                   String?
 
   // Licencias
-  es_tecnico_con_licencia             Boolean   @default(false)
+  es_tecnico_con_licencia Boolean @default(false)
+
+  quotations_created                  Quotation[] @relation("QuotationCreator")
   numero_licencia_tecnica             String?
   licencia_conducir_numero            String?
-  licencia_conducir_fecha_vencimiento DateTime? @db.Date
+  licencia_conducir_fecha_vencimiento DateTime?   @db.Date
 
   // Documentos
   foto_perfil_url            String?
@@ -88,16 +221,253 @@ model Usuario {
   otros_documentos_url       String[] @default([])
 
   // Control
-  estado         String @default("activo")
-  token_version  Int    @default(0)
-  metadata       Json?  @db.JsonB
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  estado        String   @default("activo")
+  token_version Int      @default(0)
+  metadata      Json?    @db.JsonB
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
   empresa Empresa @relation(fields: [empresa_id], references: [id])
 
-  crm_threads_asigned CrmThread[] @relation("CrmThreadAssignedUser")
-  crm_tasks_assigned  CrmTask[]   @relation("CrmTaskAssignedUser")
+  crm_threads_asigned CrmThread[]   @relation("CrmThreadAssignedUser")
+  punch_records       PunchRecord[]
+  crm_tasks_assigned  CrmTask[]     @relation("CrmTaskAssignedUser")
+
+  // Maintenance & Warranty
+  product_maintenances ProductMaintenance[]
+  warranty_cases       WarrantyCase[]
+  inventory_audits     InventoryAudit[]
+
+  // Payroll
+  payroll_runs_created       PayrollRun[]             @relation("PayrollRunCreatedBy")
+  payroll_runs_approved      PayrollRun[]             @relation("PayrollRunApprovedBy")
+  payroll_runs_paid          PayrollRun[]             @relation("PayrollRunPaidBy")
+  payroll_employee_summaries PayrollEmployeeSummary[]
+  payroll_movements          PayrollMovement[]
+  payroll_movements_created  PayrollMovement[]        @relation("PayrollMovementCreatedBy")
+  payroll_movements_approved PayrollMovement[]        @relation("PayrollMovementApprovedBy")
+  payroll_payslips           PayrollPayslip[]
+  audit_logs                 AuditLog[]
+
+  letters Letter[]
+
+  rules_contents_created RulesContent[] @relation("RulesContentCreator")
+
+  // Operations (work orders)
+  operations_jobs_created OperationsJob[] @relation("OperationsJobCreator")
+  operations_jobs_assigned OperationsJob[] @relation("OperationsJobAssignedTech")
+  operations_surveys_created OperationsSurvey[] @relation("OperationsSurveyCreator")
+  operations_schedules_assigned OperationsSchedule[] @relation("OperationsScheduleAssignedTech")
+  operations_installation_reports_created OperationsInstallationReport[] @relation("OperationsInstallationReportCreator")
+  operations_warranty_tickets_assigned OperationsWarrantyTicket[] @relation("OperationsWarrantyAssignedTech")
+
+  sales_records_created SalesRecord[] @relation("SalesRecordCreator")
+}
+
+model RulesContent {
+  id                 String        @id @default(uuid()) @db.Uuid
+  empresa_id         String        @db.Uuid
+  title              String        @db.VarChar(200)
+  category           RulesCategory
+  content            String
+
+  visible_to_all     Boolean       @default(true)
+  role_visibility    UserRole[]    @default([])
+
+  is_active          Boolean       @default(true)
+  order_index        Int           @default(0)
+
+  created_by_user_id String        @db.Uuid
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+
+  empresa            Empresa       @relation("RulesContentEmpresa", fields: [empresa_id], references: [id])
+  created_by         Usuario       @relation("RulesContentCreator", fields: [created_by_user_id], references: [id])
+
+  @@index([empresa_id, category])
+  @@index([empresa_id, is_active])
+  @@index([empresa_id, updated_at])
+}
+
+model PayrollPeriod {
+  id         String              @id @default(uuid()) @db.Uuid
+  empresa_id String              @map("company_id") @db.Uuid
+  year       Int
+  month      Int
+  half       PayrollPeriodHalf
+  date_from  DateTime            @map("date_from") @db.Date
+  date_to    DateTime            @map("date_to") @db.Date
+  status     PayrollPeriodStatus @default(OPEN)
+  created_at DateTime            @default(now()) @map("created_at")
+  updated_at DateTime            @updatedAt @map("updated_at")
+
+  empresa   Empresa           @relation(fields: [empresa_id], references: [id])
+  runs      PayrollRun[]
+  movements PayrollMovement[]
+
+  @@unique([empresa_id, year, month, half], name: "payroll_period_company_year_month_half")
+  @@index([empresa_id])
+  @@index([year, month])
+  @@map("payroll_periods")
+}
+
+model PayrollRun {
+  id                  String           @id @default(uuid()) @db.Uuid
+  empresa_id          String           @map("company_id") @db.Uuid
+  period_id           String           @map("period_id") @db.Uuid
+  created_by_user_id  String           @map("created_by_user_id") @db.Uuid
+  status              PayrollRunStatus @default(DRAFT)
+  approved_by_user_id String?          @map("approved_by_user_id") @db.Uuid
+  paid_by_user_id     String?          @map("paid_by_user_id") @db.Uuid
+  paid_at             DateTime?        @map("paid_at")
+  notes               String?
+  created_at          DateTime         @default(now()) @map("created_at")
+  updated_at          DateTime         @updatedAt @map("updated_at")
+
+  empresa     Empresa       @relation(fields: [empresa_id], references: [id])
+  period      PayrollPeriod @relation(fields: [period_id], references: [id])
+  created_by  Usuario       @relation("PayrollRunCreatedBy", fields: [created_by_user_id], references: [id])
+  approved_by Usuario?      @relation("PayrollRunApprovedBy", fields: [approved_by_user_id], references: [id])
+  paid_by     Usuario?      @relation("PayrollRunPaidBy", fields: [paid_by_user_id], references: [id])
+
+  employee_summaries PayrollEmployeeSummary[]
+  payslips           PayrollPayslip[]
+
+  @@index([empresa_id])
+  @@index([period_id])
+  @@index([status])
+  @@map("payroll_runs")
+}
+
+model PayrollEmployeeSummary {
+  id               String @id @default(uuid()) @db.Uuid
+  run_id           String @map("run_id") @db.Uuid
+  employee_user_id String @map("employee_user_id") @db.Uuid
+
+  base_salary_amount          Decimal               @db.Decimal(12, 2)
+  commissions_amount          Decimal               @db.Decimal(12, 2)
+  other_earnings_amount       Decimal               @db.Decimal(12, 2)
+  gross_amount                Decimal               @db.Decimal(12, 2)
+  statutory_deductions_amount Decimal               @db.Decimal(12, 2)
+  other_deductions_amount     Decimal               @db.Decimal(12, 2)
+  net_amount                  Decimal               @db.Decimal(12, 2)
+  currency                    String                @default("DOP")
+  status                      PayrollEmployeeStatus @default(READY)
+  created_at                  DateTime              @default(now()) @map("created_at")
+  updated_at                  DateTime              @updatedAt @map("updated_at")
+
+  run        PayrollRun        @relation(fields: [run_id], references: [id])
+  employee   Usuario           @relation(fields: [employee_user_id], references: [id])
+  line_items PayrollLineItem[]
+
+  @@unique([run_id, employee_user_id], name: "payroll_summary_run_employee")
+  @@index([run_id])
+  @@index([employee_user_id])
+  @@map("payroll_employee_summaries")
+}
+
+model PayrollLineItem {
+  id                  String              @id @default(uuid()) @db.Uuid
+  employee_summary_id String              @map("employee_summary_id") @db.Uuid
+  type                PayrollLineItemType
+  concept_code        String              @map("concept_code")
+  concept_name        String              @map("concept_name")
+  amount              Decimal             @db.Decimal(12, 2)
+  meta                Json?               @db.JsonB
+  created_at          DateTime            @default(now()) @map("created_at")
+
+  employee_summary PayrollEmployeeSummary @relation(fields: [employee_summary_id], references: [id])
+
+  @@index([employee_summary_id])
+  @@index([concept_code])
+  @@map("payroll_line_items")
+}
+
+model PayrollMovement {
+  id                  String                @id @default(uuid()) @db.Uuid
+  empresa_id          String                @map("company_id") @db.Uuid
+  employee_user_id    String                @map("employee_user_id") @db.Uuid
+  movement_type       PayrollMovementType   @map("movement_type")
+  source              PayrollMovementSource
+  concept_code        String                @map("concept_code")
+  concept_name        String                @map("concept_name")
+  amount              Decimal               @db.Decimal(12, 2)
+  effective_date      DateTime              @map("effective_date") @db.Date
+  period_id           String?               @map("period_id") @db.Uuid
+  status              PayrollMovementStatus @default(PENDING)
+  created_by_user_id  String                @map("created_by_user_id") @db.Uuid
+  approved_by_user_id String?               @map("approved_by_user_id") @db.Uuid
+  note                String?
+  created_at          DateTime              @default(now()) @map("created_at")
+  updated_at          DateTime              @updatedAt @map("updated_at")
+
+  empresa     Empresa        @relation(fields: [empresa_id], references: [id])
+  employee    Usuario        @relation(fields: [employee_user_id], references: [id])
+  period      PayrollPeriod? @relation(fields: [period_id], references: [id])
+  created_by  Usuario        @relation("PayrollMovementCreatedBy", fields: [created_by_user_id], references: [id])
+  approved_by Usuario?       @relation("PayrollMovementApprovedBy", fields: [approved_by_user_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([employee_user_id])
+  @@index([period_id])
+  @@index([status])
+  @@index([effective_date])
+  @@map("payroll_movements")
+}
+
+model StatutoryConfig {
+  id         String   @id @default(uuid()) @db.Uuid
+  empresa_id String   @map("company_id") @db.Uuid
+  year       Int
+  config     Json     @db.JsonB
+  active     Boolean  @default(true)
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([year])
+  @@index([active])
+  @@map("statutory_config")
+}
+
+model PayrollPayslip {
+  id               String   @id @default(uuid()) @db.Uuid
+  run_id           String   @map("run_id") @db.Uuid
+  employee_user_id String   @map("employee_user_id") @db.Uuid
+  pdf_url          String?  @map("pdf_url")
+  snapshot         Json     @db.JsonB
+  created_at       DateTime @default(now()) @map("created_at")
+
+  run      PayrollRun @relation(fields: [run_id], references: [id])
+  employee Usuario    @relation(fields: [employee_user_id], references: [id])
+
+  @@unique([run_id, employee_user_id], name: "payroll_payslip_run_employee")
+  @@index([run_id])
+  @@index([employee_user_id])
+  @@map("payroll_payslips")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  empresa_id    String   @map("company_id") @db.Uuid
+  actor_user_id String   @map("actor_user_id") @db.Uuid
+  action        String
+  entity        String
+  entity_id     String   @map("entity_id")
+  meta          Json?    @db.JsonB
+  created_at    DateTime @default(now()) @map("created_at")
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+  actor   Usuario @relation(fields: [actor_user_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([actor_user_id])
+  @@index([entity])
+  @@index([entity_id])
+  @@index([created_at])
+  @@map("audit_log")
 }
 
 model CompanySettings {
@@ -199,6 +569,13 @@ model Producto {
   items_as_parent ProductoItem[] @relation("ParentProducto")
   items_as_child  ProductoItem[] @relation("ChildProducto")
 
+  // Maintenance & Warranty
+  maintenances          ProductMaintenance[]
+  warranty_cases        WarrantyCase[]
+  inventory_audit_items InventoryAuditItem[]
+
+  quotation_items QuotationItem[]
+
   @@index([empresa_id])
   @@index([categoria_id])
   @@index([search_count])
@@ -238,14 +615,16 @@ model Customer {
   notas          String?
   origen         String   @default("whatsapp")
 
-  sync_version Int      @default(1)
+  sync_version Int       @default(1)
   deleted_at   DateTime?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
 
-  empresa  Empresa     @relation(fields: [empresa_id], references: [id])
-  threads  CrmThread[]
-  sales    Sale[]
+  empresa    Empresa     @relation(fields: [empresa_id], references: [id])
+  threads    CrmThread[]
+  sales      Sale[]
+  quotations Quotation[]
+  operations_jobs OperationsJob[]
 
   @@unique([empresa_id, telefono])
   @@index([empresa_id])
@@ -253,28 +632,211 @@ model Customer {
   @@map("customers_legacy")
 }
 
+// =====================
+// OPERATIONS (Work Orders)
+// =====================
+
+enum OperationsJobPriority {
+  low
+  normal
+  high
+}
+
+enum OperationsJobStatus {
+  pending_survey
+  survey_in_progress
+  survey_completed
+  pending_scheduling
+  scheduled
+  installation_in_progress
+  completed
+  warranty_pending
+  warranty_in_progress
+  closed
+  cancelled
+}
+
+enum OperationsSurveyMode {
+  physical
+  virtual
+}
+
+enum OperationsSurveyComplexity {
+  basic
+  intermediate
+  complex
+}
+
+enum OperationsWarrantyStatus {
+  pending
+  in_progress
+  resolved
+}
+
+model OperationsJob {
+  id                  String @id @default(uuid()) @db.Uuid
+  empresa_id          String @db.Uuid
+  created_by_user_id  String @db.Uuid
+  assigned_tech_id    String? @db.Uuid
+  assigned_team_ids   String[] @default([])
+
+  crm_customer_id     String @db.Uuid
+  customer_name       String
+  customer_phone      String
+  customer_address    String?
+
+  service_type        String
+  priority            OperationsJobPriority @default(normal)
+  status              OperationsJobStatus @default(pending_survey)
+  notes               String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  deleted_at DateTime?
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+  created_by Usuario @relation("OperationsJobCreator", fields: [created_by_user_id], references: [id])
+  assigned_tech Usuario? @relation("OperationsJobAssignedTech", fields: [assigned_tech_id], references: [id])
+  crm_customer Customer @relation(fields: [crm_customer_id], references: [id])
+
+  survey OperationsSurvey?
+  schedule OperationsSchedule?
+  installation_reports OperationsInstallationReport[]
+  warranty_tickets OperationsWarrantyTicket[]
+
+  @@index([empresa_id])
+  @@index([crm_customer_id])
+  @@index([status])
+  @@index([priority])
+  @@index([assigned_tech_id])
+  @@index([created_at(sort: Desc)])
+  @@index([deleted_at])
+  @@map("operations_jobs")
+}
+
+model OperationsSurvey {
+  id               String @id @default(uuid()) @db.Uuid
+  job_id           String @unique @db.Uuid
+  mode             OperationsSurveyMode
+  gps_lat          Float?
+  gps_lng          Float?
+  address_confirmed String? @db.Text
+  complexity       OperationsSurveyComplexity @default(basic)
+  site_notes       String? @db.Text
+  tools_needed     Json?
+  materials_needed Json?
+  products_to_use  Json?
+  future_opportunities String? @db.Text
+  created_by_tech_id String @db.Uuid
+  created_at DateTime @default(now())
+
+  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  created_by Usuario @relation("OperationsSurveyCreator", fields: [created_by_tech_id], references: [id])
+  media OperationsSurveyMedia[]
+
+  @@index([job_id])
+  @@index([created_at(sort: Desc)])
+  @@map("operations_surveys")
+}
+
+model OperationsSurveyMedia {
+  id        String @id @default(uuid()) @db.Uuid
+  survey_id String @db.Uuid
+  type      String
+  url_or_path String
+  caption   String?
+  created_at DateTime @default(now())
+
+  survey OperationsSurvey @relation(fields: [survey_id], references: [id], onDelete: Cascade)
+
+  @@index([survey_id])
+  @@map("operations_survey_media")
+}
+
+model OperationsSchedule {
+  id                    String @id @default(uuid()) @db.Uuid
+  job_id                String @unique @db.Uuid
+  scheduled_date        DateTime @db.Date
+  preferred_time        String?
+  assigned_tech_id      String @db.Uuid
+  additional_tech_ids   String[] @default([])
+  customer_availability_notes String? @db.Text
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  assigned_tech Usuario @relation("OperationsScheduleAssignedTech", fields: [assigned_tech_id], references: [id])
+
+  @@index([job_id])
+  @@index([scheduled_date])
+  @@index([assigned_tech_id])
+  @@map("operations_schedule")
+}
+
+model OperationsInstallationReport {
+  id            String @id @default(uuid()) @db.Uuid
+  job_id        String @db.Uuid
+  started_at    DateTime?
+  finished_at   DateTime?
+  tech_notes    String? @db.Text
+  work_done_summary String? @db.Text
+  installed_products Json?
+  media_urls    String[] @default([])
+  signature_name String?
+  created_by_tech_id String @db.Uuid
+  created_at DateTime @default(now())
+
+  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  created_by Usuario @relation("OperationsInstallationReportCreator", fields: [created_by_tech_id], references: [id])
+
+  @@index([job_id])
+  @@index([created_at(sort: Desc)])
+  @@map("operations_installation_reports")
+}
+
+model OperationsWarrantyTicket {
+  id            String @id @default(uuid()) @db.Uuid
+  job_id        String @db.Uuid
+  reason        String @db.Text
+  reported_at   DateTime @default(now())
+  status        OperationsWarrantyStatus @default(pending)
+  assigned_tech_id String? @db.Uuid
+  resolution_notes String? @db.Text
+  resolved_at   DateTime?
+  created_at DateTime @default(now())
+
+  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  assigned_tech Usuario? @relation("OperationsWarrantyAssignedTech", fields: [assigned_tech_id], references: [id])
+
+  @@index([job_id])
+  @@index([status])
+  @@index([assigned_tech_id])
+  @@index([reported_at(sort: Desc)])
+  @@map("operations_warranty_tickets")
+}
+
 model CrmThread {
-  id                   String   @id @default(uuid()) @db.Uuid
-  empresa_id            String   @db.Uuid
-  phone_number          String
-  display_name          String?
-  canal                 String   @default("whatsapp")
-  customer_id           String?  @db.Uuid
-  estado_crm            String   @default("pendiente")
-  assigned_user_id      String?  @db.Uuid
-  last_message_preview  String?
-  last_message_at       DateTime?
-  pinned               Boolean  @default(false)
-  primary_interest      String?
+  id                   String    @id @default(uuid()) @db.Uuid
+  empresa_id           String    @db.Uuid
+  phone_number         String
+  display_name         String?
+  canal                String    @default("whatsapp")
+  customer_id          String?   @db.Uuid
+  estado_crm           String    @default("pendiente")
+  assigned_user_id     String?   @db.Uuid
+  last_message_preview String?
+  last_message_at      DateTime?
+  pinned               Boolean   @default(false)
+  primary_interest     String?
 
-  sync_version Int      @default(1)
+  sync_version Int       @default(1)
   deleted_at   DateTime?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
 
-  empresa       Empresa    @relation(fields: [empresa_id], references: [id])
-  customer      Customer?  @relation(fields: [customer_id], references: [id])
-  assigned_user Usuario?   @relation("CrmThreadAssignedUser", fields: [assigned_user_id], references: [id])
+  empresa       Empresa      @relation(fields: [empresa_id], references: [id])
+  customer      Customer?    @relation(fields: [customer_id], references: [id])
+  assigned_user Usuario?     @relation("CrmThreadAssignedUser", fields: [assigned_user_id], references: [id])
   messages      CrmMessage[]
   tasks         CrmTask[]
   sales         Sale[]
@@ -288,22 +850,22 @@ model CrmThread {
 }
 
 model Sale {
-  id                 String   @id @default(uuid()) @db.Uuid
-  empresa_id         String   @db.Uuid
-  thread_id          String?  @db.Uuid
-  customer_id        String?  @db.Uuid
-  total              Decimal  @db.Decimal(12, 2)
+  id                 String  @id @default(uuid()) @db.Uuid
+  empresa_id         String  @db.Uuid
+  thread_id          String? @db.Uuid
+  customer_id        String? @db.Uuid
+  total              Decimal @db.Decimal(12, 2)
   detalles           Json?
   created_by_user_id String?
 
-  sync_version Int      @default(1)
+  sync_version Int       @default(1)
   deleted_at   DateTime?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
 
-  empresa   Empresa    @relation(fields: [empresa_id], references: [id])
-  thread    CrmThread? @relation(fields: [thread_id], references: [id])
-  customer  Customer?  @relation(fields: [customer_id], references: [id])
+  empresa  Empresa    @relation(fields: [empresa_id], references: [id])
+  thread   CrmThread? @relation(fields: [thread_id], references: [id])
+  customer Customer?  @relation(fields: [customer_id], references: [id])
 
   @@index([empresa_id])
   @@index([thread_id])
@@ -311,20 +873,174 @@ model Sale {
   @@map("sales_legacy")
 }
 
+model SalesRecord {
+  id          String  @id @default(uuid()) @db.Uuid
+  empresa_id  String  @db.Uuid
+  user_id     String  @db.Uuid
+
+  customer_name  String?
+  customer_phone String?
+  customer_document String?
+  product_or_service String
+  amount            Decimal @db.Decimal(12, 2)
+  details           Json?   @db.JsonB
+  payment_method    SalesPaymentMethod? @default(other)
+  channel           SalesChannel
+  status            SalesStatus? @default(confirmed)
+  notes             String?
+  sold_at           DateTime @db.Date
+
+  evidence_required Boolean @default(true)
+  deleted           Boolean @default(false)
+  deleted_at        DateTime?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+  user    Usuario @relation("SalesRecordCreator", fields: [user_id], references: [id])
+  evidence SalesEvidence[]
+
+  @@index([empresa_id])
+  @@index([user_id])
+  @@index([sold_at])
+  @@index([channel])
+  @@index([status])
+  @@index([deleted])
+  @@map("sales")
+}
+
+model SalesEvidence {
+  id       String @id @default(uuid()) @db.Uuid
+  sale_id  String @db.Uuid
+  type     SalesEvidenceType
+  url_or_path String
+  caption  String?
+  created_at DateTime @default(now())
+
+  sale SalesRecord @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+
+  @@index([sale_id])
+  @@index([type])
+  @@map("sale_evidence")
+}
+
+model Quotation {
+  id         String @id @default(uuid()) @db.Uuid
+  empresa_id String @db.Uuid
+  numero     String
+
+  customer_id    String? @db.Uuid
+  customer_name  String
+  customer_phone String?
+  customer_email String?
+
+  itbis_enabled Boolean @default(true)
+  itbis_rate    Decimal @default(0.18) @db.Decimal(6, 4)
+  subtotal      Decimal @db.Decimal(12, 2)
+  itbis_amount  Decimal @db.Decimal(12, 2)
+  total         Decimal @db.Decimal(12, 2)
+  notes         String?
+  status        String  @default("draft")
+
+  created_by_user_id String   @db.Uuid
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  empresa  Empresa         @relation(fields: [empresa_id], references: [id])
+  customer Customer?       @relation(fields: [customer_id], references: [id])
+  creator  Usuario         @relation("QuotationCreator", fields: [created_by_user_id], references: [id])
+  items    QuotationItem[]
+  letters  Letter[]
+
+  @@unique([empresa_id, numero])
+  @@index([empresa_id])
+  @@index([customer_id])
+  @@index([created_at])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  quotation_id String  @db.Uuid
+  product_id   String? @db.Uuid
+
+  nombre          String
+  cantidad        Decimal  @db.Decimal(12, 2)
+  unit_cost       Decimal  @default(0) @db.Decimal(12, 2)
+  unit_price      Decimal  @db.Decimal(12, 2)
+  discount_pct    Decimal  @default(0) @db.Decimal(6, 2)
+  discount_amount Decimal  @default(0) @db.Decimal(12, 2)
+  line_subtotal   Decimal  @db.Decimal(12, 2)
+  line_total      Decimal  @db.Decimal(12, 2)
+  created_at      DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotation_id], references: [id], onDelete: Cascade)
+  product   Producto? @relation(fields: [product_id], references: [id])
+
+  @@index([quotation_id])
+  @@index([product_id])
+  @@map("quotation_items")
+}
+
+model Letter {
+  id         String @id @default(uuid()) @db.Uuid
+  empresa_id String @map("company_id") @db.Uuid
+  user_id    String @map("user_id") @db.Uuid
+
+  quotation_id String? @map("quotation_id") @db.Uuid
+
+  customer_name  String
+  customer_phone String?
+  customer_email String?
+
+  letter_type LetterType
+  subject     String
+  body        String
+  status      LetterStatus @default(DRAFT)
+
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  empresa   Empresa    @relation(fields: [empresa_id], references: [id])
+  user      Usuario    @relation(fields: [user_id], references: [id])
+  quotation Quotation? @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
+  exports   LetterExport[]
+
+  @@index([empresa_id])
+  @@index([user_id])
+  @@index([quotation_id])
+  @@index([letter_type])
+  @@index([created_at])
+  @@map("letters")
+}
+
+model LetterExport {
+  id        String           @id @default(uuid()) @db.Uuid
+  letter_id String           @db.Uuid
+  format    LetterExportFormat
+  file_url  String?          @map("file_url")
+  created_at DateTime        @default(now()) @map("created_at")
+
+  letter Letter @relation(fields: [letter_id], references: [id], onDelete: Cascade)
+
+  @@index([letter_id])
+  @@map("letter_exports")
+}
+
 model CrmMessage {
-  id         String   @id @default(uuid()) @db.Uuid
-  empresa_id String   @db.Uuid
-  thread_id  String   @db.Uuid
-  message_id String?  @unique
+  id         String  @id @default(uuid()) @db.Uuid
+  empresa_id String  @db.Uuid
+  thread_id  String  @db.Uuid
+  message_id String? @unique
   from_me    Boolean
-  type       String   @default("text")
+  type       String  @default("text")
   body       String?
   media_url  String?
 
-  sync_version Int      @default(1)
+  sync_version Int       @default(1)
   deleted_at   DateTime?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
 
   empresa Empresa   @relation(fields: [empresa_id], references: [id])
   thread  CrmThread @relation(fields: [thread_id], references: [id], onDelete: Cascade)
@@ -344,13 +1060,13 @@ model CrmTask {
   status           String   @default("pendiente")
   nota             String?
 
-  sync_version Int      @default(1)
+  sync_version Int       @default(1)
   deleted_at   DateTime?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
 
-  empresa       Empresa    @relation(fields: [empresa_id], references: [id])
-  thread        CrmThread  @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+  empresa       Empresa   @relation(fields: [empresa_id], references: [id])
+  thread        CrmThread @relation(fields: [thread_id], references: [id], onDelete: Cascade)
   assigned_user Usuario   @relation("CrmTaskAssignedUser", fields: [assigned_user_id], references: [id])
 
   @@index([assigned_user_id, fecha_hora])
@@ -364,16 +1080,16 @@ model CrmTask {
 // =====================
 
 model CrmChat {
-  id                   String   @id @default(uuid()) @db.Uuid
+  id                   String    @id @default(uuid()) @db.Uuid
   wa_id                String
-  display_name          String?
+  display_name         String?
   phone                String?
-  last_message_preview  String?
-  last_message_at       DateTime?
-  unread_count          Int      @default(0)
-  status                String   @default("activo")
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
+  last_message_preview String?
+  last_message_at      DateTime?
+  unread_count         Int       @default(0)
+  status               String    @default("activo")
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
 
   messages CrmChatMessage[]
 
@@ -406,29 +1122,271 @@ model CrmChatMessage {
 }
 
 model CrmWebhookEvent {
-  id          String    @id @default(uuid()) @db.Uuid
-  created_at  DateTime  @default(now())
-  
+  id         String   @id @default(uuid()) @db.Uuid
+  created_at DateTime @default(now())
+
   // Request metadata
-  headers     Json?     @db.JsonB
-  ip_address  String?
-  user_agent  String?
-  
+  headers    Json?   @db.JsonB
+  ip_address String?
+  user_agent String?
+
   // Event data
-  payload     Json      @db.JsonB
-  event_type  String?
-  source      String    @default("evolution")
-  
+  payload    Json    @db.JsonB
+  event_type String?
+  source     String  @default("evolution")
+
   // Processing info
-  processed   Boolean   @default(false)
-  processed_at DateTime?
+  processed        Boolean   @default(false)
+  processed_at     DateTime?
   processing_error String?
-  
+
   // For debugging
-  raw_body    String?
-  
+  raw_body String?
+
   @@index([created_at(sort: Desc)])
   @@index([event_type])
   @@index([processed])
   @@map("crm_webhook_events")
+}
+
+enum PunchType {
+  IN
+  LUNCH_START
+  LUNCH_END
+  OUT
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+model PunchRecord {
+  id             String    @id @default(uuid()) @db.Uuid
+  empresa_id     String    @db.Uuid
+  user_id        String    @db.Uuid
+  type           PunchType
+  datetime_utc   DateTime
+  datetime_local String?
+  timezone       String?
+
+  // Location data
+  location_lat      Decimal? @db.Decimal(10, 8)
+  location_lng      Decimal? @db.Decimal(11, 8)
+  location_accuracy Float?
+  location_provider String?
+  address_text      String?
+  location_missing  Boolean  @default(false)
+
+  // Device info
+  device_id   String?
+  device_name String?
+  platform    String?
+
+  // Metadata
+  note           String?
+  is_manual_edit Boolean    @default(false)
+  sync_status    SyncStatus @default(SYNCED)
+
+  // Audit
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  empresa Empresa @relation(fields: [empresa_id], references: [id])
+  user    Usuario @relation(fields: [user_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([user_id])
+  @@index([datetime_utc(sort: Desc)])
+  @@index([type])
+  @@index([sync_status])
+  @@index([deleted_at])
+  @@map("punch_records")
+}
+
+// ============================================
+// MAINTENANCE & WARRANTY MODULE
+// ============================================
+
+enum ProductHealthStatus {
+  OK_VERIFICADO
+  CON_PROBLEMA
+  EN_GARANTIA
+  PERDIDO
+  DANADO_SIN_GARANTIA
+  REPARADO
+  EN_REVISION
+}
+
+enum MaintenanceType {
+  VERIFICACION
+  LIMPIEZA
+  DIAGNOSTICO
+  REPARACION
+  GARANTIA
+  AJUSTE_INVENTARIO
+  OTRO
+}
+
+enum IssueCategory {
+  ELECTRICO
+  PANTALLA
+  BATERIA
+  ACCESORIOS
+  SOFTWARE
+  FISICO
+  OTRO
+}
+
+enum WarrantyStatus {
+  ABIERTO
+  ENVIADO
+  EN_PROCESO
+  APROBADO
+  RECHAZADO
+  CERRADO
+}
+
+enum AuditStatus {
+  BORRADOR
+  FINALIZADO
+}
+
+enum AuditReason {
+  VENTA_NO_REGISTRADA
+  TRASLADO
+  ERROR_CONTEO
+  PERDIDA
+  DANADO
+  GARANTIA
+  AJUSTE_MANUAL
+  OTRO
+}
+
+enum AuditAction {
+  AJUSTADO
+  REPORTADO
+  PENDIENTE
+  INVESTIGAR
+}
+
+model ProductMaintenance {
+  id                 String @id @default(uuid()) @db.Uuid
+  empresa_id         String @db.Uuid
+  producto_id        String @db.Uuid
+  created_by_user_id String @db.Uuid
+
+  maintenance_type MaintenanceType
+  status_before    ProductHealthStatus?
+  status_after     ProductHealthStatus
+  issue_category   IssueCategory?
+
+  description    String   @db.Text
+  internal_notes String?  @db.Text
+  cost           Decimal? @db.Decimal(12, 2)
+
+  warranty_case_id String?  @db.Uuid
+  attachment_urls  String[] @default([])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  empresa       Empresa       @relation(fields: [empresa_id], references: [id])
+  producto      Producto      @relation(fields: [producto_id], references: [id])
+  created_by    Usuario       @relation(fields: [created_by_user_id], references: [id])
+  warranty_case WarrantyCase? @relation(fields: [warranty_case_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([producto_id])
+  @@index([created_by_user_id])
+  @@index([status_after])
+  @@index([created_at(sort: Desc)])
+  @@index([deleted_at])
+  @@map("product_maintenances")
+}
+
+model WarrantyCase {
+  id                 String @id @default(uuid()) @db.Uuid
+  empresa_id         String @db.Uuid
+  producto_id        String @db.Uuid
+  created_by_user_id String @db.Uuid
+
+  warranty_status WarrantyStatus @default(ABIERTO)
+  supplier_name   String?
+  supplier_ticket String?
+
+  sent_date     DateTime?
+  received_date DateTime?
+  closed_at     DateTime?
+
+  problem_description String   @db.Text
+  resolution_notes    String?  @db.Text
+  attachment_urls     String[] @default([])
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  empresa      Empresa              @relation(fields: [empresa_id], references: [id])
+  producto     Producto             @relation(fields: [producto_id], references: [id])
+  created_by   Usuario              @relation(fields: [created_by_user_id], references: [id])
+  maintenances ProductMaintenance[]
+
+  @@index([empresa_id])
+  @@index([producto_id])
+  @@index([warranty_status])
+  @@index([created_at(sort: Desc)])
+  @@index([deleted_at])
+  @@map("warranty_cases")
+}
+
+model InventoryAudit {
+  id                 String @id @default(uuid()) @db.Uuid
+  empresa_id         String @db.Uuid
+  created_by_user_id String @db.Uuid
+
+  audit_from_date DateTime
+  audit_to_date   DateTime
+  week_label      String // e.g., "2026-W02"
+  notes           String?     @db.Text
+  status          AuditStatus @default(BORRADOR)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  empresa    Empresa              @relation(fields: [empresa_id], references: [id])
+  created_by Usuario              @relation(fields: [created_by_user_id], references: [id])
+  items      InventoryAuditItem[]
+
+  @@index([empresa_id])
+  @@index([week_label])
+  @@index([status])
+  @@index([created_at(sort: Desc)])
+  @@map("inventory_audits")
+}
+
+model InventoryAuditItem {
+  id          String @id @default(uuid()) @db.Uuid
+  audit_id    String @db.Uuid
+  producto_id String @db.Uuid
+
+  expected_qty Int
+  counted_qty  Int
+  diff_qty     Int
+
+  reason       AuditReason?
+  explanation  String?      @db.Text
+  action_taken AuditAction  @default(PENDIENTE)
+
+  created_at DateTime @default(now())
+
+  audit    InventoryAudit @relation(fields: [audit_id], references: [id], onDelete: Cascade)
+  producto Producto       @relation(fields: [producto_id], references: [id])
+
+  @@index([audit_id])
+  @@index([producto_id])
+  @@map("inventory_audit_items")
 }

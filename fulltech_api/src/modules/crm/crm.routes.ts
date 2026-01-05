@@ -1,10 +1,19 @@
 import { Router } from 'express';
 import expressAsyncHandler from 'express-async-handler';
 import { authMiddleware } from '../../middleware/auth';
+import { requireRole } from '../../middleware/requireRole';
+import {
+  createQuickReply,
+  deleteQuickReply,
+  listQuickReplies,
+  updateQuickReply,
+} from './crm_quick_replies.controller';
 import {
   listChats,
   listChatMessages,
+  listChatStats,
   markChatRead,
+  patchChat,
   postUpload,
   sendMediaMessage,
   sendTextMessage,
@@ -35,19 +44,39 @@ crmRouter.use(authMiddleware);
 // =====================
 
 crmRouter.get('/chats', expressAsyncHandler(listChats));
+crmRouter.get('/chats/stats', expressAsyncHandler(listChatStats));
 crmRouter.get('/chats/:chatId/messages', expressAsyncHandler(listChatMessages));
+crmRouter.patch('/chats/:chatId', expressAsyncHandler(patchChat));
+crmRouter.patch('/chats/:chatId/read', expressAsyncHandler(markChatRead));
 crmRouter.post('/chats/:chatId/messages/text', expressAsyncHandler(sendTextMessage));
 crmRouter.post(
   '/chats/:chatId/messages/media',
   uploadCrmFile,
   expressAsyncHandler(sendMediaMessage),
 );
-crmRouter.post('/chats/:chatId/mark-read', expressAsyncHandler(markChatRead));
 
 crmRouter.get('/stream', expressAsyncHandler(sseStream));
 
 // Upload helper for media
 crmRouter.post('/upload', uploadCrmFile, expressAsyncHandler(postUpload));
+
+// Quick Replies (templates) - restricted
+crmRouter.get('/quick-replies', expressAsyncHandler(listQuickReplies));
+crmRouter.post(
+  '/quick-replies',
+  requireRole(['admin', 'administrador']),
+  expressAsyncHandler(createQuickReply),
+);
+crmRouter.put(
+  '/quick-replies/:id',
+  requireRole(['admin', 'administrador']),
+  expressAsyncHandler(updateQuickReply),
+);
+crmRouter.delete(
+  '/quick-replies/:id',
+  requireRole(['admin', 'administrador']),
+  expressAsyncHandler(deleteQuickReply),
+);
 
 // Threads
 crmRouter.get('/threads', expressAsyncHandler(listThreads));

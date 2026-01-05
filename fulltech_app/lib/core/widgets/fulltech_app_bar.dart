@@ -7,6 +7,7 @@ class FulltechAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? userRole;
   final VoidCallback onOpenProfile;
   final VoidCallback onLogout;
+  final PreferredSizeWidget? bottom;
 
   const FulltechAppBar({
     super.key,
@@ -14,10 +15,12 @@ class FulltechAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.userRole,
     required this.onOpenProfile,
     required this.onLogout,
+    this.bottom,
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize =>
+      Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
@@ -32,17 +35,22 @@ class FulltechAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 2,
       shadowColor: Colors.black.withOpacity(0.25),
       titleSpacing: 12,
+      bottom: bottom,
       title: Row(
         children: [
           // Logo (placeholder until you add assets).
           // TODO: add real logo asset and use Image.asset with pubspec assets.
           const Icon(Icons.business, color: Colors.white),
           const SizedBox(width: 10),
-          Text(
-            'FULLTECH CRM & Operaciones',
-            style: textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+          Expanded(
+            child: Text(
+              'FULLTECH CRM & Operaciones',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.titleMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -51,24 +59,33 @@ class FulltechAppBar extends StatelessWidget implements PreferredSizeWidget {
         Padding(
           padding: const EdgeInsets.only(right: 8),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    userName,
-                    style: textTheme.labelLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (userRole != null)
+              Flexible(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
                     Text(
-                      userRole!,
-                      style: textTheme.labelSmall?.copyWith(color: Colors.white70),
+                      userName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.labelLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                ],
+                    if (userRole != null)
+                      Text(
+                        userRole!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(width: 12),
               const CircleAvatar(

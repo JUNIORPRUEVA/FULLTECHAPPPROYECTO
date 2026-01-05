@@ -1,14 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fulltech_app/core/utils/debouncer.dart';
 
 import '../data/repositories/crm_repository.dart';
 import 'crm_threads_state.dart';
 
 class CrmThreadsController extends StateNotifier<CrmThreadsState> {
   final CrmRepository _repo;
+  final Debouncer _debouncer = Debouncer(
+    delay: const Duration(milliseconds: 400),
+  );
 
   CrmThreadsController({required CrmRepository repo})
-      : _repo = repo,
-        super(CrmThreadsState.initial());
+    : _repo = repo,
+      super(CrmThreadsState.initial());
+
+  @override
+  void dispose() {
+    _debouncer.dispose();
+    super.dispose();
+  }
 
   Future<void> refresh() async {
     state = state.copyWith(loading: true, error: null, offset: 0);
@@ -16,6 +26,7 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
       final page = await _repo.listThreads(
         search: state.search.isEmpty ? null : state.search,
         estado: state.estado == 'todos' ? null : state.estado,
+        productId: state.productId,
         limit: state.limit,
         offset: 0,
       );
@@ -40,6 +51,7 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
       final page = await _repo.listThreads(
         search: state.search.isEmpty ? null : state.search,
         estado: state.estado == 'todos' ? null : state.estado,
+        productId: state.productId,
         limit: state.limit,
         offset: nextOffset,
       );
@@ -60,5 +72,9 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
 
   void setEstado(String value) {
     state = state.copyWith(estado: value);
+  }
+
+  void setProductId(String? value) {
+    state = state.copyWith(productId: value);
   }
 }

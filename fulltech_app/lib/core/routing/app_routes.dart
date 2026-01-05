@@ -5,8 +5,13 @@ class AppRoutes {
   static const accessRevoked = '/access-revoked';
 
   static const crm = '/crm';
+  static const customers = '/customers';
   static const presupuesto = '/presupuesto';
+  static const cotizaciones = '/cotizaciones';
+  static const informeCotizaciones = '/informe-cotizaciones';
+  static const crearCartas = '/crear-cartas';
   static const operaciones = '/operaciones';
+  static String operacionesDetail(String id) => '$operaciones/$id';
   static const garantia = '/garantia';
   static const nomina = '/nomina';
   static const ventas = '/ventas';
@@ -20,5 +25,6 @@ class AppRoutes {
   static const rrhh = '/rrhh';
   static const usuarios = '/usuarios';
   static const perfil = '/perfil';
+  static const rules = '/rules';
   static const configuracion = '/configuracion';
 }

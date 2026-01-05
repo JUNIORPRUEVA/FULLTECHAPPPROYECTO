@@ -10,6 +10,7 @@ class CrmThreadsState {
 
   final String search;
   final String estado;
+  final String? productId;
 
   const CrmThreadsState({
     required this.loading,
@@ -20,6 +21,7 @@ class CrmThreadsState {
     required this.offset,
     required this.search,
     required this.estado,
+    required this.productId,
   });
 
   factory CrmThreadsState.initial() {
@@ -32,6 +34,7 @@ class CrmThreadsState {
       offset: 0,
       search: '',
       estado: 'todos',
+      productId: null,
     );
   }
 
@@ -44,6 +47,7 @@ class CrmThreadsState {
     int? offset,
     String? search,
     String? estado,
+    String? productId,
   }) {
     return CrmThreadsState(
       loading: loading ?? this.loading,
@@ -54,6 +58,7 @@ class CrmThreadsState {
       offset: offset ?? this.offset,
       search: search ?? this.search,
       estado: estado ?? this.estado,
+      productId: productId ?? this.productId,
     );
   }
 }

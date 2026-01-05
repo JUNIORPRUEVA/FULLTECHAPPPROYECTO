@@ -20,9 +20,7 @@ class CustomerDetailController extends StateNotifier<CustomerDetailState> {
       final detail = await _repo.getCustomer(_customerId);
       state = state.copyWith(
         loading: false,
-        customer: detail.customer,
-        threads: detail.threads,
-        resumen: detail.resumen,
+        detail: detail,
       );
     } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());

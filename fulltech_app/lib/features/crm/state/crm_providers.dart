@@ -1,12 +1,23 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/state/auth_providers.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/app_config.dart';
+import '../../catalogo/state/catalog_providers.dart';
+import '../../catalogo/models/producto.dart';
 import '../data/datasources/crm_remote_datasource.dart';
 import '../data/datasources/customers_remote_datasource.dart';
 import '../data/repositories/crm_repository.dart';
 import '../data/repositories/customers_repository.dart';
+import '../data/services/crm_sse_client.dart';
+import 'crm_chat_filters_controller.dart';
+import 'crm_chat_filters_state.dart';
+import 'crm_chat_stats_controller.dart';
+import 'crm_chat_stats_state.dart';
 import 'crm_messages_controller.dart';
 import 'crm_messages_state.dart';
 import 'crm_threads_controller.dart';
@@ -17,7 +28,10 @@ import 'customers_controller.dart';
 import 'customers_state.dart';
 
 final crmApiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient.forBaseUrl(ref.watch(localDbProvider), AppConfig.crmApiBaseUrl);
+  return ApiClient.forBaseUrl(
+    ref.watch(localDbProvider),
+    AppConfig.crmApiBaseUrl,
+  );
 });
 
 final crmRemoteDataSourceProvider = Provider<CrmRemoteDataSource>((ref) {
@@ -30,22 +44,145 @@ final crmRepositoryProvider = Provider<CrmRepository>((ref) {
 
 final crmThreadsControllerProvider =
     StateNotifierProvider<CrmThreadsController, CrmThreadsState>((ref) {
-  return CrmThreadsController(repo: ref.watch(crmRepositoryProvider));
-});
+      return CrmThreadsController(repo: ref.watch(crmRepositoryProvider));
+    });
 
 final selectedThreadIdProvider = StateProvider<String?>((ref) => null);
 
-final crmMessagesControllerProvider = StateNotifierProvider.family<
-    CrmMessagesController,
-    CrmMessagesState,
-    String>((ref, threadId) {
-  return CrmMessagesController(
-    repo: ref.watch(crmRepositoryProvider),
-    threadId: threadId,
-  );
+final crmChatFiltersProvider =
+    StateNotifierProvider<CrmChatFiltersController, CrmChatFiltersState>((ref) {
+      return CrmChatFiltersController();
+    });
+
+final crmProductsProvider = StreamProvider<List<Producto>>((ref) async* {
+  // Offline-first products for CRM.
+  // Reads cached snapshot from local DB, then refreshes from network when online.
+  const store = 'catalog_products';
+
+  final db = ref.watch(localDbProvider);
+  final api = ref.watch(catalogApiProvider);
+
+  Future<List<Producto>> readCached() async {
+    final rows = await db.listEntitiesJson(store: store);
+    return rows
+        .map((s) => Producto.fromJson(jsonDecode(s) as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<Producto>> refreshFromApi() async {
+    final productos = await api.listProductos(includeInactive: true);
+    await db.clearStore(store: store);
+    for (final p in productos) {
+      await db.upsertEntity(store: store, id: p.id, json: jsonEncode(p.toJson()));
+    }
+    return productos;
+  }
+
+  try {
+    final cached = await readCached();
+    if (cached.isNotEmpty) yield cached;
+  } catch (_) {
+    // Ignore cache errors.
+  }
+
+  bool isOnline(List<ConnectivityResult> results) =>
+      results.any((r) => r != ConnectivityResult.none);
+
+  try {
+    final initial = await Connectivity().checkConnectivity();
+    if (isOnline(initial)) {
+      yield await refreshFromApi();
+    }
+  } catch (_) {
+    // Ignore connectivity errors.
+  }
+
+  await for (final results in Connectivity().onConnectivityChanged) {
+    if (!isOnline(results)) continue;
+    try {
+      yield await refreshFromApi();
+    } catch (_) {
+      // Best-effort.
+    }
+  }
 });
 
-final customersRemoteDataSourceProvider = Provider<CustomersRemoteDataSource>((ref) {
+final crmSseClientProvider = Provider<CrmSseClient>((ref) {
+  return CrmSseClient(ref.watch(crmApiClientProvider).dio);
+});
+
+final crmRealtimeProvider = Provider<void>((ref) {
+  final client = ref.watch(crmSseClientProvider);
+
+  final pendingChatIds = <String>{};
+  Timer? timer;
+
+  void flush() {
+    timer?.cancel();
+    timer = null;
+
+    // Always refresh threads once for any CRM event.
+    // ignore: unawaited_futures
+    ref.read(crmThreadsControllerProvider.notifier).refresh();
+
+    final selected = ref.read(selectedThreadIdProvider);
+    if (selected != null && pendingChatIds.contains(selected)) {
+      // ignore: unawaited_futures
+      ref
+          .read(crmMessagesControllerProvider(selected).notifier)
+          .loadInitial();
+    }
+    pendingChatIds.clear();
+  }
+
+  void scheduleFlush() {
+    timer ??= Timer(const Duration(milliseconds: 250), flush);
+  }
+
+  final sub = client.stream().listen((evt) {
+    if (evt.type == 'message.new' && evt.chatId != null) {
+      pendingChatIds.add(evt.chatId!);
+      scheduleFlush();
+      return;
+    }
+    if (evt.type == 'chat.updated' && evt.chatId != null) {
+      pendingChatIds.add(evt.chatId!);
+      scheduleFlush();
+      return;
+    }
+    if (evt.type == 'message.status' && evt.chatId != null) {
+      pendingChatIds.add(evt.chatId!);
+      scheduleFlush();
+      return;
+    }
+  });
+
+  ref.onDispose(() async {
+    timer?.cancel();
+    await sub.cancel();
+  });
+});
+
+final crmMessagesControllerProvider =
+    StateNotifierProvider.family<
+      CrmMessagesController,
+      CrmMessagesState,
+      String
+    >((ref, threadId) {
+      return CrmMessagesController(
+        repo: ref.watch(crmRepositoryProvider),
+        threadId: threadId,
+      );
+    });
+
+final crmChatStatsControllerProvider =
+    StateNotifierProvider<CrmChatStatsController, CrmChatStatsState>((ref) {
+  return CrmChatStatsController(repo: ref.watch(crmRepositoryProvider));
+});
+
+final customersRemoteDataSourceProvider = Provider<CustomersRemoteDataSource>((
+  ref,
+) {
   return CustomersRemoteDataSource(ref.watch(crmApiClientProvider).dio);
 });
 
@@ -55,15 +192,17 @@ final customersRepositoryProvider = Provider<CustomersRepository>((ref) {
 
 final customersControllerProvider =
     StateNotifierProvider<CustomersController, CustomersState>((ref) {
-  return CustomersController(repo: ref.watch(customersRepositoryProvider));
-});
+      return CustomersController(repo: ref.watch(customersRepositoryProvider));
+    });
 
-final customerDetailControllerProvider = StateNotifierProvider.family<
-    CustomerDetailController,
-    CustomerDetailState,
-    String>((ref, customerId) {
-  return CustomerDetailController(
-    repo: ref.watch(customersRepositoryProvider),
-    customerId: customerId,
-  );
-});
+final customerDetailControllerProvider =
+    StateNotifierProvider.family<
+      CustomerDetailController,
+      CustomerDetailState,
+      String
+    >((ref, customerId) {
+      return CustomerDetailController(
+        repo: ref.watch(customersRepositoryProvider),
+        customerId: customerId,
+      );
+    });

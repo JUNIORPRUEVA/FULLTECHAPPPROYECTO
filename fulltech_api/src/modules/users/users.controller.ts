@@ -186,6 +186,9 @@ export async function createUser(req: Request, res: Response) {
   const mergedMetadata: any = {
     ...(payload.metadata ?? {}),
   };
+  if ((payload as any).meta_ventas !== undefined) {
+    mergedMetadata.meta_ventas = (payload as any).meta_ventas;
+  }
   if (isContratista) {
     mergedMetadata.areas_trabajo = (payload as any).areas_trabajo ?? [];
     mergedMetadata.horario_disponible = (payload as any).horario_disponible ?? null;
@@ -339,7 +342,28 @@ export async function updateUser(req: Request, res: Response) {
     if (docs.carta_ultimo_trabajo_url !== undefined) data.carta_ultimo_trabajo_url = docs.carta_ultimo_trabajo_url;
     if (docs.otros_documentos_url !== undefined) data.otros_documentos_url = docs.otros_documentos_url;
 
-    if (parsed.data.metadata !== undefined) data.metadata = parsed.data.metadata as any;
+    if (
+      parsed.data.metadata !== undefined ||
+      (parsed.data as any).meta_ventas !== undefined ||
+      (parsed.data as any).areas_trabajo !== undefined ||
+      (parsed.data as any).horario_disponible !== undefined
+    ) {
+      const merged: any = { ...((existing as any).metadata ?? {}) };
+      if (parsed.data.metadata !== undefined) {
+        Object.assign(merged, parsed.data.metadata as any);
+      }
+      if ((parsed.data as any).meta_ventas !== undefined) {
+        merged.meta_ventas = (parsed.data as any).meta_ventas;
+      }
+      if ((parsed.data as any).areas_trabajo !== undefined) {
+        merged.areas_trabajo = (parsed.data as any).areas_trabajo;
+      }
+      if ((parsed.data as any).horario_disponible !== undefined) {
+        merged.horario_disponible = (parsed.data as any).horario_disponible;
+      }
+
+      data.metadata = merged;
+    }
   }
 
   if (Object.keys(data).length === 0) {

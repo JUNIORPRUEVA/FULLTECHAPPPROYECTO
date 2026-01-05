@@ -17,12 +17,15 @@ class ThreadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = (thread.displayName != null && thread.displayName!.trim().isNotEmpty)
+    final title =
+        (thread.displayName != null && thread.displayName!.trim().isNotEmpty)
         ? thread.displayName!.trim()
         : (thread.phone ?? thread.waId);
 
     final subtitle = (thread.lastMessagePreview ?? '').trim();
-    final secondary = (thread.phone ?? thread.waId).trim();
+    final phone = (thread.phone ?? '').trim();
+    final waId = thread.waId.trim();
+    final primaryId = phone.isNotEmpty ? phone : waId;
 
     return ListTile(
       selected: selected,
@@ -34,28 +37,25 @@ class ThreadTile extends StatelessWidget {
       title: Row(
         children: [
           Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ],
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            secondary,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (subtitle.isNotEmpty)
+          Text(primaryId, maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (phone.isNotEmpty)
             Text(
-              subtitle,
+              waId,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.65),
+              ),
             ),
+          if (subtitle.isNotEmpty)
+            Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
       trailing: thread.lastMessageAt != null
@@ -69,7 +69,8 @@ class ThreadTile extends StatelessWidget {
 
   static String _dateTimeCompact(DateTime dt) {
     final now = DateTime.now();
-    final sameDay = now.year == dt.year && now.month == dt.month && now.day == dt.day;
+    final sameDay =
+        now.year == dt.year && now.month == dt.month && now.day == dt.day;
     if (sameDay) {
       final h = dt.hour.toString().padLeft(2, '0');
       final m = dt.minute.toString().padLeft(2, '0');

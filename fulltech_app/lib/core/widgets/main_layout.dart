@@ -14,8 +14,9 @@ import '../theme/app_colors.dart';
 
 class MainLayout extends ConsumerWidget {
   final Widget child;
+  final PreferredSizeWidget? appBarBottom;
 
-  const MainLayout({super.key, required this.child});
+  const MainLayout({super.key, required this.child, this.appBarBottom});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,6 +43,7 @@ class MainLayout extends ConsumerWidget {
         userRole: userRole,
         onOpenProfile: () => context.go(AppRoutes.perfil),
         onLogout: () => ref.read(authControllerProvider.notifier).logout(),
+        bottom: appBarBottom,
       ),
       drawer: isMobile
           ? Drawer(
@@ -69,8 +71,8 @@ class MainLayout extends ConsumerWidget {
                       ),
                       const Divider(height: 1, color: AppColors.sidebarDivider),
                       const SizedBox(height: 8),
-                      ...primarySidebarItems.map(
-                        (item) => _DrawerNavTile(
+                      for (final item in primarySidebarItems)
+                        _DrawerNavTile(
                           item: item,
                           selected: location.startsWith(item.route),
                           onTap: () {
@@ -78,7 +80,18 @@ class MainLayout extends ConsumerWidget {
                             context.go(item.route);
                           },
                         ),
-                      ),
+                      for (final item in primarySidebarItems)
+                        for (final child in item.children)
+                          _DrawerNavTile(
+                            item: child,
+                            indent: 16,
+                            dense: true,
+                            selected: location.startsWith(child.route),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              context.go(child.route);
+                            },
+                          ),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 8),
                         child: Divider(
@@ -125,11 +138,15 @@ class _DrawerNavTile extends StatelessWidget {
   final SidebarItem item;
   final bool selected;
   final VoidCallback onTap;
+  final double indent;
+  final bool dense;
 
   const _DrawerNavTile({
     required this.item,
     required this.selected,
     required this.onTap,
+    this.indent = 0,
+    this.dense = false,
   });
 
   @override
@@ -137,7 +154,7 @@ class _DrawerNavTile extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: EdgeInsets.fromLTRB(8 + indent, 4, 8, 4),
       child: Material(
         color: selected ? AppColors.sidebarItemActiveBg : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
@@ -145,7 +162,7 @@ class _DrawerNavTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
           child: SizedBox(
-            height: 48,
+            height: dense ? 44 : 48,
             child: Row(
               children: [
                 Container(
@@ -162,7 +179,8 @@ class _DrawerNavTile extends StatelessWidget {
                 const SizedBox(width: 12),
                 Icon(
                   item.icon,
-                  color: Colors.white.withOpacity(selected ? 1 : 0.82),
+                  color: Colors.white.withOpacity(selected ? 1 : (dense ? 0.7 : 0.82)),
+                  size: dense ? 18 : 22,
                 ),
                 const SizedBox(width: 12),
                 Expanded(

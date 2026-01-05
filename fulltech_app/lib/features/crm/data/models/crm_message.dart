@@ -31,17 +31,32 @@ class CrmMessage {
   }
 
   factory CrmMessage.fromJson(Map<String, dynamic> json) {
-    final direction = (json['direction'] ?? 'in') as String;
-    final fromMe = direction == 'out';
+    final fromMeRaw = json['fromMe'] ?? json['from_me'];
+    final directionRaw = json['direction'];
 
-    final ts = _dtOrNull(json['timestamp']) ?? _dt(json['created_at']);
+    final direction = (directionRaw is String && directionRaw.trim().isNotEmpty)
+        ? directionRaw
+        : null;
+    final fromMe = fromMeRaw is bool
+        ? fromMeRaw
+        : (direction ?? 'in').toLowerCase() == 'out';
+
+    final ts =
+        _dtOrNull(json['createdAt']) ??
+        _dtOrNull(json['created_at']) ??
+        _dtOrNull(json['timestamp']) ??
+        _dt(json['created_at']);
+
+    final type =
+        (json['type'] ?? json['message_type'] ?? json['messageType'] ?? 'text')
+            .toString();
 
     return CrmMessage(
       id: (json['id'] ?? '') as String,
       fromMe: fromMe,
-      type: (json['message_type'] ?? 'text') as String,
-      body: json['text'] as String?,
-      mediaUrl: json['media_url'] as String?,
+      type: type,
+      body: (json['text'] ?? json['body'] ?? json['caption']) as String?,
+      mediaUrl: (json['mediaUrl'] ?? json['media_url']) as String?,
       status: (json['status'] ?? 'received') as String,
       createdAt: ts,
     );

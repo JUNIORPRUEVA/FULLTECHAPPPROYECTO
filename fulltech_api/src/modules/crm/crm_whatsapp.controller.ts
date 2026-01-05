@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 
 import { prisma } from '../../config/prisma';
 import { ApiError } from '../../middleware/errorHandler';
@@ -6,6 +7,7 @@ import { EvolutionClient } from '../../services/evolution/evolution_client';
 import {
   crmChatMessagesListQuerySchema,
   crmChatsListQuerySchema,
+  crmChatPatchSchema,
   crmSendMediaFieldsSchema,
   crmSendTextSchema,
 } from './crm_whatsapp.schema';
@@ -22,11 +24,172 @@ function parseBeforeDate(raw?: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function digitsOnly(v: string): string {
+  return v.replace(/[^0-9]/g, '');
+}
+
+function phoneFromWaId(waId: string): string | null {
+  const at = waId.indexOf('@');
+  const base = at >= 0 ? waId.slice(0, at) : waId;
+  const digits = digitsOnly(base);
+  if (!digits) return null;
+  return digits;
+}
+
+function toPhoneE164(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const d = digitsOnly(raw);
+  if (!d) return null;
+
+  // Minimal normalization: if it looks like a 10-digit NANP number, prefix country code "1".
+  // Otherwise, keep as-is.
+  if (d.length == 10) return `1${d}`;
+  return d;
+}
+
+function toChatApiItem(chat: any) {
+  const waId = String(chat.wa_id ?? chat.waId ?? '');
+  const phoneCandidate = chat.phone ?? phoneFromWaId(waId);
+  const phoneE164 = toPhoneE164(phoneCandidate);
+
+  const important = Boolean(chat.important ?? chat.is_important ?? false);
+  const productId = chat.product_id ?? chat.productId ?? null;
+  const internalNote = chat.internal_note ?? chat.note ?? null;
+  const assignedUserId = chat.assigned_user_id ?? chat.assigned_to_user_id ?? null;
+
+  return {
+    // canonical camelCase
+    id: chat.id,
+    waId,
+    phoneE164,
+    displayName: chat.display_name ?? null,
+    lastMessageText: chat.last_message_preview ?? null,
+    lastMessageAt: chat.last_message_at ?? null,
+    unreadCount: chat.unread_count ?? 0,
+    status: chat.status ?? 'activo',
+    // preferred names per spec
+    isImportant: important,
+    productId,
+    note: internalNote,
+    assignedToUserId: assignedUserId,
+
+    // backward compatible
+    important,
+    internalNote,
+    assignedUserId,
+
+    // backward compatible snake_case
+    wa_id: waId,
+    phone: phoneE164,
+    display_name: chat.display_name ?? null,
+    last_message_preview: chat.last_message_preview ?? null,
+    last_message_at: chat.last_message_at ?? null,
+    unread_count: chat.unread_count ?? 0,
+    created_at: chat.created_at ?? null,
+    updated_at: chat.updated_at ?? null,
+    product_id: productId,
+    internal_note: internalNote,
+    assigned_user_id: assignedUserId,
+    is_important: important,
+    assigned_to_user_id: assignedUserId,
+  };
+}
+
+async function fetchChatMeta(chatIds: string[]): Promise<Map<string, any>> {
+  const map = new Map<string, any>();
+  if (chatIds.length === 0) return map;
+
+  // Safe, parameterized query.
+  const rows = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT chat_id, important, product_id, internal_note, assigned_user_id
+      FROM crm_chat_meta
+      WHERE chat_id = ANY($1::uuid[])
+    `,
+    chatIds,
+  );
+
+  for (const r of rows) {
+    map.set(String(r.chat_id), r);
+  }
+  return map;
+}
+
+async function upsertChatMeta(
+  chatId: string,
+  data: {
+    important?: boolean;
+    product_id?: string | null;
+    internal_note?: string | null;
+    assigned_user_id?: string | null;
+  },
+): Promise<void> {
+  const important = data.important ?? false;
+  const productId = data.product_id ?? null;
+  const internalNote = data.internal_note ?? null;
+  const assignedUserId = data.assigned_user_id ?? null;
+
+  await prisma.$executeRawUnsafe(
+    `
+      INSERT INTO crm_chat_meta (chat_id, important, product_id, internal_note, assigned_user_id, updated_at)
+      VALUES ($1::uuid, $2::boolean, $3::text, $4::text, $5::uuid, now())
+      ON CONFLICT (chat_id)
+      DO UPDATE SET
+        important = EXCLUDED.important,
+        product_id = EXCLUDED.product_id,
+        internal_note = EXCLUDED.internal_note,
+        assigned_user_id = EXCLUDED.assigned_user_id,
+        updated_at = now()
+    `,
+    chatId,
+    important,
+    productId,
+    internalNote,
+    assignedUserId,
+  );
+}
+
+function toMessageApiItem(m: any) {
+  const direction = String(m.direction ?? 'in');
+  const fromMe = direction === 'out';
+  const type = String(m.message_type ?? m.type ?? 'text');
+  const createdAt = m.timestamp ?? m.created_at ?? null;
+
+  return {
+    // canonical camelCase
+    id: m.id,
+    chatId: m.chat_id,
+    direction,
+    fromMe,
+    type,
+    text: m.text ?? null,
+    mediaUrl: m.media_url ?? null,
+    mimeType: m.media_mime ?? null,
+    fileName: m.media_name ?? null,
+    size: m.media_size ?? null,
+    status: m.status ?? 'received',
+    createdAt,
+
+    // backward compatible snake_case
+    chat_id: m.chat_id,
+    message_type: m.message_type ?? type,
+    media_url: m.media_url ?? null,
+    media_mime: m.media_mime ?? null,
+    media_size: m.media_size ?? null,
+    media_name: m.media_name ?? null,
+    remote_message_id: m.remote_message_id ?? null,
+    quoted_message_id: m.quoted_message_id ?? null,
+    timestamp: m.timestamp ?? null,
+    created_at: m.created_at ?? null,
+    error: m.error ?? null,
+  };
+}
+
 export async function listChats(req: Request, res: Response) {
   const parsed = crmChatsListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
 
-  const { search, status, page, limit } = parsed.data;
+  const { search, status, productId, product_id, page, limit } = parsed.data;
   const skip = (page - 1) * limit;
 
   const where: any = {};
@@ -45,6 +208,21 @@ export async function listChats(req: Request, res: Response) {
     ];
   }
 
+  const effectiveProductId = (productId ?? product_id ?? '').trim();
+  if (effectiveProductId.length > 0) {
+    const rows = await prisma.$queryRawUnsafe<{ chat_id: string }[]>(
+      `SELECT chat_id FROM crm_chat_meta WHERE product_id = $1::text`,
+      effectiveProductId,
+    );
+    const ids = rows.map((r) => String(r.chat_id));
+    // If no matches, return empty quickly.
+    if (ids.length === 0) {
+      res.json({ items: [], total: 0, page, limit });
+      return;
+    }
+    where.id = { in: ids };
+  }
+
   const [items, total] = await Promise.all([
     prisma.crmChat.findMany({
       where,
@@ -55,11 +233,108 @@ export async function listChats(req: Request, res: Response) {
     prisma.crmChat.count({ where }),
   ]);
 
-  res.json({ items, total, page, limit });
+  const metaByChatId = await fetchChatMeta(items.map((c) => c.id));
+  const merged = items.map((c) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
+  const mapped = merged.map(toChatApiItem);
+  res.json({ items: mapped, total, page, limit });
+}
+
+export async function patchChat(req: Request, res: Response) {
+  const chatId = req.params.chatId;
+
+  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  const parsed = crmChatPatchSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const {
+    status,
+    important,
+    product_id,
+    internal_note,
+    assigned_user_id,
+    isImportant,
+    productId,
+    note,
+    assignedToUserId,
+  } = parsed.data;
+
+  const effectiveImportant = typeof isImportant !== 'undefined' ? isImportant : important;
+  const effectiveProductId = typeof productId !== 'undefined' ? productId : product_id;
+  const effectiveNote = typeof note !== 'undefined' ? note : internal_note;
+  const effectiveAssigned =
+    typeof assignedToUserId !== 'undefined' ? assignedToUserId : assigned_user_id;
+
+  if (status && status.trim().length > 0) {
+    await prisma.crmChat.update({
+      where: { id: chatId },
+      data: { status: status.trim() },
+    });
+  }
+
+  // Only upsert meta if any meta fields are provided.
+  const hasMeta =
+    typeof effectiveImportant !== 'undefined' ||
+    typeof effectiveProductId !== 'undefined' ||
+    typeof effectiveNote !== 'undefined' ||
+    typeof effectiveAssigned !== 'undefined';
+  if (hasMeta) {
+    await upsertChatMeta(chatId, {
+      important: effectiveImportant,
+      product_id: effectiveProductId,
+      internal_note: effectiveNote,
+      assigned_user_id: effectiveAssigned,
+    });
+  }
+
+  const updated = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  const metaById = await fetchChatMeta([chatId]);
+  const merged = { ...updated, ...(metaById.get(chatId) ?? {}) };
+
+  emitCrmEvent({ type: 'chat.updated', chatId });
+
+  res.json({ item: toChatApiItem(merged) });
+}
+
+export async function listChatStats(_req: Request, res: Response) {
+  const [total, byStatusRows, unreadAgg] = await Promise.all([
+    prisma.crmChat.count(),
+    prisma.crmChat.groupBy({
+      by: ['status'],
+      _count: { _all: true },
+    }),
+    prisma.crmChat.aggregate({
+      _sum: { unread_count: true },
+    }),
+  ]);
+
+  // Important flag lives in crm_chat_meta.
+  const importantRows = await prisma.$queryRawUnsafe<{ count: number }[]>(
+    `SELECT COUNT(*)::int as count FROM crm_chat_meta WHERE important = TRUE`,
+  );
+  const importantCount = importantRows?.[0]?.count ?? 0;
+
+  const byStatus: Record<string, number> = {};
+  for (const r of byStatusRows) {
+    byStatus[String(r.status ?? 'unknown')] = (r._count?._all as number) ?? 0;
+  }
+
+  const unreadTotal = Number(unreadAgg._sum.unread_count ?? 0);
+
+  res.json({
+    total,
+    byStatus,
+    importantCount,
+    unreadTotal,
+  });
 }
 
 export async function listChatMessages(req: Request, res: Response) {
   const chatId = req.params.chatId;
+
+  // Temporary debug logs for production verification.
+  console.log('[CRM] listChatMessages called', { chatId });
 
   const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
   if (!chat) throw new ApiError(404, 'Chat not found');
@@ -81,7 +356,16 @@ export async function listChatMessages(req: Request, res: Response) {
   const items = itemsDesc.slice().reverse();
   const nextBefore = itemsDesc.length > 0 ? itemsDesc[itemsDesc.length - 1].timestamp : null;
 
-  res.json({ items, next_before: nextBefore });
+  console.log('[CRM] listChatMessages result', { chatId, count: items.length });
+
+  const mapped = items.map(toMessageApiItem);
+
+  res.json({
+    items: mapped,
+    next_before: nextBefore,
+    // also provide camelCase for new clients
+    nextBefore,
+  });
 }
 
 export async function postUpload(req: Request, res: Response) {
@@ -109,6 +393,10 @@ export async function sendTextMessage(req: Request, res: Response) {
 
   const parsed = crmSendTextSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const aiSuggestionId = parsed.data.aiSuggestionId ?? null;
+  const aiSuggestedText = parsed.data.aiSuggestedText ?? null;
+  const aiUsedKnowledge = parsed.data.aiUsedKnowledge ?? null;
 
   const createdAt = new Date();
 
@@ -141,6 +429,23 @@ export async function sendTextMessage(req: Request, res: Response) {
       },
     });
 
+    if (aiSuggestionId || aiSuggestedText || (aiUsedKnowledge && aiUsedKnowledge.length)) {
+      const auditId = randomUUID();
+      await prisma.$executeRawUnsafe(
+        `
+        INSERT INTO ai_message_audits (id, chat_id, message_id, suggestion_id, suggested_text, final_text, used_knowledge)
+        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::jsonb)
+        `,
+        auditId,
+        chatId,
+        updated.id,
+        aiSuggestionId,
+        aiSuggestedText,
+        parsed.data.text.trim(),
+        JSON.stringify(aiUsedKnowledge ?? []),
+      );
+    }
+
     await prisma.crmChat.update({
       where: { id: chatId },
       data: {
@@ -161,6 +466,23 @@ export async function sendTextMessage(req: Request, res: Response) {
         error: e?.message ?? String(e),
       },
     });
+
+    if (aiSuggestionId || aiSuggestedText || (aiUsedKnowledge && aiUsedKnowledge.length)) {
+      const auditId = randomUUID();
+      await prisma.$executeRawUnsafe(
+        `
+        INSERT INTO ai_message_audits (id, chat_id, message_id, suggestion_id, suggested_text, final_text, used_knowledge)
+        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::jsonb)
+        `,
+        auditId,
+        chatId,
+        updated.id,
+        aiSuggestionId,
+        aiSuggestedText,
+        parsed.data.text.trim(),
+        JSON.stringify(aiUsedKnowledge ?? []),
+      );
+    }
 
     emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
 

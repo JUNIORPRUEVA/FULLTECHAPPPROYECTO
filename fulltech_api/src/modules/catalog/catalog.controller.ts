@@ -22,6 +22,30 @@ function parseProductType(value: unknown): 'simple' | 'servicio' | undefined {
   return undefined;
 }
 
+function parseNumberQuery(value: unknown): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const v = value.trim();
+  if (v === '') return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+function parseIntQuery(value: unknown): number | undefined {
+  const n = parseNumberQuery(value);
+  if (n === undefined) return undefined;
+  const i = Math.trunc(n);
+  if (!Number.isFinite(i)) return undefined;
+  return i;
+}
+
+function parseOrderQuery(value: unknown): 'most_used' | 'recent' | 'price_asc' | 'price_desc' | undefined {
+  if (typeof value !== 'string') return undefined;
+  const v = value.trim().toLowerCase();
+  if (v === 'most_used' || v === 'recent' || v === 'price_asc' || v === 'price_desc') return v;
+  return undefined;
+}
+
 function calculateTotals(items: Array<{ cantidad: number; costo_unitario: number; precio_unitario: number }>) {
   const totalCost = items.reduce((acc, it) => acc + it.cantidad * it.costo_unitario, 0);
   const totalPrice = items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0);
@@ -159,12 +183,47 @@ export async function listProductos(req: Request, res: Response) {
   const categoriaId =
     typeof req.query.category_id === 'string' ? req.query.category_id.trim() : undefined;
 
+  const minPrice = parseNumberQuery(req.query.min_price);
+  const maxPrice = parseNumberQuery(req.query.max_price);
+  const order = parseOrderQuery(req.query.order);
+
+  const limitRaw = parseIntQuery(req.query.limit);
+  const pageRaw = parseIntQuery(req.query.page);
+  const limit = Math.min(Math.max(limitRaw ?? 0, 0), 200);
+  const page = Math.max(pageRaw ?? 0, 0);
+
+  const usePaging = limit > 0;
+  const take = usePaging ? limit : undefined;
+  const skip = usePaging ? Math.max((page <= 1 ? 0 : (page - 1) * limit), 0) : undefined;
+
+  const orderBy = (() => {
+    switch (order) {
+      case 'recent':
+        return [{ created_at: 'desc' as const }, { id: 'desc' as const }];
+      case 'price_asc':
+        return [{ precio_venta: 'asc' as const }, { created_at: 'desc' as const }, { id: 'desc' as const }];
+      case 'price_desc':
+        return [{ precio_venta: 'desc' as const }, { created_at: 'desc' as const }, { id: 'desc' as const }];
+      case 'most_used':
+      default:
+        return [{ search_count: 'desc' as const }, { created_at: 'desc' as const }, { id: 'desc' as const }];
+    }
+  })();
+
   const items = await prisma.producto.findMany({
     where: {
       empresa_id: empresaId,
       ...(includeInactive ? {} : { is_active: true }),
       ...(productType ? { product_type: productType } : {}),
       ...(categoriaId ? { categoria_id: categoriaId } : {}),
+      ...((minPrice !== undefined || maxPrice !== undefined)
+        ? {
+            precio_venta: {
+              ...(minPrice !== undefined ? { gte: minPrice } : {}),
+              ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
+            },
+          }
+        : {}),
       ...(q
         ? {
             nombre: {
@@ -174,7 +233,9 @@ export async function listProductos(req: Request, res: Response) {
           }
         : {}),
     },
-    orderBy: [{ search_count: 'desc' }, { created_at: 'desc' }],
+    orderBy,
+    ...(skip !== undefined ? { skip } : {}),
+    ...(take !== undefined ? { take } : {}),
     include: {
       categoria: true,
       _count: { select: { items_as_parent: true } },

@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import axios from 'axios';
+import { spawn } from 'child_process';
+import ffmpegPath from 'ffmpeg-static';
 
 import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
@@ -35,6 +37,43 @@ function publicUrlForSavedFile(absPath: string): string {
   const root = path.resolve(process.cwd(), env.UPLOADS_DIR || 'uploads');
   const rel = path.relative(root, absPath).split(path.sep).join('/');
   return `${env.PUBLIC_BASE_URL.replace(/\/$/, '')}/uploads/${rel}`;
+}
+
+async function tryTranscodeToMp3(
+  inputAbsPath: string,
+): Promise<{ absPath: string; mime: string } | null> {
+  // WhatsApp PTTs are commonly OGG/OPUS which is not reliably playable on
+  // Windows Media Foundation. Transcode to MP3 for maximum client compatibility.
+  const ffmpeg = ffmpegPath;
+  if (!ffmpeg) return null;
+
+  const outAbsPath = inputAbsPath.replace(/\.ogg$/i, '.mp3').replace(/\.opus$/i, '.mp3');
+  if (outAbsPath === inputAbsPath) return null;
+
+  return await new Promise((resolve) => {
+    const args = [
+      '-y',
+      '-i',
+      inputAbsPath,
+      '-vn',
+      // Prefer MP3 for broad client support.
+      '-c:a',
+      'libmp3lame',
+      '-q:a',
+      '4',
+      outAbsPath,
+    ];
+
+    const proc = spawn(ffmpeg, args, { stdio: 'ignore', windowsHide: true });
+    proc.on('error', () => resolve(null));
+    proc.on('exit', (code) => {
+      if (code === 0 && fs.existsSync(outAbsPath)) {
+        resolve({ absPath: outAbsPath, mime: 'audio/mpeg' });
+      } else {
+        resolve(null);
+      }
+    });
+  });
 }
 
 async function maybeDownloadMedia(
@@ -77,16 +116,35 @@ async function maybeDownloadMedia(
       return '';
     })();
 
+    const extFromUrl = (() => {
+      try {
+        const u = new URL(url);
+        return path.extname(u.pathname).toLowerCase();
+      } catch {
+        return '';
+      }
+    })();
+
     const id = crypto.randomUUID();
-    const fileName = `${id}${extFromType}`;
+    const fileExt = extFromType || extFromUrl || '';
+    const fileName = `${id}${fileExt}`;
     const abs = path.join(uploadsCrmDir(), fileName);
 
     fs.writeFileSync(abs, Buffer.from(res.data));
 
+    // If this is an OGG/OPUS voice note, transcode to MP3 for client playback.
+    const transcode =
+      (fileExt === '.ogg' || fileExt === '.opus' || contentType?.includes('audio/ogg'))
+        ? await tryTranscodeToMp3(abs)
+        : null;
+
+    const finalAbs = transcode?.absPath ?? abs;
+    const finalMime = transcode?.mime ?? contentType;
+
     return {
-      mediaUrl: publicUrlForSavedFile(abs),
-      mediaMime: contentType,
-      mediaSize: Buffer.byteLength(Buffer.from(res.data)),
+      mediaUrl: publicUrlForSavedFile(finalAbs),
+      mediaMime: finalMime,
+      mediaSize: fs.existsSync(finalAbs) ? fs.statSync(finalAbs).size : Buffer.byteLength(Buffer.from(res.data)),
       mediaName: null,
     };
   } catch {

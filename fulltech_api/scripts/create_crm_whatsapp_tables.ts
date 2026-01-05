@@ -60,14 +60,62 @@ async function main() {
     );
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS quick_replies (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      title text NOT NULL,
+      category text NOT NULL,
+      content text NOT NULL,
+      is_active boolean NOT NULL DEFAULT TRUE,
+      created_at timestamp(3) NOT NULL DEFAULT now(),
+      updated_at timestamp(3) NOT NULL DEFAULT now()
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS quick_replies_category_idx
+    ON quick_replies (category);
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS quick_replies_is_active_idx
+    ON quick_replies (is_active);
+  `);
+
+  // Extra metadata for chats (CRM management) without changing Prisma models.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS crm_chat_meta (
+      chat_id uuid PRIMARY KEY REFERENCES crm_chats(id) ON DELETE CASCADE,
+      important boolean NOT NULL DEFAULT FALSE,
+      product_id text,
+      internal_note text,
+      assigned_user_id uuid,
+      created_at timestamp(3) NOT NULL DEFAULT now(),
+      updated_at timestamp(3) NOT NULL DEFAULT now()
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS crm_chat_meta_product_id_idx
+    ON crm_chat_meta (product_id);
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS crm_chat_meta_important_idx
+    ON crm_chat_meta (important);
+  `);
+
   // eslint-disable-next-line no-console
-  console.log('✅ WhatsApp CRM tables ensured: crm_chats, crm_messages, crm_webhook_events');
+  console.log(
+    '✅ WhatsApp CRM tables ensured: crm_chats, crm_messages, crm_webhook_events, crm_chat_meta, quick_replies',
+  );
 }
 
 main()
   .catch((e) => {
     // eslint-disable-next-line no-console
     console.error('❌ Failed creating WhatsApp CRM tables', e);
+    // @ts-ignore - process is available in Node.js runtime
     process.exitCode = 1;
   })
   .finally(async () => {

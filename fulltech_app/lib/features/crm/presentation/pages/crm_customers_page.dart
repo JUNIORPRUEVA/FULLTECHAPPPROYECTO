@@ -98,10 +98,10 @@ class _CrmCustomersPageState extends ConsumerState<CrmCustomersPage> {
                     final c = state.items[index];
                     return ListTile(
                       leading: CircleAvatar(
-                        child: Text(c.nombre.isNotEmpty ? c.nombre[0].toUpperCase() : '?'),
+                        child: Text(c.displayName.isNotEmpty ? c.displayName[0].toUpperCase() : '?'),
                       ),
-                      title: Text(c.nombre),
-                      subtitle: Text(c.telefono),
+                      title: Text(c.displayName),
+                      subtitle: Text(c.phone),
                       onTap: () => context.go('${AppRoutes.crm}/customers/${c.id}'),
                     );
                   },

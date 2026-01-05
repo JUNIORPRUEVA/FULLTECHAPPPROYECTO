@@ -32,6 +32,19 @@ Configure Evolution webhook URL to:
 ## 5) Health check
 - `GET https://tu-api-dominio/api/health`
 
+## 6) Database: migraciones SQL
+Este repo incluye scripts SQL en `fulltech_api/sql/` para crear/actualizar tablas en Postgres.
+
+- En EasyPanel (o tu proveedor), abre el panel de tu Postgres y ejecuta los scripts necesarios.
+- Para el módulo **Ponchado / Attendance**, ejecuta:
+	- `fulltech_api/sql/2026-01-04_attendance_punch_records.sql`
+
+### Scripts SQL recomendados
+
+- Módulo Mantenimiento / Garantías / Auditorías: `sql/2026-01-05_maintenance_module.sql`
+
+Ejecuta el script en tu Postgres (local o nube) antes de probar los endpoints del módulo.
+
 ## Notes
 - Chats/mensajes se crean cuando llega un webhook de Evolution a `/webhooks/evolution`.
 - Si tu backend está local, Evolution en la nube no podrá enviar webhooks. Deploy público o túnel.

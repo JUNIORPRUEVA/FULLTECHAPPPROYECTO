@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import fs from 'fs';
+import { spawn } from 'child_process';
+import ffmpegPath from 'ffmpeg-static';
 
 import { env } from './config/env';
 import { httpLogger } from './middleware/logger';
@@ -18,6 +20,8 @@ fs.mkdirSync(path.join(uploadsRoot, 'products'), { recursive: true });
 fs.mkdirSync(path.join(uploadsRoot, 'users'), { recursive: true });
 fs.mkdirSync(path.join(uploadsRoot, 'company'), { recursive: true });
 fs.mkdirSync(path.join(uploadsRoot, 'crm'), { recursive: true });
+fs.mkdirSync(path.join(uploadsRoot, 'sales'), { recursive: true });
+fs.mkdirSync(path.join(uploadsRoot, 'operations'), { recursive: true });
 
 app.use(helmet());
 app.use(
@@ -28,6 +32,44 @@ app.use(
 );
 app.use(express.json({ limit: '2mb' }));
 app.use(httpLogger);
+
+function tryTranscodeOggToMp3(inputAbs: string, outputAbs: string): Promise<boolean> {
+  const ffmpeg = ffmpegPath;
+  if (!ffmpeg) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    const args = ['-y', '-i', inputAbs, '-vn', '-c:a', 'libmp3lame', '-q:a', '4', outputAbs];
+    const proc = spawn(ffmpeg, args, { stdio: 'ignore', windowsHide: true });
+    proc.on('error', () => resolve(false));
+    proc.on('exit', (code) => resolve(code === 0 && fs.existsSync(outputAbs)));
+  });
+}
+
+// On-demand transcode for WhatsApp PTTs stored as .ogg/.opus (Windows playback compatibility).
+app.get('/uploads/crm/:ym/:file', (req, res, next) => {
+  void (async () => {
+    const file = String(req.params.file || '');
+    if (!/\.(ogg|opus)$/i.test(file)) return next();
+
+    const ym = String(req.params.ym || '');
+    const abs = path.join(uploadsRoot, 'crm', ym, file);
+    if (!fs.existsSync(abs)) return next();
+
+    const mp3Abs = abs.replace(/\.(ogg|opus)$/i, '.mp3');
+    if (!fs.existsSync(mp3Abs)) {
+      await tryTranscodeOggToMp3(abs, mp3Abs);
+    }
+
+    if (fs.existsSync(mp3Abs)) {
+      const rel = path.relative(uploadsRoot, mp3Abs).split(path.sep).join('/');
+      res.redirect(302, `/uploads/${rel}`);
+      return;
+    }
+
+    // If we couldn't transcode, fall through to serve the original file.
+    next();
+  })().catch(next);
+});
 
 // Public static files (e.g. product images)
 app.use('/uploads', express.static(uploadsRoot));

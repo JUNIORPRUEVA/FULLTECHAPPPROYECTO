@@ -1,8 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
+import '../platform/open_file.dart';
 import 'module_page.dart';
 
 class PdfViewerPage extends StatefulWidget {
@@ -30,17 +29,13 @@ class _PdfViewerPageState extends State<PdfViewerPage> {
   }
 
   Future<void> _openFile(String filePath) async {
-    if (Platform.isWindows) {
-      await Process.run('cmd', ['/c', 'start', '', filePath]);
-      return;
-    }
-    if (Platform.isMacOS) {
-      await Process.run('open', [filePath]);
-      return;
-    }
-    if (Platform.isLinux) {
-      await Process.run('xdg-open', [filePath]);
-      return;
+    try {
+      await openFilePath(filePath);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo abrir: $e')),
+      );
     }
   }
 

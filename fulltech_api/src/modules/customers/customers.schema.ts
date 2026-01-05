@@ -23,7 +23,8 @@ export const customerUpdateSchema = z.object({
 });
 
 export const customerListQuerySchema = z.object({
-  search: z.string().max(200).optional(),
+  q: z.string().max(200).optional(), // unified search
+  search: z.string().max(200).optional(), // legacy
   tags: z
     .union([z.string(), z.array(z.string())])
     .optional()
@@ -32,6 +33,10 @@ export const customerListQuerySchema = z.object({
       const arr = Array.isArray(v) ? v : v.split(',');
       return arr.map((x) => x.trim()).filter(Boolean);
     }),
+  productId: z.string().max(100).optional(),
+  status: z.string().max(50).optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
   limit: z
     .string()
     .optional()

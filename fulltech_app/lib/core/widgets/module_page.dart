@@ -9,6 +9,7 @@ class ModulePage extends StatelessWidget {
   final List<Widget> actions;
   final bool denseHeader;
   final double? headerBottomSpacing;
+  final PreferredSizeWidget? appBarBottom;
 
   const ModulePage({
     super.key,
@@ -17,28 +18,34 @@ class ModulePage extends StatelessWidget {
     this.actions = const [],
     this.denseHeader = false,
     this.headerBottomSpacing,
+    this.appBarBottom,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasHeader = title.trim().isNotEmpty || actions.isNotEmpty;
+
     return MainLayout(
+      appBarBottom: appBarBottom,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+          if (hasHeader) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              ...actions,
-            ],
-          ),
-          SizedBox(height: headerBottomSpacing ?? (denseHeader ? 6 : 12)),
+                ...actions,
+              ],
+            ),
+            SizedBox(height: headerBottomSpacing ?? (denseHeader ? 6 : 12)),
+          ],
           Expanded(child: child),
         ],
       ),

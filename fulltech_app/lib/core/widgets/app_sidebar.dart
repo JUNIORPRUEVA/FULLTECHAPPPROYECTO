@@ -9,23 +9,19 @@ import 'sidebar_items.dart';
 class AppSidebar extends ConsumerWidget {
   final String currentRoute;
 
-  const AppSidebar({
-    super.key,
-    required this.currentRoute,
-  });
+  const AppSidebar({super.key, required this.currentRoute});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final collapsed = ref.watch(sidebarCollapsedProvider);
     final textTheme = Theme.of(context).textTheme;
+    final visiblePrimaryItems = primarySidebarItems;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,
       width: collapsed ? 72 : 260,
-      decoration: const BoxDecoration(
-        gradient: AppColors.sidebarGradient,
-      ),
+      decoration: const BoxDecoration(gradient: AppColors.sidebarGradient),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -36,7 +32,9 @@ class AppSidebar extends ConsumerWidget {
                 children: [
                   IconButton(
                     tooltip: collapsed ? 'Expandir menú' : 'Colapsar menú',
-                    onPressed: () => ref.read(sidebarCollapsedProvider.notifier).state = !collapsed,
+                    onPressed: () =>
+                        ref.read(sidebarCollapsedProvider.notifier).state =
+                            !collapsed,
                     icon: Icon(
                       collapsed ? Icons.chevron_right : Icons.chevron_left,
                       color: Colors.white,
@@ -65,13 +63,26 @@ class AppSidebar extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 children: [
-                  for (final item in primarySidebarItems)
+                  for (final item in visiblePrimaryItems) ...[
                     _SidebarNavItem(
                       item: item,
                       isCollapsed: collapsed,
-                      isSelected: currentRoute.startsWith(item.route),
+                      isSelected: currentRoute.startsWith(item.route) ||
+                          item.children.any(
+                            (c) => currentRoute.startsWith(c.route),
+                          ),
                       onTap: () => context.go(item.route),
                     ),
+                    for (final child in item.children)
+                      _SidebarNavItem(
+                        item: child,
+                        isCollapsed: collapsed,
+                        isChild: true,
+                        indent: collapsed ? 0 : 18,
+                        isSelected: currentRoute.startsWith(child.route),
+                        onTap: () => context.go(child.route),
+                      ),
+                  ],
                   const SizedBox(height: 10),
                   Container(
                     height: 1,
@@ -100,6 +111,8 @@ class _SidebarNavItem extends StatefulWidget {
   final SidebarItem item;
   final bool isCollapsed;
   final bool isSelected;
+  final bool isChild;
+  final double indent;
   final VoidCallback onTap;
 
   const _SidebarNavItem({
@@ -107,6 +120,8 @@ class _SidebarNavItem extends StatefulWidget {
     required this.isCollapsed,
     required this.isSelected,
     required this.onTap,
+    this.isChild = false,
+    this.indent = 0,
   });
 
   @override
@@ -121,12 +136,13 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
     final textTheme = Theme.of(context).textTheme;
     final isSelected = widget.isSelected;
     final isCollapsed = widget.isCollapsed;
+    final isChild = widget.isChild;
 
     final bgColor = isSelected
         ? AppColors.sidebarItemActiveBg
         : _hover
-            ? AppColors.sidebarItemHover
-            : Colors.transparent;
+        ? AppColors.sidebarItemHover
+        : Colors.transparent;
 
     final textStyle = textTheme.labelLarge?.copyWith(
       color: Colors.white,
@@ -134,12 +150,22 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
     );
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
+      onEnter: (_) {
+        if (!mounted) return;
+        setState(() => _hover = true);
+      },
+      onExit: (_) {
+        if (!mounted) return;
+        setState(() => _hover = false);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 230),
         curve: Curves.easeOut,
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: EdgeInsets.only(
+          top: 4,
+          bottom: 4,
+          left: widget.indent,
+        ),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(14),
@@ -148,7 +174,7 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
           borderRadius: BorderRadius.circular(14),
           onTap: widget.onTap,
           child: SizedBox(
-            height: 46,
+            height: isChild ? 40 : 46,
             child: Row(
               children: [
                 AnimatedContainer(
@@ -158,14 +184,18 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
                   height: double.infinity,
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.corporateBlueBright : Colors.transparent,
+                    color: isSelected
+                        ? AppColors.corporateBlueBright
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Icon(
                   widget.item.icon,
-                  color: Colors.white.withOpacity(isSelected ? 1 : 0.82),
+                  size: isChild ? 18 : 22,
+                  color: Colors.white
+                      .withOpacity(isSelected ? 1 : (isChild ? 0.7 : 0.82)),
                 ),
                 if (!isCollapsed) ...[
                   const SizedBox(width: 12),

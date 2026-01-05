@@ -1,3 +1,6 @@
+import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -9,6 +12,34 @@ import 'features/auth/state/auth_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Workaround for a known Flutter Windows keyboard assertion that can spam
+  // the console and feel like a freeze in debug mode.
+  FlutterError.onError = (details) {
+    final msg = details.exceptionAsString();
+    if (msg.contains(
+      'Attempted to send a key down event when no keys are in keysPressed',
+    )) {
+      if (kDebugMode) {
+        debugPrint('[UI] Ignored RawKeyboard assertion: $msg');
+      }
+      return;
+    }
+    FlutterError.presentError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    final msg = error.toString();
+    if (msg.contains(
+      'Attempted to send a key down event when no keys are in keysPressed',
+    )) {
+      if (kDebugMode) {
+        debugPrint('[UI] Ignored platform RawKeyboard error: $msg');
+      }
+      return true;
+    }
+    return false;
+  };
 
   // Helps ensure PDFium/pdfrx is initialized before any PdfViewer builds.
   pdfrxFlutterInitialize(dismissPdfiumWasmWarnings: true);
@@ -40,7 +71,9 @@ class _BootstrapperState extends ConsumerState<_Bootstrapper> {
   void initState() {
     super.initState();
     // Restore existing session from local DB.
-    Future.microtask(() => ref.read(authControllerProvider.notifier).bootstrap());
+    Future.microtask(
+      () => ref.read(authControllerProvider.notifier).bootstrap(),
+    );
   }
 
   @override

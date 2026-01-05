@@ -7,6 +7,8 @@ import { ApiError } from '../../middleware/errorHandler';
 const uploadsRoot = path.resolve(process.cwd(), 'uploads');
 const productsDir = path.join(uploadsRoot, 'products');
 const usersDir = path.join(uploadsRoot, 'users');
+const salesDir = path.join(uploadsRoot, 'sales');
+const operationsDir = path.join(uploadsRoot, 'operations');
 
 function ensureSafeImage(file: Express.Multer.File) {
   const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -19,6 +21,25 @@ function ensureSafeUserDoc(file: Express.Multer.File) {
   const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
   if (!allowed.has(file.mimetype)) {
     throw new ApiError(400, 'Only images (jpg/png/webp) or PDF are allowed');
+  }
+}
+
+function ensureSafeSalesEvidence(file: Express.Multer.File) {
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
+  if (!allowed.has(file.mimetype)) {
+    throw new ApiError(400, 'Only images (jpg/png/webp) or PDF are allowed');
+  }
+}
+
+function ensureSafeOperationsMedia(file: Express.Multer.File) {
+  const allowed = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'video/mp4',
+  ]);
+  if (!allowed.has(file.mimetype)) {
+    throw new ApiError(400, 'Only images (jpg/png/webp) or video/mp4 are allowed');
   }
 }
 
@@ -124,4 +145,80 @@ export async function postUploadUserDocs(req: Request, res: Response) {
     cartaUltimoTrabajoUrl: carta ? `/uploads/users/${carta.filename}` : null,
     otrosDocumentos: otros.map((f) => `/uploads/users/${f.filename}`),
   });
+}
+
+// --- Sales evidence upload ---
+
+const salesStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, salesDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const id = crypto.randomBytes(16).toString('hex');
+    cb(null, `${id}${ext || ''}`);
+  },
+});
+
+export const uploadSalesEvidence = multer({
+  storage: salesStorage,
+  limits: {
+    fileSize: 8 * 1024 * 1024, // 8MB
+  },
+  fileFilter: (_req, file, cb) => {
+    try {
+      ensureSafeSalesEvidence(file);
+      cb(null, true);
+    } catch (err) {
+      cb(err as any, false);
+    }
+  },
+}).single('file');
+
+export async function postUploadSalesEvidence(req: Request, res: Response) {
+  const file = req.file;
+  if (!file) {
+    throw new ApiError(400, 'Missing file field "file"');
+  }
+
+  const urlPath = `/uploads/sales/${file.filename}`;
+  res.status(201).json({ url: urlPath, mimeType: file.mimetype });
+}
+
+// --- Operations media upload ---
+
+const operationsStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, operationsDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const id = crypto.randomBytes(16).toString('hex');
+    cb(null, `${id}${ext || ''}`);
+  },
+});
+
+export const uploadOperationsMedia = multer({
+  storage: operationsStorage,
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25MB
+  },
+  fileFilter: (_req, file, cb) => {
+    try {
+      ensureSafeOperationsMedia(file);
+      cb(null, true);
+    } catch (err) {
+      cb(err as any, false);
+    }
+  },
+}).single('file');
+
+export async function postUploadOperationsMedia(req: Request, res: Response) {
+  const file = req.file;
+  if (!file) {
+    throw new ApiError(400, 'Missing file field "file"');
+  }
+
+  const urlPath = `/uploads/operations/${file.filename}`;
+  res.status(201).json({ url: urlPath, mimeType: file.mimetype });
 }
