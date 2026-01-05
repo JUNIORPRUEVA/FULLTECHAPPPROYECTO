@@ -23,6 +23,10 @@ function normalizeDestNumber(opts: { toPhone?: string; toWaId?: string }): strin
 export class EvolutionClient {
   private readonly _http: AxiosInstance;
 
+  private _instance(): string {
+    return (env.EVOLUTION_INSTANCE ?? env.EVOLUTION_INSTANCE_ID ?? '').trim();
+  }
+
   constructor() {
     if (!env.EVOLUTION_BASE_URL || env.EVOLUTION_BASE_URL.trim().length === 0) {
       throw new Error('EVOLUTION_BASE_URL is not configured');
@@ -41,13 +45,51 @@ export class EvolutionClient {
   }
 
   private _instancePath(path: string): string {
-    const inst = (env.EVOLUTION_INSTANCE ?? env.EVOLUTION_INSTANCE_ID ?? '').trim();
+    const inst = this._instance();
     if (!inst) return path;
 
     // Many Evolution API deployments use endpoints like /message/sendText/{instance}
     if (path.includes('{instance}')) return path.replace('{instance}', inst);
     if (path.endsWith('/')) return `${path}${inst}`;
     return `${path}/${inst}`;
+  }
+
+  private _formatAxiosError(err: unknown): string {
+    if (!axios.isAxiosError(err)) return String((err as any)?.message ?? err);
+    const status = err.response?.status;
+    const data = err.response?.data;
+    let dataPreview = '';
+    try {
+      if (typeof data === 'string') dataPreview = data.slice(0, 500);
+      else if (data != null) dataPreview = JSON.stringify(data).slice(0, 500);
+    } catch {
+      // ignore
+    }
+    return `Evolution API error${status ? ` (${status})` : ''}: ${err.message}${dataPreview ? ` | ${dataPreview}` : ''}`;
+  }
+
+  private async _postWithInstanceFallback(path: string, payload: any): Promise<any> {
+    const inst = this._instance();
+    const candidates = inst
+      ? [this._instancePath(path), path]
+      : [path];
+
+    let lastErr: unknown;
+    for (let i = 0; i < candidates.length; i++) {
+      const url = candidates[i];
+      try {
+        const res = await this._http.post(url, payload);
+        return res;
+      } catch (e) {
+        lastErr = e;
+        // If the instance-appended route 404s, retry without instance.
+        const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+        if (status === 404 && i < candidates.length - 1) continue;
+        break;
+      }
+    }
+
+    throw new Error(this._formatAxiosError(lastErr));
   }
 
   async sendText({
@@ -59,7 +101,7 @@ export class EvolutionClient {
     toWaId?: string;
     text: string;
   }): Promise<EvolutionSendResult> {
-    const url = this._instancePath('/message/sendText');
+    const url = '/message/sendText';
 
     const number = normalizeDestNumber({ toPhone, toWaId });
 
@@ -70,7 +112,7 @@ export class EvolutionClient {
       },
     };
 
-    const res = await this._http.post(url, payload);
+    const res = await this._postWithInstanceFallback(url, payload);
     const raw = res.data;
 
     const messageId =
@@ -95,7 +137,7 @@ export class EvolutionClient {
     caption?: string;
     mediaType?: string;
   }): Promise<EvolutionSendResult> {
-    const url = this._instancePath('/message/sendMedia');
+    const url = '/message/sendMedia';
 
     const number = normalizeDestNumber({ toPhone, toWaId });
 
@@ -108,7 +150,7 @@ export class EvolutionClient {
       },
     };
 
-    const res = await this._http.post(url, payload);
+    const res = await this._postWithInstanceFallback(url, payload);
     const raw = res.data;
 
     const messageId =
