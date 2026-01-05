@@ -156,7 +156,8 @@ class _ThreadsList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(crmThreadsControllerProvider.notifier);
     final now = DateTime.now();
-    final count = visibleItems.length;
+    // Use server-reported total so the number doesn't look "fixed" at the page size.
+    final count = threadsState.total;
     final unansweredCount = visibleItems
         .where((t) => !t.lastMessageFromMe && t.unreadCount > 0)
         .length;
