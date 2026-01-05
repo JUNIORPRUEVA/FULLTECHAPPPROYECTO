@@ -516,9 +516,8 @@ export async function sendTextMessage(req: Request, res: Response) {
     },
   });
 
-  const evo = new EvolutionClient();
-
   try {
+    const evo = new EvolutionClient();
     const send = await evo.sendText({
       toWaId: chat.wa_id,
       toPhone: chat.phone ?? undefined,
@@ -637,9 +636,8 @@ export async function sendMediaMessage(req: Request, res: Response) {
     },
   });
 
-  const evo = new EvolutionClient();
-
   try {
+    const evo = new EvolutionClient();
     const send = await evo.sendMedia({
       toWaId: chat.wa_id,
       toPhone: chat.phone ?? undefined,
