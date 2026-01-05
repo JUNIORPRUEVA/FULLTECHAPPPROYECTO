@@ -10,8 +10,8 @@ function actorEmpresaId(req: Request): string {
   return actor.empresaId;
 }
 
-function ok(res: Response, data: any, message = 'OK', status = 200) {
-  return res.status(status).json({ ok: true, data, message });
+function ok(res: Response, data: any, message = 'OK', status = 200): void {
+  res.status(status).json({ ok: true, data, message });
 }
 
 function parseDate(value: unknown): Date | null {
@@ -158,7 +158,8 @@ export async function createSale(req: Request, res: Response) {
       return { sale, thread };
     });
 
-    return ok(res, { legacy: true, item: result.sale, thread: result.thread }, 'Sale created', 201);
+    ok(res, { legacy: true, item: result.sale, thread: result.thread }, 'Sale created', 201);
+    return;
   }
 
   const soldAt = parseDate(body.sold_at) ?? new Date();
@@ -194,7 +195,7 @@ export async function createSale(req: Request, res: Response) {
     },
   });
 
-  return ok(res, { item: created }, 'Sale created', 201);
+  ok(res, { item: created }, 'Sale created', 201);
 }
 
 export async function listSales(req: Request, res: Response) {
@@ -266,7 +267,7 @@ export async function listSales(req: Request, res: Response) {
     _count: undefined,
   }));
 
-  return ok(res, { items: normalized, page, pageSize, total }, 'OK');
+  ok(res, { items: normalized, page, pageSize, total }, 'OK');
 }
 
 export async function getSale(req: Request, res: Response) {
@@ -282,7 +283,7 @@ export async function getSale(req: Request, res: Response) {
   });
   if (!item) throw new ApiError(404, 'Sale not found');
 
-  return ok(res, { item }, 'OK');
+  ok(res, { item }, 'OK');
 }
 
 export async function updateSale(req: Request, res: Response) {
@@ -350,7 +351,7 @@ export async function updateSale(req: Request, res: Response) {
     },
   });
 
-  return ok(res, { item: updated }, 'Sale updated');
+  ok(res, { item: updated }, 'Sale updated');
 }
 
 export async function deleteSale(req: Request, res: Response) {
@@ -367,7 +368,7 @@ export async function deleteSale(req: Request, res: Response) {
     data: { deleted: true, deleted_at: new Date() },
   });
 
-  return ok(res, { id }, 'Sale deleted');
+  ok(res, { id }, 'Sale deleted');
 }
 
 export async function addSaleEvidence(req: Request, res: Response) {
@@ -408,5 +409,5 @@ export async function addSaleEvidence(req: Request, res: Response) {
     },
   });
 
-  return ok(res, { item: evidence }, 'Evidence added', 201);
+  ok(res, { item: evidence }, 'Evidence added', 201);
 }
