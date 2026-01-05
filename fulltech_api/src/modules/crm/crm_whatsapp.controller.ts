@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 
+import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
 import { ApiError } from '../../middleware/errorHandler';
 import { EvolutionClient } from '../../services/evolution/evolution_client';
@@ -154,6 +155,29 @@ function toMessageApiItem(m: any) {
   const fromMe = direction === 'out';
   const type = String(m.message_type ?? m.type ?? 'text');
   const createdAt = m.timestamp ?? m.created_at ?? null;
+  const normalizeMediaUrl = (raw: unknown): string | null => {
+    if (typeof raw !== 'string') return null;
+    const url = raw.trim();
+    if (url.length === 0) return null;
+
+    const base = env.PUBLIC_BASE_URL.replace(/\/$/, '');
+
+    if (url.startsWith('/uploads/')) return `${base}${url}`;
+
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname;
+      if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+        return `${base}${parsed.pathname}${parsed.search}`;
+      }
+    } catch {
+      // ignore
+    }
+
+    return url;
+  };
+
+  const mediaUrl = normalizeMediaUrl(m.media_url ?? null);
 
   return {
     // canonical camelCase
@@ -163,7 +187,7 @@ function toMessageApiItem(m: any) {
     fromMe,
     type,
     text: m.text ?? null,
-    mediaUrl: m.media_url ?? null,
+    mediaUrl,
     mimeType: m.media_mime ?? null,
     fileName: m.media_name ?? null,
     size: m.media_size ?? null,
@@ -173,7 +197,7 @@ function toMessageApiItem(m: any) {
     // backward compatible snake_case
     chat_id: m.chat_id,
     message_type: m.message_type ?? type,
-    media_url: m.media_url ?? null,
+    media_url: mediaUrl,
     media_mime: m.media_mime ?? null,
     media_size: m.media_size ?? null,
     media_name: m.media_name ?? null,

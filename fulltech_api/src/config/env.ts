@@ -2,6 +2,18 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+function stripWrappingQuotes(value: string): string {
+  const v = value.trim();
+  if (v.length >= 2) {
+    const first = v[0];
+    const last = v[v.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return v.slice(1, -1).trim();
+    }
+  }
+  return v;
+}
+
 function requireEnv(key: string): string {
   const value = process.env[key];
   if (!value) {
@@ -15,7 +27,7 @@ export const env = {
   PORT: Number(process.env.PORT ?? 3000),
   CORS_ORIGIN: (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
     .split(',')
-    .map((s) => s.trim())
+    .map((s) => stripWrappingQuotes(s))
     .filter(Boolean),
   JWT_SECRET: requireEnv('JWT_SECRET'),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? '7d',
@@ -40,7 +52,7 @@ export const env = {
 
   // Public URL of this backend (used to build absolute media URLs).
   PUBLIC_BASE_URL:
-    (process.env.PUBLIC_BASE_URL ?? '').trim() ||
+    stripWrappingQuotes(process.env.PUBLIC_BASE_URL ?? '') ||
     `http://localhost:${Number(process.env.PORT ?? 3000)}`,
 
   // Webhook auth (if Evolution supports a secret).

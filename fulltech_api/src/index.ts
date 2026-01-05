@@ -85,4 +85,6 @@ app.use(errorHandler);
 app.listen(env.PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`FULLTECH API listening on http://localhost:${env.PORT}`);
+  // eslint-disable-next-line no-console
+  console.log(`[ENV] PUBLIC_BASE_URL=${env.PUBLIC_BASE_URL}`);
 });
