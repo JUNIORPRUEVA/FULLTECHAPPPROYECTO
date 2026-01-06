@@ -22,6 +22,45 @@ class PosCategory {
       nombre: (json['nombre'] ?? '').toString(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'nombre': nombre,
+      };
+}
+
+class PosSupplier {
+  final String id;
+  final String name;
+  final String? phone;
+  final String? rnc;
+  final String? email;
+  final String? address;
+
+  PosSupplier({
+    required this.id,
+    required this.name,
+    required this.phone,
+    required this.rnc,
+    required this.email,
+    required this.address,
+  });
+
+  factory PosSupplier.fromJson(Map<String, dynamic> json) {
+    String? cleanNullable(dynamic v) {
+      final s = (v ?? '').toString().trim();
+      return s.isEmpty ? null : s;
+    }
+
+    return PosSupplier(
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      phone: cleanNullable(json['phone']),
+      rnc: cleanNullable(json['rnc']),
+      email: cleanNullable(json['email']),
+      address: cleanNullable(json['address']),
+    );
+  }
 }
 
 class PosProduct {
@@ -73,6 +112,21 @@ class PosProduct {
           : (json['imagen_url'] ?? '').toString(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'nombre': nombre,
+        'precio_venta': precioVenta,
+        'cost_price': costPrice,
+        'stock_qty': stockQty,
+        'min_stock': minStock,
+        'max_stock': maxStock,
+        'allow_negative_stock': allowNegativeStock,
+        'low_stock': lowStock,
+        'suggested_reorder_qty': suggestedReorderQty,
+        'categoria': categoria?.toJson(),
+        'imagen_url': imagenUrl,
+      };
 }
 
 class PosSaleItemDraft {
@@ -244,6 +298,7 @@ class PosPurchaseOrderItem {
 
 class PosPurchaseOrder {
   final String id;
+  final String? supplierId;
   final String supplierName;
   final String status;
   final double subtotal;
@@ -253,6 +308,7 @@ class PosPurchaseOrder {
 
   PosPurchaseOrder({
     required this.id,
+    required this.supplierId,
     required this.supplierName,
     required this.status,
     required this.subtotal,
@@ -263,8 +319,11 @@ class PosPurchaseOrder {
 
   factory PosPurchaseOrder.fromJson(Map<String, dynamic> json) {
     final itemsJson = (json['items'] as List?)?.cast<Map>() ?? const [];
+
+    final supplierIdRaw = (json['supplier_id'] ?? '').toString().trim();
     return PosPurchaseOrder(
       id: json['id'] as String,
+      supplierId: supplierIdRaw.isEmpty ? null : supplierIdRaw,
       supplierName: (json['supplier_name'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       subtotal: _asDouble(json['subtotal']),

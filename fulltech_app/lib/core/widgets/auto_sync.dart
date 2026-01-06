@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,8 +13,11 @@ import '../../features/maintenance/providers/maintenance_provider.dart';
 import '../../features/operaciones/state/operations_providers.dart';
 import '../../features/ponchado/providers/punch_provider.dart';
 import '../../features/ventas/state/ventas_providers.dart';
+import '../../modules/pos/state/pos_providers.dart';
+import '../../features/configuracion/state/display_settings_provider.dart';
 import '../services/http_queue_sync_service.dart';
 import '../services/sync_signals.dart';
+import '../state/permissions_provider.dart';
 
 /// Global, silent best-effort sync for all offline-first modules.
 ///
@@ -44,7 +48,7 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
   bool _syncInProgress = false;
   DateTime _lastAttempt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  static const _minInterval = Duration(seconds: 10);
+  static const _minInterval = Duration(seconds: 2);
   static const _periodicInterval = Duration(seconds: 45);
   static const _retryErroredMinAge = Duration(seconds: 30);
 
@@ -55,7 +59,12 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
 
     _authSub = ref.listenManual<AuthState>(authControllerProvider, (prev, next) {
       if (next is AuthAuthenticated) {
+        // Load permissions/UI settings ASAP after login.
+        unawaited(ref.read(permissionsProvider.notifier).load());
+        unawaited(_loadRemoteUiSettings());
         _scheduleSync();
+      } else {
+        ref.read(permissionsProvider.notifier).clear();
       }
     });
 
@@ -75,6 +84,32 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
 
     // Best effort: try early during startup.
     Future.microtask(_scheduleSync);
+  }
+
+  Future<void> _loadRemoteUiSettings() async {
+    try {
+      final dio = ref.read(apiClientProvider).dio;
+      final res = await dio.get(
+        '/settings/ui',
+        options: Options(extra: {'offlineCache': false, 'offlineQueue': false}),
+      );
+      final data = res.data as Map<String, dynamic>;
+      final item = (data['item'] as Map?)?.cast<String, dynamic>();
+      if (item == null) return;
+
+      final large = (item['largeScreenMode'] as bool?) ?? false;
+      final hide = (item['hideSidebar'] as bool?) ?? false;
+      final scaleRaw = item['scale'];
+      final scale = (scaleRaw is num) ? scaleRaw.toDouble() : 1.0;
+
+      await ref.read(displaySettingsProvider.notifier).applyRemoteUiSettings(
+            largeScreenMode: large,
+            hideSidebar: hide,
+            scale: scale,
+          );
+    } catch (_) {
+      // Best-effort only.
+    }
   }
 
   @override
@@ -131,6 +166,10 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
       // --- Sales
       final salesRepo = ref.read(salesRepositoryProvider);
       await salesRepo.syncPending();
+
+      // --- POS
+      final posRepo = ref.read(posRepositoryProvider);
+      await posRepo.syncPending();
 
       // --- Cotizaciones
       final quotationRepo = ref.read(quotationRepositoryProvider);

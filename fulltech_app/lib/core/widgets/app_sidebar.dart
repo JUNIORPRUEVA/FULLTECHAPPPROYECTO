@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../theme/app_colors.dart';
+import '../../features/configuracion/state/display_settings_provider.dart';
+import '../state/permissions_provider.dart';
+import '../routing/app_routes.dart';
 import 'layout_provider.dart';
 import 'sidebar_items.dart';
 
@@ -14,8 +17,46 @@ class AppSidebar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final collapsed = ref.watch(sidebarCollapsedProvider);
+    final displaySettings = ref.watch(displaySettingsProvider);
     final textTheme = Theme.of(context).textTheme;
-    final visiblePrimaryItems = primarySidebarItems;
+
+    final permsAsync = ref.watch(permissionsProvider);
+
+    bool can(String code) {
+      return permsAsync.maybeWhen(
+        data: (s) => s.has(code),
+        orElse: () => false,
+      );
+    }
+
+    bool allowRoute(String route) {
+      // If permissions haven't loaded yet, keep current UX (don't hide).
+      final loaded = permsAsync is AsyncData<PermissionsState>;
+      if (!loaded) return true;
+
+      if (route == AppRoutes.pos) return can('pos.sell');
+      if (route == AppRoutes.posPurchases) return can('pos.purchases.manage');
+      if (route == AppRoutes.posInventory) return can('pos.inventory.adjust');
+      if (route == AppRoutes.posReports) return can('pos.reports.view');
+      if (route == AppRoutes.usuarios) return can('users.view');
+      return true;
+    }
+
+    final visiblePrimaryItems = primarySidebarItems
+        .map(
+          (it) => SidebarItem(
+            label: it.label,
+            icon: it.icon,
+            route: it.route,
+            children: it.children.where((c) => allowRoute(c.route)).toList(),
+          ),
+        )
+        .where((it) => allowRoute(it.route))
+        .toList();
+
+    if (displaySettings.hideSidebar) {
+      return const SizedBox.shrink();
+    }
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),

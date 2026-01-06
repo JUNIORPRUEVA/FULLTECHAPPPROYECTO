@@ -16,6 +16,7 @@ declare global {
           | 'contratista'
           | 'asistente_administrativo';
       };
+      permissions?: string[];
     }
   }
 }

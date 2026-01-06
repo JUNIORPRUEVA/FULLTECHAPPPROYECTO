@@ -7,6 +7,12 @@ export const posListProductsSchema = z.object({
     .optional()
     .transform((v) => (v === true || v === 'true' ? true : false)),
   categoryId: z.string().uuid().optional(),
+  take: z
+    .preprocess((v) => (typeof v === 'string' ? Number(v) : v), z.number().int().min(1).max(1000))
+    .optional(),
+  skip: z
+    .preprocess((v) => (typeof v === 'string' ? Number(v) : v), z.number().int().min(0).max(100000))
+    .optional(),
 });
 
 export const posCreateSaleSchema = z.object({
@@ -99,4 +105,24 @@ export const posListCreditSchema = z.object({
 export const posReportsRangeSchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
+});
+
+export const posListSuppliersSchema = z.object({
+  search: z.string().optional(),
+});
+
+export const posCreateSupplierSchema = z.object({
+  name: z.string().trim().min(1),
+  phone: z.string().trim().optional().nullable(),
+  rnc: z.string().trim().optional().nullable(),
+  email: z.string().trim().optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+});
+
+export const posUpdateSupplierSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  phone: z.string().trim().optional().nullable(),
+  rnc: z.string().trim().optional().nullable(),
+  email: z.string().trim().optional().nullable(),
+  address: z.string().trim().optional().nullable(),
 });

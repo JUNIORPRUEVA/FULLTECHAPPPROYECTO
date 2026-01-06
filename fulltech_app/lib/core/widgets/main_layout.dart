@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/state/auth_providers.dart';
 import '../../features/auth/state/auth_state.dart';
 import '../../features/configuracion/state/display_settings_provider.dart';
+import '../state/permissions_provider.dart';
 import '../routing/app_routes.dart';
 import 'app_footer.dart';
 import 'app_sidebar.dart';
@@ -34,6 +35,31 @@ class MainLayout extends ConsumerWidget {
         : EdgeInsets.all(displaySettings.compact ? 8 : 12);
 
     final isMobile = MediaQuery.of(context).size.width < 900;
+
+    final permsAsync = ref.watch(permissionsProvider);
+    bool loadedPerms = permsAsync is AsyncData<PermissionsState>;
+    bool can(String code) => permsAsync.maybeWhen(data: (s) => s.has(code), orElse: () => false);
+    bool allowRoute(String route) {
+      if (!loadedPerms) return true;
+      if (route == AppRoutes.pos) return can('pos.sell');
+      if (route == AppRoutes.posPurchases) return can('pos.purchases.manage');
+      if (route == AppRoutes.posInventory) return can('pos.inventory.adjust');
+      if (route == AppRoutes.posReports) return can('pos.reports.view');
+      if (route == AppRoutes.usuarios) return can('users.view');
+      return true;
+    }
+
+    final drawerPrimary = primarySidebarItems
+        .map(
+          (it) => SidebarItem(
+            label: it.label,
+            icon: it.icon,
+            route: it.route,
+            children: it.children.where((c) => allowRoute(c.route)).toList(),
+          ),
+        )
+        .where((it) => allowRoute(it.route))
+        .toList();
 
     final sidebar = AppSidebar(currentRoute: location);
 
@@ -71,7 +97,7 @@ class MainLayout extends ConsumerWidget {
                       ),
                       const Divider(height: 1, color: AppColors.sidebarDivider),
                       const SizedBox(height: 8),
-                      for (final item in primarySidebarItems)
+                      for (final item in drawerPrimary)
                         _DrawerNavTile(
                           item: item,
                           selected: location.startsWith(item.route),
@@ -80,7 +106,7 @@ class MainLayout extends ConsumerWidget {
                             context.go(item.route);
                           },
                         ),
-                      for (final item in primarySidebarItems)
+                      for (final item in drawerPrimary)
                         for (final child in item.children)
                           _DrawerNavTile(
                             item: child,
@@ -120,7 +146,7 @@ class MainLayout extends ConsumerWidget {
           Expanded(
             child: Row(
               children: [
-                if (!isMobile) sidebar,
+                if (!isMobile && !displaySettings.hideSidebar) sidebar,
                 Expanded(
                   child: Padding(padding: contentPadding, child: child),
                 ),

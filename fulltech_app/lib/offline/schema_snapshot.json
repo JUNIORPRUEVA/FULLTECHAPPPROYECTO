@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-01-06T01:57:55.634Z",
+  "generated_at": "2026-01-06T21:26:22.808Z",
   "sources": {
     "prisma": "fulltech_api/prisma/schema.prisma",
     "sql_dir": "fulltech_api/sql",
@@ -3598,6 +3598,1144 @@
       }
     },
     {
+      "name": "pos_credit_accounts",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "balance",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "due_date",
+          "type": "date",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "paid",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "sale_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "columns": [
+            "sale_id"
+          ],
+          "raw": "sale_id        String   @unique @db.Uuid"
+        },
+        {
+          "columns": [
+            "sale_id"
+          ],
+          "raw": "sale_id uuid NOT NULL UNIQUE"
+        }
+      ],
+      "fk": [
+        {
+          "column": "sale_id",
+          "refTable": "pos_sales",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_credit_accounts\n        ADD CONSTRAINT fk_pos_credit_accounts_sale\n        FOREIGN KEY (sale_id) REFERENCES pos_sales(id)"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "customers_legacy",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_credit_accounts\n        ADD CONSTRAINT fk_pos_credit_accounts_customer\n        FOREIGN KEY (customer_id) REFERENCES customers_legacy(id)"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_credit_accounts\n        ADD CONSTRAINT fk_pos_credit_accounts_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "name": "idx_pos_credit_accounts_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_credit_accounts_empresa_id ON pos_credit_accounts(empresa_id);"
+        },
+        {
+          "name": "idx_pos_credit_accounts_status",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_credit_accounts_status ON pos_credit_accounts(status);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PosCreditAccount"
+      }
+    },
+    {
+      "name": "pos_fiscal_sequences",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        {
+          "name": "current_number",
+          "type": "bigint",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "doc_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "max_number",
+          "type": "bigint",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "prefix",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "series",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([empresa_id, doc_type])"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_fiscal_sequences\n        ADD CONSTRAINT fk_pos_fiscal_sequences_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        }
+      ],
+      "indexes": [],
+      "source": {
+        "kind": "prisma",
+        "model": "PosFiscalSequence"
+      }
+    },
+    {
+      "name": "pos_purchase_order_items",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "line_total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "product_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "product_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "purchase_order_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "unit_cost",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "purchase_order_id",
+          "refTable": "PosPurchaseOrder",
+          "refColumn": "id",
+          "raw": "purchase_order PosPurchaseOrder @relation(fields: [purchase_order_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "purchase_order_id",
+          "refTable": "pos_purchase_orders",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_order_items\n        ADD CONSTRAINT fk_pos_purchase_order_items_po\n        FOREIGN KEY (purchase_order_id) REFERENCES pos_purchase_orders(id)"
+        },
+        {
+          "column": "product_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_order_items\n        ADD CONSTRAINT fk_pos_purchase_order_items_product\n        FOREIGN KEY (product_id) REFERENCES \"Producto\"(id)"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_order_items\n        ADD CONSTRAINT fk_pos_purchase_order_items_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "purchase_order_id",
+          "refTable": "pos_purchase_orders",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_order_items\n            ADD CONSTRAINT fk_pos_purchase_order_items_po\n            FOREIGN KEY (purchase_order_id) REFERENCES pos_purchase_orders(id)"
+        },
+        {
+          "column": "product_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_order_items\n            ADD CONSTRAINT fk_pos_purchase_order_items_product\n            FOREIGN KEY (product_id) REFERENCES \"Producto\"(id)"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_order_items\n            ADD CONSTRAINT fk_pos_purchase_order_items_empresa\n            FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([purchase_order_id])"
+        },
+        {
+          "name": "idx_pos_purchase_order_items_po_id",
+          "columns": [
+            "purchase_order_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_purchase_order_items_po_id ON pos_purchase_order_items(purchase_order_id);"
+        },
+        {
+          "name": "idx_pos_purchase_order_items_po_id",
+          "columns": [
+            "purchase_order_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_purchase_order_items_po_id\n    ON pos_purchase_order_items(purchase_order_id);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PosPurchaseOrderItem"
+      }
+    },
+    {
+      "name": "pos_purchase_orders",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "expected_date",
+          "type": "date",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "itbis_total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "subtotal",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "supplier_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "supplier_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_orders\n        ADD CONSTRAINT fk_pos_purchase_orders_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "supplier_id",
+          "refTable": "pos_suppliers",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_orders\n        ADD CONSTRAINT fk_pos_purchase_orders_supplier\n        FOREIGN KEY (supplier_id) REFERENCES pos_suppliers(id)"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_orders\n        ADD CONSTRAINT fk_pos_purchase_orders_user\n        FOREIGN KEY (created_by_user_id) REFERENCES \"Usuario\"(id)"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_orders\n            ADD CONSTRAINT fk_pos_purchase_orders_empresa\n            FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "supplier_id",
+          "refTable": "pos_suppliers",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_orders\n            ADD CONSTRAINT fk_pos_purchase_orders_supplier\n            FOREIGN KEY (supplier_id) REFERENCES pos_suppliers(id)"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_purchase_orders\n            ADD CONSTRAINT fk_pos_purchase_orders_user\n            FOREIGN KEY (created_by_user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id, created_at(sort: Desc)])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "name": "idx_pos_purchase_orders_empresa_created_at",
+          "columns": [
+            "empresa_id",
+            "created_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_purchase_orders_empresa_created_at ON pos_purchase_orders(empresa_id, created_at);"
+        },
+        {
+          "name": "idx_pos_purchase_orders_status",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_purchase_orders_status ON pos_purchase_orders(status);"
+        },
+        {
+          "name": "idx_pos_purchase_orders_empresa_created_at",
+          "columns": [
+            "empresa_id",
+            "created_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_purchase_orders_empresa_created_at\n    ON pos_purchase_orders(empresa_id, created_at);"
+        },
+        {
+          "name": "idx_pos_purchase_orders_status",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_purchase_orders_status\n    ON pos_purchase_orders(status);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PosPurchaseOrder"
+      }
+    },
+    {
+      "name": "pos_sale_items",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "discount_amount",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "itbis_amount",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "line_total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "product_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "product_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "qty",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "sale_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "unit_price",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "sale_id",
+          "refTable": "PosSale",
+          "refColumn": "id",
+          "raw": "sale PosSale @relation(fields: [sale_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "sale_id",
+          "refTable": "pos_sales",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_sale_items\n        ADD CONSTRAINT fk_pos_sale_items_sale\n        FOREIGN KEY (sale_id) REFERENCES pos_sales(id)"
+        },
+        {
+          "column": "product_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_sale_items\n        ADD CONSTRAINT fk_pos_sale_items_product\n        FOREIGN KEY (product_id) REFERENCES \"Producto\"(id)"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_sale_items\n        ADD CONSTRAINT fk_pos_sale_items_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([sale_id])"
+        },
+        {
+          "raw": "@@index([product_id])"
+        },
+        {
+          "name": "idx_pos_sale_items_sale_id",
+          "columns": [
+            "sale_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_sale_items_sale_id ON pos_sale_items(sale_id);"
+        },
+        {
+          "name": "idx_pos_sale_items_product_id",
+          "columns": [
+            "product_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_sale_items_product_id ON pos_sale_items(product_id);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PosSaleItem"
+      }
+    },
+    {
+      "name": "pos_sales",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "change_amount",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_rnc",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "discount_total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "invoice_no",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "invoice_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "itbis_total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "ncf",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "paid_amount",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "payment_method",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "subtotal",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([empresa_id, invoice_no])"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_sales\n        ADD CONSTRAINT fk_pos_sales_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "customers_legacy",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_sales\n        ADD CONSTRAINT fk_pos_sales_customer\n        FOREIGN KEY (customer_id) REFERENCES customers_legacy(id)"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_sales\n        ADD CONSTRAINT fk_pos_sales_user\n        FOREIGN KEY (created_by_user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id, created_at(sort: Desc)])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "name": "idx_pos_sales_empresa_created_at",
+          "columns": [
+            "empresa_id",
+            "created_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_sales_empresa_created_at ON pos_sales(empresa_id, created_at);"
+        },
+        {
+          "name": "idx_pos_sales_status",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_sales_status ON pos_sales(status);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PosSale"
+      }
+    },
+    {
+      "name": "pos_stock_movements",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "product_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "qty_change",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "ref_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "ref_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "unit_cost",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_stock_movements\n        ADD CONSTRAINT fk_pos_stock_movements_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "product_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_stock_movements\n        ADD CONSTRAINT fk_pos_stock_movements_product\n        FOREIGN KEY (product_id) REFERENCES \"Producto\"(id)"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_stock_movements\n        ADD CONSTRAINT fk_pos_stock_movements_user\n        FOREIGN KEY (created_by_user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([product_id])"
+        },
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        },
+        {
+          "name": "idx_pos_stock_movements_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_stock_movements_empresa_id ON pos_stock_movements(empresa_id);"
+        },
+        {
+          "name": "idx_pos_stock_movements_product_id",
+          "columns": [
+            "product_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_stock_movements_product_id ON pos_stock_movements(product_id);"
+        },
+        {
+          "name": "idx_pos_stock_movements_created_at",
+          "columns": [
+            "created_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_stock_movements_created_at ON pos_stock_movements(created_at);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PosStockMovement"
+      }
+    },
+    {
+      "name": "pos_suppliers",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "rnc",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_suppliers\n        ADD CONSTRAINT fk_pos_suppliers_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE pos_suppliers\n            ADD CONSTRAINT fk_pos_suppliers_empresa\n            FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "name": "idx_pos_suppliers_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_suppliers_empresa_id ON pos_suppliers(empresa_id);"
+        },
+        {
+          "name": "idx_pos_suppliers_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pos_suppliers_empresa_id\n    ON pos_suppliers(empresa_id);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PosSupplier"
+      }
+    },
+    {
+      "name": "printer_settings",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "copies",
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "paper_width_mm",
+          "type": "integer",
+          "nullable": false,
+          "default": "80"
+        },
+        {
+          "name": "printer_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "strategy",
+          "type": "text",
+          "nullable": false,
+          "default": "'PDF_FALLBACK'"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "UNIQUE (empresa_id, user_id)"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE printer_settings\n        ADD CONSTRAINT fk_printer_settings_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE printer_settings\n        ADD CONSTRAINT fk_printer_settings_user\n        FOREIGN KEY (user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_printer_settings_empresa_user",
+          "columns": [
+            "empresa_id",
+            "user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_printer_settings_empresa_user ON printer_settings(empresa_id, user_id);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-06_settings_rbac_printer_ui.sql"
+      }
+    },
+    {
       "name": "product_maintenances",
       "pk": [
         "id"
@@ -3831,6 +4969,18 @@
       ],
       "columns": [
         {
+          "name": "allow_negative_stock",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "brand",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
           "name": "categoria_id",
           "type": "uuid",
           "nullable": false,
@@ -3849,6 +4999,18 @@
           "default": "uuid("
         },
         {
+          "name": "max_stock",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "min_stock",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
           "name": "precio_compra",
           "type": "decimal(12, 2)",
           "nullable": false,
@@ -3858,6 +5020,18 @@
           "name": "precio_venta",
           "type": "decimal(12, 2)",
           "nullable": false,
+          "default": null
+        },
+        {
+          "name": "stock_qty",
+          "type": "numeric(14,2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "supplier_id",
+          "type": "uuid",
+          "nullable": true,
           "default": null
         },
         {
@@ -3886,6 +5060,18 @@
           "refTable": "CategoriaProducto",
           "refColumn": "id",
           "raw": "categoria CategoriaProducto @relation(fields: [categoria_id], references: [id])"
+        },
+        {
+          "column": "supplier_id",
+          "refTable": "PosSupplier",
+          "refColumn": "id",
+          "raw": "supplier  PosSupplier?      @relation(fields: [supplier_id], references: [id])"
+        },
+        {
+          "column": "supplier_id",
+          "refTable": "pos_suppliers",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"Producto\"\n      ADD CONSTRAINT fk_producto_supplier_id_pos_suppliers\n      FOREIGN KEY (supplier_id)\n      REFERENCES pos_suppliers(id)"
         }
       ],
       "indexes": [
@@ -3896,10 +5082,62 @@
           "raw": "@@index([categoria_id])"
         },
         {
+          "raw": "@@index([empresa_id, stock_qty])"
+        },
+        {
+          "raw": "@@index([empresa_id, brand])"
+        },
+        {
+          "raw": "@@index([empresa_id, supplier_id])"
+        },
+        {
           "raw": "@@index([search_count])"
         },
         {
           "raw": "@@index([product_type])"
+        },
+        {
+          "name": "idx_producto_empresa_stock_qty",
+          "columns": [
+            "empresa_id",
+            "stock_qty"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_producto_empresa_stock_qty\n  ON \"Producto\" (empresa_id, stock_qty);"
+        },
+        {
+          "name": "idx_producto_empresa_brand",
+          "columns": [
+            "empresa_id",
+            "brand"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_producto_empresa_brand\n  ON \"Producto\" (empresa_id, brand);"
+        },
+        {
+          "name": "idx_producto_empresa_supplier",
+          "columns": [
+            "empresa_id",
+            "supplier_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_producto_empresa_supplier\n  ON \"Producto\" (empresa_id, supplier_id);"
+        },
+        {
+          "name": "idx_producto_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_producto_empresa_id ON \"Producto\"(empresa_id);"
+        },
+        {
+          "name": "idx_producto_stock_qty",
+          "columns": [
+            "stock_qty"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_producto_stock_qty ON \"Producto\"(stock_qty);"
         }
       ],
       "source": {
@@ -4496,6 +5734,275 @@
       "source": {
         "kind": "prisma",
         "model": "Quotation"
+      }
+    },
+    {
+      "name": "rbac_permissions",
+      "pk": [
+        "code"
+      ],
+      "columns": [
+        {
+          "name": "code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": false,
+          "default": "''"
+        }
+      ],
+      "unique": [],
+      "fk": [],
+      "indexes": [],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-06_settings_rbac_printer_ui.sql"
+      }
+    },
+    {
+      "name": "rbac_role_permissions",
+      "pk": [
+        "role_id",
+        "permission_code"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "permission_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "role_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "role_id",
+          "refTable": "rbac_roles",
+          "refColumn": "id",
+          "raw": "ALTER TABLE rbac_role_permissions\n        ADD CONSTRAINT fk_rbac_role_permissions_role\n        FOREIGN KEY (role_id) REFERENCES rbac_roles(id)"
+        },
+        {
+          "column": "permission_code",
+          "refTable": "rbac_permissions",
+          "refColumn": "code",
+          "raw": "ALTER TABLE rbac_role_permissions\n        ADD CONSTRAINT fk_rbac_role_permissions_perm\n        FOREIGN KEY (permission_code) REFERENCES rbac_permissions(code)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_rbac_role_permissions_role",
+          "columns": [
+            "role_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_rbac_role_permissions_role ON rbac_role_permissions(role_id);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-06_settings_rbac_printer_ui.sql"
+      }
+    },
+    {
+      "name": "rbac_roles",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "is_system",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [
+        {
+          "raw": "UNIQUE (empresa_id, name)"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE rbac_roles\n        ADD CONSTRAINT fk_rbac_roles_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_rbac_roles_empresa",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_rbac_roles_empresa ON rbac_roles(empresa_id);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-06_settings_rbac_printer_ui.sql"
+      }
+    },
+    {
+      "name": "rbac_user_permission_overrides",
+      "pk": [
+        "user_id",
+        "permission_code"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "effect",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "permission_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE rbac_user_permission_overrides\n        ADD CONSTRAINT fk_rbac_user_perm_overrides_user\n        FOREIGN KEY (user_id) REFERENCES \"Usuario\"(id)"
+        },
+        {
+          "column": "permission_code",
+          "refTable": "rbac_permissions",
+          "refColumn": "code",
+          "raw": "ALTER TABLE rbac_user_permission_overrides\n        ADD CONSTRAINT fk_rbac_user_perm_overrides_perm\n        FOREIGN KEY (permission_code) REFERENCES rbac_permissions(code)"
+        }
+      ],
+      "indexes": [],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-06_settings_rbac_printer_ui.sql"
+      }
+    },
+    {
+      "name": "rbac_user_roles",
+      "pk": [
+        "user_id",
+        "role_id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "role_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE rbac_user_roles\n        ADD CONSTRAINT fk_rbac_user_roles_user\n        FOREIGN KEY (user_id) REFERENCES \"Usuario\"(id)"
+        },
+        {
+          "column": "role_id",
+          "refTable": "rbac_roles",
+          "refColumn": "id",
+          "raw": "ALTER TABLE rbac_user_roles\n        ADD CONSTRAINT fk_rbac_user_roles_role\n        FOREIGN KEY (role_id) REFERENCES rbac_roles(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_rbac_user_roles_user",
+          "columns": [
+            "user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_rbac_user_roles_user ON rbac_user_roles(user_id);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-06_settings_rbac_printer_ui.sql"
       }
     },
     {
@@ -5287,6 +6794,96 @@
       "source": {
         "kind": "prisma",
         "model": "StatutoryConfig"
+      }
+    },
+    {
+      "name": "ui_settings",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "hide_sidebar",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "large_screen_mode",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "scale",
+          "type": "numeric(6,3)",
+          "nullable": false,
+          "default": "1.0"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "UNIQUE (empresa_id, user_id)"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE ui_settings\n        ADD CONSTRAINT fk_ui_settings_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE ui_settings\n        ADD CONSTRAINT fk_ui_settings_user\n        FOREIGN KEY (user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ui_settings_empresa_user",
+          "columns": [
+            "empresa_id",
+            "user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_ui_settings_empresa_user ON ui_settings(empresa_id, user_id);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-06_settings_rbac_printer_ui.sql"
       }
     },
     {

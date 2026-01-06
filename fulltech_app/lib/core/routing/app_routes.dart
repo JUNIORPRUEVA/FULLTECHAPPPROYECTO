@@ -15,6 +15,12 @@ class AppRoutes {
   static const garantia = '/garantia';
   static const nomina = '/nomina';
   static const ventas = '/ventas';
+  static const pos = '/pos';
+  static const posPurchases = '/pos/purchases';
+  static const posSuppliers = '/pos/suppliers';
+  static const posInventory = '/pos/inventory';
+  static const posCredit = '/pos/credit';
+  static const posReports = '/pos/reports';
   static const catalogo = '/catalogo';
   static const tecnico = '/tecnico';
   static const contrato = '/contrato';

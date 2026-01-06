@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/api_client.dart';
-import '../../core/storage/local_db.dart';
+import '../../../features/auth/state/auth_providers.dart';
 import '../data/pos_api.dart';
 import '../data/pos_repository.dart';
 import 'pos_tpv_controller.dart';

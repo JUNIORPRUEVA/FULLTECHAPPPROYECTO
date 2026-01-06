@@ -23,6 +23,9 @@ import { lettersRouter } from '../modules/letters/letters.routes';
 import { operationsRouter } from '../modules/operations/operations.routes';
 import { rulesRouter } from '../modules/rules/rules.routes';
 import { posRouter } from '../modules/pos/pos.routes';
+import { inventoryRouter } from '../modules/inventory/inventory.routes';
+import { settingsRouter } from '../modules/settings/settings.routes';
+import { printRouter } from '../modules/print/print.routes';
 
 export const apiRouter = Router();
 
@@ -54,5 +57,8 @@ apiRouter.use('/operations', operationsRouter);
 apiRouter.use('/rules', rulesRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/pos', posRouter);
+apiRouter.use('/inventory', inventoryRouter);
+apiRouter.use('/settings', settingsRouter);
+apiRouter.use('/print', printRouter);
 
 // TODO: Montar módulos restantes (operaciones, nómina, rrhh, guagua, etc.)

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/state/permissions_provider.dart';
 import '../../../core/widgets/module_page.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../auth/state/auth_providers.dart';
@@ -22,6 +23,19 @@ class ConfiguracionScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isAdmin = _isAdmin(ref);
 
+    final auth = ref.watch(authControllerProvider);
+    final role = auth is AuthAuthenticated ? auth.user.role : '';
+
+    final permissions = ref.watch(permissionsProvider);
+    final canManageSettings = permissions.maybeWhen(
+      data: (p) => p.has('settings.manage'),
+      orElse: () => isAdmin,
+    );
+    final canUsePrinting = permissions.maybeWhen(
+      data: (p) => p.has('printing.use'),
+      orElse: () => isAdmin || role == 'vendedor',
+    );
+
     final cards = <_SettingsCardModel>[
       if (isAdmin)
         _SettingsCardModel(
@@ -29,6 +43,20 @@ class ConfiguracionScreen extends ConsumerWidget {
           title: 'Empresa',
           description: 'Datos de la empresa y logo.',
           route: '${AppRoutes.configuracion}/empresa',
+        ),
+      if (canManageSettings)
+        _SettingsCardModel(
+          icon: Icons.manage_accounts_outlined,
+          title: 'Permisos de usuarios',
+          description: 'Roles, permisos y overrides.',
+          route: '${AppRoutes.configuracion}/permisos',
+        ),
+      if (canUsePrinting)
+        _SettingsCardModel(
+          icon: Icons.print_outlined,
+          title: 'Impresora',
+          description: 'Estrategia y preferencias de impresión.',
+          route: '${AppRoutes.configuracion}/impresora',
         ),
       if (isAdmin && kDebugMode)
         _SettingsCardModel(
@@ -43,13 +71,12 @@ class ConfiguracionScreen extends ConsumerWidget {
         description: 'Tema y preferencias visuales.',
         route: '${AppRoutes.configuracion}/tema',
       ),
-      if (isAdmin)
-        _SettingsCardModel(
-          icon: Icons.fullscreen,
-          title: 'Pantalla',
-          description: 'Pantalla completa y modo compacto.',
-          route: '${AppRoutes.configuracion}/pantalla',
-        ),
+      _SettingsCardModel(
+        icon: Icons.fullscreen,
+        title: 'Pantalla',
+        description: 'Modo pantalla grande (F1) y escala.',
+        route: '${AppRoutes.configuracion}/pantalla',
+      ),
     ];
 
     return ModulePage(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/offline_http_queue.dart';
 import '../data/pos_repository.dart';
 import '../models/pos_models.dart';
 
@@ -47,9 +48,14 @@ class PosTicket {
     );
   }
 
-  double get subtotal => items.fold<double>(0, (acc, it) => acc + (it.qty * it.unitPrice));
-  double get lineDiscounts => items.fold<double>(0, (acc, it) => acc + it.discountAmount);
-  double get baseAfterLineDiscounts => items.fold<double>(0, (acc, it) => acc + (it.lineSubtotal < 0 ? 0 : it.lineSubtotal));
+  double get subtotal =>
+      items.fold<double>(0, (acc, it) => acc + (it.qty * it.unitPrice));
+  double get lineDiscounts =>
+      items.fold<double>(0, (acc, it) => acc + it.discountAmount);
+  double get baseAfterLineDiscounts => items.fold<double>(
+    0,
+    (acc, it) => acc + (it.lineSubtotal < 0 ? 0 : it.lineSubtotal),
+  );
 }
 
 class PosTpvState {
@@ -79,7 +85,8 @@ class PosTpvState {
     required this.lastPaidSale,
   });
 
-  PosTicket get activeTicket => tickets.firstWhere((t) => t.id == activeTicketId);
+  PosTicket get activeTicket =>
+      tickets.firstWhere((t) => t.id == activeTicketId);
 
   PosTpvState copyWith({
     bool? loading,
@@ -108,31 +115,31 @@ class PosTpvState {
 
 class PosTpvController extends StateNotifier<PosTpvState> {
   PosTpvController({required PosRepository repo})
-      : _repo = repo,
-        super(
-          PosTpvState(
-            loading: false,
-            error: null,
-            search: '',
-            lowStockOnly: false,
-            categoryId: null,
-            products: const [],
-            tickets: const [
-              PosTicket(
-                id: 'ticket-1',
-                name: 'Ticket 1',
-                customerId: null,
-                customerName: null,
-                customerRnc: null,
-                invoiceType: 'NORMAL',
-                globalDiscount: 0,
-                items: [],
-              ),
-            ],
-            activeTicketId: 'ticket-1',
-            lastPaidSale: null,
-          ),
-        ) {
+    : _repo = repo,
+      super(
+        PosTpvState(
+          loading: false,
+          error: null,
+          search: '',
+          lowStockOnly: false,
+          categoryId: null,
+          products: const [],
+          tickets: const [
+            PosTicket(
+              id: 'ticket-1',
+              name: 'Ticket 1',
+              customerId: null,
+              customerName: null,
+              customerRnc: null,
+              invoiceType: 'NORMAL',
+              globalDiscount: 0,
+              items: [],
+            ),
+          ],
+          activeTicketId: 'ticket-1',
+          lastPaidSale: null,
+        ),
+      ) {
     unawaited(refreshProducts());
   }
 
@@ -148,7 +155,7 @@ class PosTpvController extends StateNotifier<PosTpvState> {
   Future<void> refreshProducts() async {
     state = state.copyWith(loading: true, error: null);
     try {
-      final products = await _repo.listProducts(
+      final products = await _repo.listAllProducts(
         search: state.search,
         lowStock: state.lowStockOnly,
         categoryId: state.categoryId,
@@ -197,11 +204,22 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     );
   }
 
+  void renameTicket(String id, String name) {
+    final nextName = name.trim();
+    if (nextName.isEmpty) return;
+    final tickets = state.tickets
+        .map((t) => t.id == id ? t.copyWith(name: nextName) : t)
+        .toList();
+    state = state.copyWith(tickets: tickets);
+  }
+
   void closeTicket(String id) {
     final tickets = [...state.tickets];
     if (tickets.length == 1) return;
     tickets.removeWhere((t) => t.id == id);
-    final active = state.activeTicketId == id ? tickets.first.id : state.activeTicketId;
+    final active = state.activeTicketId == id
+        ? tickets.first.id
+        : state.activeTicketId;
     state = state.copyWith(tickets: tickets, activeTicketId: active);
   }
 
@@ -217,7 +235,14 @@ class PosTpvController extends StateNotifier<PosTpvState> {
   void setCustomer({String? customerId, String? name, String? rnc}) {
     final t = state.activeTicket;
     final label = (name ?? '').trim().isEmpty ? t.name : name!.trim();
-    _updateTicket(t.copyWith(customerId: customerId, customerName: name, customerRnc: rnc, name: label));
+    _updateTicket(
+      t.copyWith(
+        customerId: customerId,
+        customerName: name,
+        customerRnc: rnc,
+        name: label,
+      ),
+    );
   }
 
   void setGlobalDiscount(double amount) {
@@ -234,7 +259,14 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       final current = items[idx];
       items[idx] = current.copyWith(qty: current.qty + 1);
     } else {
-      items.add(PosSaleItemDraft(product: product, qty: 1, unitPrice: product.precioVenta, discountAmount: 0));
+      items.add(
+        PosSaleItemDraft(
+          product: product,
+          qty: 1,
+          unitPrice: product.precioVenta,
+          discountAmount: 0,
+        ),
+      );
     }
 
     _updateTicket(t.copyWith(items: items));
@@ -242,16 +274,22 @@ class PosTpvController extends StateNotifier<PosTpvState> {
 
   void updateLine(PosSaleItemDraft line, PosSaleItemDraft next) {
     final t = state.activeTicket;
-    final items = t.items.map((it) => it.product.id == line.product.id ? next : it).toList();
+    final items = t.items
+        .map((it) => it.product.id == line.product.id ? next : it)
+        .toList();
     _updateTicket(t.copyWith(items: items));
   }
 
   void removeLine(PosSaleItemDraft line) {
     final t = state.activeTicket;
-    _updateTicket(t.copyWith(items: t.items.where((it) => it.product.id != line.product.id).toList()));
+    _updateTicket(
+      t.copyWith(
+        items: t.items.where((it) => it.product.id != line.product.id).toList(),
+      ),
+    );
   }
 
-  Future<PosSale> checkout({
+  Future<PosSale?> checkout({
     required String paymentMethod,
     required double paidAmount,
     double? receivedAmount,
@@ -293,13 +331,39 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       state = state.copyWith(loading: false, lastPaidSale: paid);
       return paid;
     } catch (e) {
+      // Offline-first: queue the checkout and clear the ticket so the user can continue.
+      if (OfflineHttpQueue.isNetworkError(e)) {
+        await _repo.queueOfflineCheckout(
+          invoiceType: t.invoiceType,
+          customerId: t.customerId,
+          customerName: t.customerName,
+          customerRnc: t.customerRnc,
+          items: t.items,
+          discountTotal: t.globalDiscount,
+          paymentMethod: paymentMethod,
+          paidAmount: paidAmount,
+          receivedAmount: receivedAmount,
+          dueDateIso: dueDate?.toIso8601String(),
+          initialPayment: initialPayment,
+          docType: docType,
+          note: null,
+        );
+
+        final cleared = t.copyWith(items: const [], globalDiscount: 0);
+        _updateTicket(cleared);
+        state = state.copyWith(loading: false, error: null);
+        return null;
+      }
+
       state = state.copyWith(loading: false, error: e.toString());
       rethrow;
     }
   }
 
   void _updateTicket(PosTicket next) {
-    final tickets = state.tickets.map((t) => t.id == next.id ? next : t).toList();
+    final tickets = state.tickets
+        .map((t) => t.id == next.id ? next : t)
+        .toList();
     state = state.copyWith(tickets: tickets);
   }
 }

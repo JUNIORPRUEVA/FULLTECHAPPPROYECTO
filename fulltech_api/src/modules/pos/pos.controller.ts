@@ -16,6 +16,9 @@ import {
   posReceivePurchaseSchema,
   posPaySaleSchema,
   posReportsRangeSchema,
+  posListSuppliersSchema,
+  posCreateSupplierSchema,
+  posUpdateSupplierSchema,
 } from './pos.schema';
 import { parseDateOrNull, round2, suggestReorderQty, wouldBlockStock } from './pos.logic';
 
@@ -84,7 +87,7 @@ export async function listPosProducts(req: Request, res: Response) {
   const parsed = posListProductsSchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
 
-  const { search, lowStock, categoryId } = parsed.data;
+  const { search, lowStock, categoryId, take, skip } = parsed.data;
 
   const q = (search ?? '').trim();
 
@@ -99,7 +102,8 @@ export async function listPosProducts(req: Request, res: Response) {
       categoria: { select: { id: true, nombre: true } },
     },
     orderBy: [{ search_count: 'desc' }, { nombre: 'asc' }],
-    take: 200,
+    take: take ?? 200,
+    skip: skip ?? 0,
   });
 
   const filtered = lowStock
@@ -128,6 +132,102 @@ export async function listPosProducts(req: Request, res: Response) {
   });
 
   ok(res, data);
+}
+
+export async function listPosSuppliers(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+
+  const parsed = posListSuppliersSchema.safeParse(req.query);
+  if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
+
+  const q = (parsed.data.search ?? '').trim();
+
+  const items = await prisma.posSupplier.findMany({
+    where: {
+      empresa_id,
+      ...(q.length > 0
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' } },
+              { phone: { contains: q, mode: 'insensitive' } },
+              { rnc: { contains: q, mode: 'insensitive' } },
+              { email: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ name: 'asc' }],
+    take: 200,
+  });
+
+  ok(res, items);
+}
+
+export async function createPosSupplier(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+
+  const parsed = posCreateSupplierSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const body = parsed.data;
+
+  const created = await prisma.posSupplier.create({
+    data: {
+      empresa_id,
+      name: body.name,
+      phone: body.phone ?? null,
+      rnc: body.rnc ?? null,
+      email: body.email ?? null,
+      address: body.address ?? null,
+    },
+  });
+
+  ok(res, created, 'Created', 201);
+}
+
+export async function updatePosSupplier(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const id = String(req.params.id);
+
+  const parsed = posUpdateSupplierSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const existing = await prisma.posSupplier.findFirst({ where: { id, empresa_id } });
+  if (!existing) throw new ApiError(404, 'Supplier not found');
+
+  const body = parsed.data;
+
+  const updated = await prisma.posSupplier.update({
+    where: { id },
+    data: {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.phone !== undefined ? { phone: body.phone } : {}),
+      ...(body.rnc !== undefined ? { rnc: body.rnc } : {}),
+      ...(body.email !== undefined ? { email: body.email } : {}),
+      ...(body.address !== undefined ? { address: body.address } : {}),
+    },
+  });
+
+  ok(res, updated);
+}
+
+export async function deletePosSupplier(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const id = String(req.params.id);
+
+  const existing = await prisma.posSupplier.findFirst({ where: { id, empresa_id } });
+  if (!existing) throw new ApiError(404, 'Supplier not found');
+
+  await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    await tx.posPurchaseOrder.updateMany({
+      where: { empresa_id, supplier_id: id },
+      data: { supplier_id: null },
+    });
+
+    await tx.posSupplier.delete({ where: { id } });
+  });
+
+  ok(res, { id });
 }
 
 export async function createPosSale(req: Request, res: Response) {

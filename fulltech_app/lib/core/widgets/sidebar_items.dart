@@ -54,6 +54,38 @@ const primarySidebarItems = <SidebarItem>[
     route: AppRoutes.ventas,
   ),
   SidebarItem(
+    label: 'POS',
+    icon: Icons.storefront_outlined,
+    route: AppRoutes.pos,
+    children: [
+      SidebarItem(
+        label: 'TPV',
+        icon: Icons.point_of_sale_outlined,
+        route: AppRoutes.pos,
+      ),
+      SidebarItem(
+        label: 'Compras',
+        icon: Icons.shopping_cart_outlined,
+        route: AppRoutes.posPurchases,
+      ),
+      SidebarItem(
+        label: 'Inventario',
+        icon: Icons.inventory_2_outlined,
+        route: AppRoutes.posInventory,
+      ),
+      SidebarItem(
+        label: 'Crédito',
+        icon: Icons.account_balance_wallet_outlined,
+        route: AppRoutes.posCredit,
+      ),
+      SidebarItem(
+        label: 'Reportes',
+        icon: Icons.bar_chart_outlined,
+        route: AppRoutes.posReports,
+      ),
+    ],
+  ),
+  SidebarItem(
     label: 'Mantenimiento',
     icon: Icons.build_outlined,
     route: AppRoutes.mantenimiento,
