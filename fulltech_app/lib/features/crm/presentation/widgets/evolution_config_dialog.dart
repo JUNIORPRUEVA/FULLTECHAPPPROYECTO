@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/crm_providers.dart';
+import '../../data/datasources/evolution_direct_settings.dart';
+import 'crm_keyboard_shortcuts.dart';
 
 class EvolutionConfigDialog extends ConsumerStatefulWidget {
   const EvolutionConfigDialog({super.key});
@@ -17,6 +19,11 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
   late TextEditingController _apiKeyCtrl;
   late TextEditingController _expectedPhoneCtrl;
 
+  late TextEditingController _directBaseUrlCtrl;
+  late TextEditingController _directInstanceCtrl;
+  late TextEditingController _directCountryCtrl;
+  bool _directEnabled = false;
+
   bool _isLoading = false;
   String? _error;
   Map<String, dynamic>? _status;
@@ -28,6 +35,10 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
     _baseUrlCtrl = TextEditingController();
     _apiKeyCtrl = TextEditingController();
     _expectedPhoneCtrl = TextEditingController();
+
+    _directBaseUrlCtrl = TextEditingController();
+    _directInstanceCtrl = TextEditingController();
+    _directCountryCtrl = TextEditingController();
     _loadConfig();
   }
 
@@ -37,6 +48,10 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
     _baseUrlCtrl.dispose();
     _apiKeyCtrl.dispose();
     _expectedPhoneCtrl.dispose();
+
+    _directBaseUrlCtrl.dispose();
+    _directInstanceCtrl.dispose();
+    _directCountryCtrl.dispose();
     super.dispose();
   }
 
@@ -47,12 +62,25 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
       final config = await repo.getEvolutionConfig();
       final status = await repo.getEvolutionStatus();
 
+      final direct = await EvolutionDirectSettings.load();
+
       if (mounted) {
         setState(() {
           _status = status;
           _instanceNameCtrl.text = config['instanceName'] ?? '';
           _baseUrlCtrl.text = config['evolutionBaseUrl'] ?? '';
           _expectedPhoneCtrl.text = config['expectedPhoneNumber'] ?? '';
+
+          _directEnabled = direct.enabled;
+          _directBaseUrlCtrl.text = direct.baseUrl.trim().isNotEmpty
+              ? direct.baseUrl
+              : (config['evolutionBaseUrl'] ?? '');
+          _apiKeyCtrl.text = direct.apiKey;
+          _directInstanceCtrl.text = direct.instance.trim().isNotEmpty
+              ? direct.instance
+              : (config['instanceName'] ?? '');
+          _directCountryCtrl.text = direct.defaultCountryCode;
+
           _isLoading = false;
         });
       }
@@ -62,6 +90,40 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
           _error = 'Error cargando config: $e';
           _isLoading = false;
         });
+      }
+    }
+  }
+
+  Future<void> _saveDirectSettings() async {
+    setState(() => _isLoading = true);
+    try {
+      await EvolutionDirectSettings.save(
+        EvolutionDirectSettingsData(
+          enabled: _directEnabled,
+          baseUrl: _directBaseUrlCtrl.text.trim(),
+          apiKey: _apiKeyCtrl.text.trim(),
+          instance: _directInstanceCtrl.text.trim(),
+          defaultCountryCode: _directCountryCtrl.text.trim().isEmpty
+              ? '1'
+              : _directCountryCtrl.text.trim(),
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Configuración (modo directo) guardada'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -265,6 +327,18 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
                     _SectionHeader(title: 'Configuración', theme: theme),
                     const SizedBox(height: 12),
                     _buildConfigSection(context, theme),
+
+                    const SizedBox(height: 20),
+                    Divider(color: theme.colorScheme.outlineVariant),
+                    const SizedBox(height: 20),
+
+                    // Sección D: Atajos de teclado
+                    _SectionHeader(
+                      title: 'Atajos de teclado (CRM)',
+                      theme: theme,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildKeyboardShortcutsSection(context, theme),
                   ],
                 ),
               ),
@@ -414,6 +488,49 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
     );
   }
 
+  Widget _buildKeyboardShortcutsSection(BuildContext context, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Atajos disponibles para trabajar más rápido dentro del chat del CRM:',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        for (final s in crmKeyboardShortcuts)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: Text(
+                    s.keys,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(s.description, style: theme.textTheme.bodyMedium),
+                ),
+              ],
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => showCrmKeyboardShortcutsDialog(context),
+            icon: const Icon(Icons.keyboard),
+            label: const Text('Ver ayuda'),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildActionsSection(BuildContext context, ThemeData theme) {
     return Wrap(
       spacing: 8,
@@ -471,6 +588,74 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
             color: theme.colorScheme.onSurfaceVariant,
             fontStyle: FontStyle.italic,
           ),
+        ),
+
+        const SizedBox(height: 18),
+        Divider(color: theme.colorScheme.outlineVariant),
+        const SizedBox(height: 12),
+        Text(
+          'Envío directo desde la app (solo pruebas)',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          value: _directEnabled,
+          onChanged: _isLoading
+              ? null
+              : (v) => setState(() {
+                  _directEnabled = v;
+                }),
+          title: const Text('Activar envío directo a Evolution'),
+          subtitle: const Text(
+            'Evita el envío por backend (inseguro: guarda API Key en el cliente).',
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _directBaseUrlCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Evolution Base URL (directo)',
+            hintText: 'https://tu-evolution',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _directInstanceCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Nombre de Instancia (directo)',
+            hintText: 'ej: Fulltech-Main',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _apiKeyCtrl,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'API Key (directo)',
+            hintText: '••••••••',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _directCountryCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Default Country Code (directo)',
+            hintText: '1',
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _isLoading ? null : _saveDirectSettings,
+          icon: const Icon(Icons.save, size: 18),
+          label: const Text('Guardar modo directo'),
         ),
       ],
     );

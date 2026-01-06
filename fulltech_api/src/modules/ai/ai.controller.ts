@@ -16,17 +16,43 @@ async function aiSettingsTableExists(): Promise<boolean> {
   }
 
   try {
-    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
-      'SELECT to_regclass($1) as regclass',
-      'public.ai_settings',
+    const rows = await prisma.$queryRawUnsafe<{ count: number }[]>(
+      `SELECT COUNT(*)::int as count
+       FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'ai_settings'`,
     );
-    const exists = Boolean(rows?.[0]?.regclass);
+    const exists = Number(rows?.[0]?.count ?? 0) > 0;
     aiSettingsExistsCache = exists;
     aiSettingsExistsAtMs = now;
     return exists;
   } catch {
     aiSettingsExistsCache = false;
     aiSettingsExistsAtMs = now;
+    return false;
+  }
+}
+
+let aiSuggestionsExistsCache: boolean | null = null;
+let aiSuggestionsExistsAtMs = 0;
+async function aiSuggestionsTableExists(): Promise<boolean> {
+  const now = Date.now();
+  if (aiSuggestionsExistsCache != null && now - aiSuggestionsExistsAtMs < 60_000) {
+    return aiSuggestionsExistsCache;
+  }
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ count: number }[]>(
+      `SELECT COUNT(*)::int as count
+       FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'ai_suggestions'`,
+    );
+    const exists = Number(rows?.[0]?.count ?? 0) > 0;
+    aiSuggestionsExistsCache = exists;
+    aiSuggestionsExistsAtMs = now;
+    return exists;
+  } catch {
+    aiSuggestionsExistsCache = false;
+    aiSuggestionsExistsAtMs = now;
     return false;
   }
 }
@@ -228,6 +254,8 @@ export async function suggestAiReplies(req: Request, res: Response) {
 
   const suggestions: Array<{ id: string; text: string; confidence: number; tags: string[] }> = [];
 
+  const canPersistSuggestions = await aiSuggestionsTableExists();
+
   if (quickRepliesEnabled) {
     const qrRows = await prisma.$queryRawUnsafe<any[]>(
       `
@@ -265,19 +293,21 @@ export async function suggestAiReplies(req: Request, res: Response) {
       });
       usedKnowledge.push(`quickReplies:${tag}`);
 
-      // Persist suggestion for audit.
-      await prisma.$executeRawUnsafe(
-        `
-        INSERT INTO ai_suggestions (id, chat_id, last_customer_message_id, customer_text, suggestion_text, used_knowledge)
-        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::jsonb)
-        `,
-        id,
-        parsed.data.chatId ?? null,
-        parsed.data.lastCustomerMessageId ?? null,
-        parsed.data.customerMessageText,
-        text,
-        JSON.stringify(usedKnowledge),
-      );
+      // Persist suggestion for audit (optional).
+      if (canPersistSuggestions) {
+        await prisma.$executeRawUnsafe(
+          `
+          INSERT INTO ai_suggestions (id, chat_id, last_customer_message_id, customer_text, suggestion_text, used_knowledge)
+          VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::jsonb)
+          `,
+          id,
+          parsed.data.chatId ?? null,
+          parsed.data.lastCustomerMessageId ?? null,
+          parsed.data.customerMessageText,
+          text,
+          JSON.stringify(usedKnowledge),
+        );
+      }
     }
   }
 
@@ -304,6 +334,27 @@ export async function suggestAiReplies(req: Request, res: Response) {
         });
         usedKnowledge.push(...llmRes.usedKnowledge);
 
+        if (canPersistSuggestions) {
+          await prisma.$executeRawUnsafe(
+            `
+            INSERT INTO ai_suggestions (id, chat_id, last_customer_message_id, customer_text, suggestion_text, used_knowledge)
+            VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::jsonb)
+            `,
+            id,
+            parsed.data.chatId ?? null,
+            parsed.data.lastCustomerMessageId ?? null,
+            parsed.data.customerMessageText,
+            s.text.trim(),
+            JSON.stringify(usedKnowledge),
+          );
+        }
+      }
+    } else {
+      // Minimal fallback without LLM: 1 generic suggestion.
+      const id = randomUUID();
+      const text = '¡Gracias por tu mensaje! ¿Podrías confirmarme tu ubicación y el horario en que te conviene?';
+      suggestions.push({ id, text, confidence: 0.35, tags: ['general'] });
+      if (canPersistSuggestions) {
         await prisma.$executeRawUnsafe(
           `
           INSERT INTO ai_suggestions (id, chat_id, last_customer_message_id, customer_text, suggestion_text, used_knowledge)
@@ -313,27 +364,10 @@ export async function suggestAiReplies(req: Request, res: Response) {
           parsed.data.chatId ?? null,
           parsed.data.lastCustomerMessageId ?? null,
           parsed.data.customerMessageText,
-          s.text.trim(),
+          text,
           JSON.stringify(usedKnowledge),
         );
       }
-    } else {
-      // Minimal fallback without LLM: 1 generic suggestion.
-      const id = randomUUID();
-      const text = '¡Gracias por tu mensaje! ¿Podrías confirmarme tu ubicación y el horario en que te conviene?';
-      suggestions.push({ id, text, confidence: 0.35, tags: ['general'] });
-      await prisma.$executeRawUnsafe(
-        `
-        INSERT INTO ai_suggestions (id, chat_id, last_customer_message_id, customer_text, suggestion_text, used_knowledge)
-        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::jsonb)
-        `,
-        id,
-        parsed.data.chatId ?? null,
-        parsed.data.lastCustomerMessageId ?? null,
-        parsed.data.customerMessageText,
-        text,
-        JSON.stringify(usedKnowledge),
-      );
     }
   }
 

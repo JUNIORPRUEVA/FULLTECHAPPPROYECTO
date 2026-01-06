@@ -106,6 +106,14 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
                 ),
               ),
               DropdownMenuItem(
+                value: 'primer_contacto',
+                child: Text(
+                  'Primer contacto',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              DropdownMenuItem(
                 value: 'pendiente',
                 child: Text(
                   'Pendiente',

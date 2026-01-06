@@ -13,6 +13,7 @@
     "prisma:studio": "prisma studio",
     "reset-password": "tsx scripts/reset_user_password.ts",
     "create-crm-tables": "tsx scripts/create_crm_whatsapp_tables.ts",
+    "create-ai-tables": "tsx scripts/create_ai_settings_and_suggestions_tables.ts",
     "consolidate-empresa": "tsx scripts/consolidate_to_single_empresa.ts",
     "audit-empresas": "tsx scripts/audit_empresas.ts",
     "delete-other-empresas": "tsx scripts/delete_other_empresas.ts"

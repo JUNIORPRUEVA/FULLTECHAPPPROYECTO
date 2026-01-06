@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../datasources/crm_remote_datasource.dart';
 import '../models/crm_message.dart';
 import '../models/crm_chat_stats.dart';
@@ -5,12 +7,81 @@ import '../models/crm_thread.dart';
 import '../models/crm_quick_reply.dart';
 import '../models/ai_settings.dart';
 import '../models/ai_suggestion.dart';
+import '../models/customer.dart';
 import 'package:file_picker/file_picker.dart';
+
+import '../../../../core/storage/local_db_interface.dart';
 
 class CrmRepository {
   final CrmRemoteDataSource _remote;
+  final LocalDb _db;
 
-  CrmRepository(this._remote);
+  static const String threadsStore = 'crm_threads_v1';
+  static String messagesStoreForThread(String threadId) =>
+      'crm_messages_v1:$threadId';
+
+  CrmRepository(this._remote, this._db);
+
+  Future<List<CrmThread>> readCachedThreads() async {
+    final rows = await _db.listEntitiesJson(store: threadsStore);
+    final items = rows
+        .map((s) => CrmThread.fromJson(jsonDecode(s) as Map<String, dynamic>))
+        .toList(growable: false);
+
+    // Sort newest first (last message / updated).
+    items.sort((a, b) {
+      final aKey = a.lastMessageAt ?? a.updatedAt;
+      final bKey = b.lastMessageAt ?? b.updatedAt;
+      return bKey.compareTo(aKey);
+    });
+    return items;
+  }
+
+  Future<void> cacheThreads(
+    List<CrmThread> threads, {
+    bool replace = false,
+  }) async {
+    if (replace) {
+      await _db.clearStore(store: threadsStore);
+    }
+    for (final t in threads) {
+      await _db.upsertEntity(
+        store: threadsStore,
+        id: t.id,
+        json: jsonEncode(t.toJson()),
+      );
+    }
+  }
+
+  Future<List<CrmMessage>> readCachedMessages({required String threadId}) async {
+    final store = messagesStoreForThread(threadId);
+    final rows = await _db.listEntitiesJson(store: store);
+    final items = rows
+        .map((s) => CrmMessage.fromJson(jsonDecode(s) as Map<String, dynamic>))
+        .toList(growable: false);
+
+    // Ensure chronological order (oldest -> newest).
+    items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return items;
+  }
+
+  Future<void> cacheMessages(
+    List<CrmMessage> messages, {
+    required String threadId,
+    bool replace = false,
+  }) async {
+    final store = messagesStoreForThread(threadId);
+    if (replace) {
+      await _db.clearStore(store: store);
+    }
+    for (final m in messages) {
+      await _db.upsertEntity(
+        store: store,
+        id: m.id,
+        json: jsonEncode(m.toJson()),
+      );
+    }
+  }
 
   Future<ThreadsPage> listThreads({
     String? search,
@@ -37,7 +108,7 @@ class CrmRepository {
   Future<CrmThread> patchThread(String id, Map<String, dynamic> patch) =>
       _remote.patchThread(id, patch);
 
-    Future<CrmThread> patchChat(String chatId, Map<String, dynamic> patch) =>
+  Future<CrmThread> patchChat(String chatId, Map<String, dynamic> patch) =>
       _remote.patchChat(chatId, patch);
 
   Future<MessagesPage> listMessages({
@@ -45,7 +116,30 @@ class CrmRepository {
     int limit = 50,
     DateTime? before,
   }) {
-    return _remote.listMessages(threadId: threadId, limit: limit, before: before);
+    return _remote.listMessages(
+      threadId: threadId,
+      limit: limit,
+      before: before,
+    );
+  }
+
+  Future<CrmMessage> editChatMessage({
+    required String threadId,
+    required String messageId,
+    required String text,
+  }) {
+    return _remote.editChatMessage(
+      threadId: threadId,
+      messageId: messageId,
+      text: text,
+    );
+  }
+
+  Future<CrmMessage> deleteChatMessage({
+    required String threadId,
+    required String messageId,
+  }) {
+    return _remote.deleteChatMessage(threadId: threadId, messageId: messageId);
   }
 
   Future<CrmMessage> postMessage({
@@ -69,6 +163,8 @@ class CrmRepository {
     String type = 'text',
     String? message,
     String? mediaUrl,
+    String? toWaId,
+    String? toPhone,
     String? aiSuggestionId,
     String? aiSuggestedText,
     List<String>? aiUsedKnowledge,
@@ -78,9 +174,25 @@ class CrmRepository {
       type: type,
       message: message,
       mediaUrl: mediaUrl,
+      toWaId: toWaId,
+      toPhone: toPhone,
       aiSuggestionId: aiSuggestionId,
       aiSuggestedText: aiSuggestedText,
       aiUsedKnowledge: aiUsedKnowledge,
+    );
+  }
+
+  Future<Map<String, dynamic>> sendOutboundTextMessage({
+    required String phone,
+    required String text,
+    String? status,
+    String? displayName,
+  }) {
+    return _remote.sendOutboundTextMessage(
+      phone: phone,
+      text: text,
+      status: status,
+      displayName: displayName,
     );
   }
 
@@ -89,17 +201,44 @@ class CrmRepository {
     required PlatformFile file,
     String? caption,
     String? type,
+    String? toWaId,
+    String? toPhone,
   }) {
     return _remote.sendMediaMessage(
       threadId: threadId,
       file: file,
       caption: caption,
       type: type,
+      toWaId: toWaId,
+      toPhone: toPhone,
+    );
+  }
+
+  Future<CrmMessage> sendLocationMessage({
+    required String threadId,
+    required double latitude,
+    required double longitude,
+    String? label,
+    String? address,
+    String? toWaId,
+    String? toPhone,
+  }) {
+    return _remote.sendLocationMessage(
+      threadId: threadId,
+      latitude: latitude,
+      longitude: longitude,
+      label: label,
+      address: address,
+      toWaId: toWaId,
+      toPhone: toPhone,
     );
   }
 
   Future<ConvertResult> convertThreadToCustomer(String threadId) =>
       _remote.convertThreadToCustomer(threadId);
+
+  Future<Customer> convertChatToCustomer(String chatId) =>
+      _remote.convertChatToCustomer(chatId);
 
   Future<CrmChatStats> getChatStats() => _remote.getChatStats();
 
@@ -172,9 +311,11 @@ class CrmRepository {
   Future<void> markChatRead(String chatId) => _remote.markChatRead(chatId);
 
   // AI
-  Future<AiSettingsPublic> getAiSettingsPublic() => _remote.getAiSettingsPublic();
+  Future<AiSettingsPublic> getAiSettingsPublic() =>
+      _remote.getAiSettingsPublic();
   Future<AiSettings> getAiSettings() => _remote.getAiSettings();
-  Future<AiSettings> patchAiSettings(Map<String, dynamic> patch) => _remote.patchAiSettings(patch);
+  Future<AiSettings> patchAiSettings(Map<String, dynamic> patch) =>
+      _remote.patchAiSettings(patch);
 
   Future<AiSuggestResponse> suggestAi({
     String? chatId,

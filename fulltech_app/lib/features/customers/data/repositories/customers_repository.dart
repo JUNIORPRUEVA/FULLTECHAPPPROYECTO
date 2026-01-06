@@ -1,11 +1,26 @@
 import 'package:dio/dio.dart';
 import 'package:fulltech_app/features/customers/data/models/customer_response.dart';
 
+import '../../../../core/services/offline_http_queue.dart';
+import '../../../../core/storage/local_db.dart';
+
 class CustomersRepository {
   final Dio _dio;
+  final LocalDb? _db;
   CancelToken? _cancelToken;
 
-  CustomersRepository(this._dio);
+  static const _noOfflineQueueExtra = {'offlineQueue': false};
+
+  CustomersRepository(this._dio, {LocalDb? db}) : _db = db;
+
+  bool _isNetworkError(Object e) {
+    if (e is DioException) {
+      return e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+    }
+    return OfflineHttpQueue.isNetworkError(e);
+  }
 
   void cancelRequests() {
     _cancelToken?.cancel('Operation cancelled by user');
@@ -60,24 +75,53 @@ class CustomersRepository {
   }
 
   Future<void> deleteCustomer(String id) async {
-    await _dio.delete(
-      '/customers/$id',
-      options: Options(
-        sendTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-      ),
-    );
+    try {
+      await _dio.delete(
+        '/customers/$id',
+        options: Options(
+          extra: _noOfflineQueueExtra,
+          sendTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+    } catch (e) {
+      final db = _db;
+      if (db != null && _isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          db,
+          method: 'DELETE',
+          path: '/customers/$id',
+        );
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<void> patchCustomer(String id, Map<String, dynamic> patch) async {
-    await _dio.patch(
-      '/customers/$id',
-      data: patch,
-      options: Options(
-        sendTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-      ),
-    );
+    try {
+      await _dio.patch(
+        '/customers/$id',
+        data: patch,
+        options: Options(
+          extra: _noOfflineQueueExtra,
+          sendTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+    } catch (e) {
+      final db = _db;
+      if (db != null && _isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          db,
+          method: 'PATCH',
+          path: '/customers/$id',
+          data: patch,
+        );
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<List<CustomerChatItem>> getCustomerChats(String id) async {

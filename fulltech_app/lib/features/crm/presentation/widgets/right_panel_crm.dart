@@ -262,6 +262,8 @@ class _InfoSection extends StatelessWidget {
   static String _statusLabel(String raw) {
     final v = raw.trim().toLowerCase();
     switch (v) {
+      case 'primer_contacto':
+        return 'Primer contacto';
       case 'pendiente':
         return 'Pendiente';
       case 'interesado':
@@ -480,6 +482,10 @@ class _ActionsSection extends ConsumerWidget {
         DropdownButtonFormField<String>(
           value: thread.status,
           items: const [
+            DropdownMenuItem(
+              value: 'primer_contacto',
+              child: Text('Primer contacto'),
+            ),
             DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
             DropdownMenuItem(value: 'interesado', child: Text('Interesado')),
             DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
@@ -492,7 +498,63 @@ class _ActionsSection extends ConsumerWidget {
           ],
           onChanged: (v) async {
             if (v == null) return;
-            await onSave({'status': v});
+
+            final nextStatus = v.trim();
+            final needsConfirm = nextStatus == 'activo' || nextStatus == 'compro';
+
+            if (needsConfirm) {
+              final label = nextStatus == 'activo' ? 'Activo' : 'Compró';
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (_) {
+                  return AlertDialog(
+                    title: const Text('Confirmación'),
+                    content: Text(
+                      '¿Está seguro que quiere marcar la conversación como "$label"?\n\nEsto agregará el cliente a la tabla de clientes.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancelar'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Sí, confirmar'),
+                      ),
+                    ],
+                  );
+                },
+              );
+              if (ok != true) return;
+            }
+
+            await onSave({'status': nextStatus});
+
+            // Only for Activo/Compró, ensure the customer exists.
+            if (needsConfirm) {
+              try {
+                await ref
+                    .read(crmRepositoryProvider)
+                    .convertChatToCustomer(thread.id);
+
+                // Refresh CRM customers list so it shows up immediately.
+                // ignore: unawaited_futures
+                ref.read(customersControllerProvider.notifier).refresh();
+
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Cliente agregado a la tabla de clientes')),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('No se pudo crear el cliente: $e'),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                );
+              }
+            }
           },
           decoration: const InputDecoration(
             labelText: 'Cambiar estado',

@@ -1,22 +1,39 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../../core/widgets/adaptive_image.dart';
+import '../../../../core/utils/launch_uri.dart';
 
 import '../../data/models/crm_message.dart';
 
 class MessageBubble extends StatelessWidget {
   final CrmMessage message;
+  final String? displayName;
+  final String? phone;
 
-  const MessageBubble({super.key, required this.message});
+  const MessageBubble({
+    super.key,
+    required this.message,
+    this.displayName,
+    this.phone,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isMe = message.fromMe;
     final theme = Theme.of(context);
 
+    final status = (message.status).trim().toLowerCase();
+    final isFailed = isMe && (status == 'failed' || status == 'error');
+
     final bg = isMe
         ? theme.colorScheme.primaryContainer
-        : theme.colorScheme.surfaceContainerHighest;
+        : theme.colorScheme.surface;
+    final fg = isMe
+        ? theme.colorScheme.onPrimaryContainer
+        : theme.colorScheme.onSurface;
 
     final align = isMe ? Alignment.centerRight : Alignment.centerLeft;
 
@@ -32,6 +49,9 @@ class MessageBubble extends StatelessWidget {
 
     final mediaUrl = (message.mediaUrl ?? '').trim();
     final hasMedia = mediaUrl.isNotEmpty;
+
+    final showSendingPlaceholder =
+        isMe && !hasMedia && status == 'sending' && message.type != 'text';
 
     final IconData mediaIcon;
     switch (message.type) {
@@ -57,91 +77,153 @@ class MessageBubble extends StatelessWidget {
         ? _buildStatusIcon(context, message.status)
         : null;
 
+    final borderColor = isFailed
+        ? theme.colorScheme.error.withOpacity(0.7)
+        : (isMe ? null : theme.colorScheme.outlineVariant.withOpacity(0.55));
+
+    final mediaLabel = _mediaLabel(message.type, mediaUrl, fallback: body);
+    final bodyStyle = (theme.textTheme.bodyMedium ?? const TextStyle())
+        .copyWith(color: fg, height: 1.25);
+
+    // --- Sender info logic ---
+    final showSender = !isMe;
+    final senderLabel = (displayName != null && displayName!.trim().isNotEmpty)
+        ? displayName!.trim()
+        : (phone ?? '');
+
     return Align(
       alignment: align,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
-        child: Column(
-          crossAxisAlignment: isMe
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
-          children: [
-            if (isMe)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  'Asistente Junior',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Column(
+            crossAxisAlignment: isMe
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: bubbleRadius,
+                  border: borderColor != null
+                      ? Border.all(color: borderColor)
+                      : null,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 10, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showSender && senderLabel.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  senderLabel,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _timeOnly(message.createdAt),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (hasMedia) ...[
+                        if (message.type == 'image')
+                          _ImageThumb(
+                            url: mediaUrl,
+                            labelStyle: theme.textTheme.bodySmall,
+                            showUrl: false,
+                          )
+                        else if (message.type == 'audio' ||
+                            message.type == 'ptt')
+                          _AudioPlayerBubble(
+                            url: mediaUrl,
+                            labelStyle: theme.textTheme.bodySmall,
+                          )
+                        else if (message.type == 'video' ||
+                            message.type == 'document')
+                          _AttachmentCard(
+                            url: mediaUrl,
+                            type: message.type,
+                            fg: fg,
+                          )
+                        else
+                          _MediaRow(
+                            icon: mediaIcon,
+                            label: mediaLabel,
+                            labelStyle:
+                                (theme.textTheme.bodySmall ?? const TextStyle())
+                                    .copyWith(color: fg),
+                          ),
+                        if (hasBody) const SizedBox(height: 8),
+                      ],
+                      if (hasBody)
+                        RichText(
+                          text: _formatToSpan(
+                            context,
+                            body,
+                            baseStyle: bodyStyle,
+                          ),
+                        )
+                      else if (showSendingPlaceholder)
+                        Text(
+                          'Enviando ${message.type}...',
+                          style: bodyStyle.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        )
+                      else if (!hasMedia)
+                        Text('[sin texto] ${message.type}', style: bodyStyle),
+                      if (!showSender)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _timeOnly(message.createdAt),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: isMe
+                                        ? theme.colorScheme.onPrimaryContainer
+                                              .withOpacity(0.75)
+                                        : theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                if (statusWidget != null) ...[
+                                  const SizedBox(width: 4),
+                                  statusWidget,
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (showSender && statusWidget != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: statusWidget,
+                        ),
+                    ],
                   ),
                 ),
               ),
-            DecoratedBox(
-              decoration: BoxDecoration(color: bg, borderRadius: bubbleRadius),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 10, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (hasMedia) ...[
-                      if (message.type == 'image')
-                        _ImageThumb(
-                          url: mediaUrl,
-                          labelStyle: theme.textTheme.bodySmall,
-                          showUrl: false,
-                        )
-                      else if (message.type == 'audio' || message.type == 'ptt')
-                        _AudioPlayerBubble(
-                          url: mediaUrl,
-                          labelStyle: theme.textTheme.bodySmall,
-                        )
-                      else
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(mediaIcon, size: 18),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                mediaUrl,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ),
-                          ],
-                        ),
-                      if (hasBody) const SizedBox(height: 8),
-                    ],
-                    if (hasBody)
-                      RichText(text: _formatToSpan(context, body))
-                    else if (!hasMedia)
-                      Text(
-                        '[sin texto] ${message.type}',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _timeOnly(message.createdAt),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        if (statusWidget != null) ...[
-                          const SizedBox(width: 4),
-                          statusWidget,
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -186,9 +268,12 @@ class MessageBubble extends StatelessWidget {
   }
 }
 
-TextSpan _formatToSpan(BuildContext context, String input) {
+TextSpan _formatToSpan(
+  BuildContext context,
+  String input, {
+  required TextStyle baseStyle,
+}) {
   final theme = Theme.of(context);
-  final baseStyle = theme.textTheme.bodyMedium ?? const TextStyle();
 
   final spans = <TextSpan>[];
 
@@ -253,6 +338,207 @@ TextSpan _formatToSpan(BuildContext context, String input) {
   return TextSpan(style: baseStyle, children: spans);
 }
 
+class _MediaRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final TextStyle labelStyle;
+
+  const _MediaRow({
+    required this.icon,
+    required this.label,
+    required this.labelStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: labelStyle.color),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: labelStyle,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AttachmentCard extends StatelessWidget {
+  final String url;
+  final String type;
+  final Color fg;
+
+  const _AttachmentCard({
+    required this.url,
+    required this.type,
+    required this.fg,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = type.trim().toLowerCase();
+
+    final icon = t == 'video' ? Icons.play_circle_outline : Icons.description;
+    final title = t == 'video' ? 'Video' : 'Documento';
+    final filename = _lastPathSegment(url);
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 360),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Icon(icon, color: fg),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: fg,
+                      ),
+                    ),
+                    if (filename.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          filename,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: fg.withOpacity(0.85),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: () => _openUrl(context, url),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('Abrir'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: fg,
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () => _copyUrl(context, url),
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copiar'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: fg,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _mediaLabel(String type, String url, {required String fallback}) {
+  final t = type.trim().toLowerCase();
+  if (url.trim().isEmpty) return fallback;
+
+  final name = _lastPathSegment(url);
+  if (t == 'video') return name.isEmpty ? 'Video' : 'Video · $name';
+  if (t == 'document') return name.isEmpty ? 'Documento' : 'Documento · $name';
+  if (t == 'audio' || t == 'ptt')
+    return name.isEmpty ? 'Audio' : 'Audio · $name';
+  if (t == 'image') return name.isEmpty ? 'Imagen' : 'Imagen · $name';
+  return name.isEmpty ? url : name;
+}
+
+String _lastPathSegment(String url) {
+  final v = url.trim();
+  if (v.isEmpty) return '';
+
+  // Windows local paths.
+  if (v.contains('\\')) {
+    final parts = v.split('\\').where((s) => s.trim().isNotEmpty).toList();
+    return parts.isNotEmpty ? parts.last : '';
+  }
+
+  final uri = Uri.tryParse(v);
+  if (uri != null && uri.pathSegments.isNotEmpty) {
+    return uri.pathSegments.last;
+  }
+
+  final parts = v.split('/').where((s) => s.trim().isNotEmpty).toList();
+  return parts.isNotEmpty ? parts.last : '';
+}
+
+Future<void> _copyUrl(BuildContext context, String url) async {
+  final v = url.trim();
+  if (v.isEmpty) return;
+
+  await Clipboard.setData(ClipboardData(text: v));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(const SnackBar(content: Text('Enlace copiado')));
+}
+
+Future<void> _openUrl(BuildContext context, String url) async {
+  final v = url.trim();
+  if (v.isEmpty) return;
+
+  final uri = toLaunchUri(v);
+  if (uri == null) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Enlace inválido')));
+    return;
+  }
+
+  final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('No se pudo abrir el enlace')));
+  }
+}
+
 class _ImageThumb extends StatelessWidget {
   final String url;
   final TextStyle? labelStyle;
@@ -268,6 +554,21 @@ class _ImageThumb extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    Widget fallback(Object error) {
+      return Container(
+        color: theme.colorScheme.surfaceContainerHighest,
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.broken_image),
+            const SizedBox(width: 8),
+            Flexible(child: SelectableText(url, style: labelStyle)),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -278,7 +579,13 @@ class _ImageThumb extends StatelessWidget {
               builder: (context) {
                 return Dialog(
                   child: InteractiveViewer(
-                    child: Image.network(url, fit: BoxFit.contain),
+                    child: adaptiveImage(
+                      url,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stack) {
+                        return fallback(error);
+                      },
+                    ),
                   ),
                 );
               },
@@ -288,22 +595,11 @@ class _ImageThumb extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 260, maxHeight: 220),
-              child: Image.network(
+              child: adaptiveImage(
                 url,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) {
-                  return Container(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.broken_image),
-                        const SizedBox(width: 8),
-                        Flexible(child: SelectableText(url, style: labelStyle)),
-                      ],
-                    ),
-                  );
+                errorBuilder: (context, error, stack) {
+                  return fallback(error);
                 },
               ),
             ),

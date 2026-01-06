@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/crm_stream_event.dart';
 
@@ -21,12 +22,26 @@ class CrmSseClient {
             '/crm/stream',
             options: Options(
               responseType: ResponseType.stream,
-              headers: const {
+              // IMPORTANT: SSE is long-lived.
+              // The ApiClient default receiveTimeout is 20s, while the backend ping is 25s.
+              // If we don't increase it, the stream will always time out and reconnect.
+              receiveTimeout: const Duration(minutes: 2),
+              extra: const {
+                'offlineQueue': false,
+                'logSse': true,
+              },
+              headers: {
                 'Accept': 'text/event-stream',
                 'Cache-Control': 'no-cache',
               },
             ),
           );
+
+          if (kDebugMode) {
+            debugPrint(
+              '[CRM][SSE] connected status=${res.statusCode} baseUrl=${_dio.options.baseUrl}',
+            );
+          }
 
           final body = res.data;
           if (body == null) {
@@ -97,7 +112,19 @@ class CrmSseClient {
 
           // Stream ended.
           await flush();
-        } catch (_) {
+          if (kDebugMode) {
+            debugPrint('[CRM][SSE] disconnected; reconnecting...');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            if (e is DioException) {
+              debugPrint(
+                '[CRM][SSE] error type=${e.type} status=${e.response?.statusCode} msg=${e.message} baseUrl=${_dio.options.baseUrl}',
+              );
+            } else {
+              debugPrint('[CRM][SSE] error $e');
+            }
+          }
           // Best-effort reconnect.
           await Future.delayed(const Duration(seconds: 2));
         }

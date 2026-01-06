@@ -1,13 +1,29 @@
 import 'package:dio/dio.dart';
 import 'dart:convert';
 
+import 'package:uuid/uuid.dart';
+
 import '../datasources/users_remote_datasource.dart';
 import '../models/user_model.dart';
 import '../../../../core/storage/local_db.dart';
+import '../../../../core/services/offline_http_queue.dart';
 
 class UsersRepository {
   final UsersRemoteDataSource _remote;
   final LocalDb? _db;
+
+  static const _uuid = Uuid();
+
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    if (v is String) {
+      final t = v.trim();
+      if (t.isEmpty) return null;
+      return DateTime.tryParse(t);
+    }
+    return null;
+  }
 
   UsersRepository(this._remote, {LocalDb? db}) : _db = db;
 
@@ -95,15 +111,143 @@ class UsersRepository {
 
   Future<UserModel> getUser(String id) => _remote.getUser(id);
 
-  Future<UserModel> createUser(Map<String, dynamic> payload) => _remote.createUser(payload);
+  UserModel _placeholderUser({required String id, required Map<String, dynamic> payload}) {
+    return UserModel(
+      id: id,
+      empresaId: (payload['empresa_id'] ?? payload['empresaId'] ?? '') as String,
+      email: (payload['email'] ?? '') as String,
+      nombre: (payload['nombre_completo'] ?? payload['nombre'] ?? '') as String,
+      rol: (payload['rol'] ?? payload['role'] ?? 'usuario') as String,
+      estado: (payload['estado'] ?? 'pendiente') as String,
+      esCasado: false,
+      cantidadHijos: 0,
+      tieneCasa: false,
+      tieneVehiculo: false,
+      otrosDocumentos: const [],
+      telefono: payload['telefono']?.toString(),
+      direccion: payload['direccion']?.toString(),
+      fechaIngreso: _parseDate(payload['fecha_ingreso_empresa'] ?? payload['fecha_ingreso']),
+      salarioMensual: payload['salario_mensual'] as num?,
+    );
+  }
 
-  Future<UserModel> updateUser(String id, Map<String, dynamic> patch) => _remote.updateUser(id, patch);
+  Future<UserModel> createUser(Map<String, dynamic> payload) async {
+    try {
+      return await _remote.createUser(payload);
+    } catch (e) {
+      final db = _db;
+      if (db != null && _isNetworkError(e)) {
+        final localId = _uuid.v4();
+        await OfflineHttpQueue.enqueue(
+          db,
+          method: 'POST',
+          path: '/users',
+          data: payload,
+          requestId: localId,
+        );
 
-  Future<void> deleteUser(String id) => _remote.deleteUser(id);
+        final json = jsonEncode({
+          'id': localId,
+          'email': payload['email'],
+          'nombre_completo': payload['nombre_completo'] ?? payload['nombre'],
+          'rol': payload['rol'] ?? payload['role'],
+          'estado': 'pendiente',
+          'telefono': payload['telefono'],
+          'fecha_ingreso_empresa': payload['fecha_ingreso_empresa']?.toString(),
+          'foto_perfil_url': payload['foto_perfil_url'],
+        });
+        await db.upsertEntity(store: _cacheStore, id: localId, json: json);
 
-  Future<UserModel> blockUser(String id) => _remote.blockUser(id);
+        return _placeholderUser(id: localId, payload: payload);
+      }
+      rethrow;
+    }
+  }
 
-  Future<UserModel> unblockUser(String id) => _remote.unblockUser(id);
+  Future<UserModel> updateUser(String id, Map<String, dynamic> patch) async {
+    try {
+      return await _remote.updateUser(id, patch);
+    } catch (e) {
+      final db = _db;
+      if (db != null && _isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          db,
+          method: 'PUT',
+          path: '/users/$id',
+          data: patch,
+        );
+
+        // Update cached summary snapshot best-effort.
+        final rows = await db.listEntitiesJson(store: _cacheStore);
+        for (final s in rows) {
+          final map = jsonDecode(s);
+          if (map is Map && map['id'] == id) {
+            final next = Map<String, dynamic>.from(map);
+            for (final entry in patch.entries) {
+              next[entry.key] = entry.value;
+            }
+            await db.upsertEntity(store: _cacheStore, id: id, json: jsonEncode(next));
+            break;
+          }
+        }
+
+        return _placeholderUser(id: id, payload: patch);
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> deleteUser(String id) async {
+    try {
+      await _remote.deleteUser(id);
+    } catch (e) {
+      final db = _db;
+      if (db != null && _isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          db,
+          method: 'DELETE',
+          path: '/users/$id',
+        );
+        await db.deleteEntity(store: _cacheStore, id: id);
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  Future<UserModel> blockUser(String id) async {
+    try {
+      return await _remote.blockUser(id);
+    } catch (e) {
+      final db = _db;
+      if (db != null && _isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          db,
+          method: 'PATCH',
+          path: '/users/$id/block',
+        );
+        return _placeholderUser(id: id, payload: const {'estado': 'bloqueado'});
+      }
+      rethrow;
+    }
+  }
+
+  Future<UserModel> unblockUser(String id) async {
+    try {
+      return await _remote.unblockUser(id);
+    } catch (e) {
+      final db = _db;
+      if (db != null && _isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          db,
+          method: 'PATCH',
+          path: '/users/$id/unblock',
+        );
+        return _placeholderUser(id: id, payload: const {'estado': 'activo'});
+      }
+      rethrow;
+    }
+  }
 
   Future<Map<String, dynamic>> uploadUserDocuments({
     MultipartFile? fotoPerfil,

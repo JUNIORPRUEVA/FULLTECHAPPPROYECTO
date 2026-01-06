@@ -57,6 +57,9 @@ dependencies:
   # File picking (image upload)
   file_picker: ^8.1.6
 
+  # Image resize/compress (pure Dart, works on Windows)
+  image: ^4.5.4
+
   # Audio recording (CRM voice notes)
   record: ^5.2.0
 

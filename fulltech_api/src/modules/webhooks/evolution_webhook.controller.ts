@@ -452,6 +452,8 @@ async function processWebhookEvent(body: any, eventId: string | null) {
         last_message_preview: preview,
         last_message_at: createdAt,
         unread_count: direction === 'in' ? 1 : 0,
+        // Default bucket for new inbound/outbound conversations.
+        status: 'primer_contacto',
       },
       update: {
         ...(parsed.displayName?.trim() ? { display_name: parsed.displayName.trim() } : null),

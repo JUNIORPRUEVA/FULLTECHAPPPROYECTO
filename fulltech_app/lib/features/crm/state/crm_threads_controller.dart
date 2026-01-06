@@ -21,7 +21,25 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
   }
 
   Future<void> refresh() async {
-    state = state.copyWith(loading: true, error: null, offset: 0);
+    // Offline-first: show cached threads immediately (if any), then refresh.
+    try {
+      final cached = await _repo.readCachedThreads();
+      if (cached.isNotEmpty) {
+        state = state.copyWith(
+          loading: false,
+          error: null,
+          offset: 0,
+          items: cached,
+          total: cached.length,
+        );
+      } else {
+        state = state.copyWith(loading: true, error: null, offset: 0);
+      }
+    } catch (_) {
+      // If cache fails, fall back to online behavior.
+      state = state.copyWith(loading: true, error: null, offset: 0);
+    }
+
     try {
       final page = await _repo.listThreads(
         search: state.search.isEmpty ? null : state.search,
@@ -30,6 +48,12 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
         limit: state.limit,
         offset: 0,
       );
+
+      // Persist latest snapshot (best-effort).
+      try {
+        await _repo.cacheThreads(page.items, replace: true);
+      } catch (_) {}
+
       state = state.copyWith(
         loading: false,
         items: page.items,
@@ -37,6 +61,7 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
         offset: page.offset,
       );
     } catch (e) {
+      // Keep any cached items visible; surface the error.
       state = state.copyWith(loading: false, error: e.toString());
     }
   }
@@ -55,6 +80,12 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
         limit: state.limit,
         offset: nextOffset,
       );
+
+      // Best-effort cache append.
+      try {
+        await _repo.cacheThreads(page.items, replace: false);
+      } catch (_) {}
+
       state = state.copyWith(
         loading: false,
         items: [...state.items, ...page.items],

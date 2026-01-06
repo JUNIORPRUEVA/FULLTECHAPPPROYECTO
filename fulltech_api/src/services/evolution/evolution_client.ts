@@ -6,6 +6,11 @@ export type EvolutionSendResult = {
   raw: any;
 };
 
+export type EvolutionActionResult = {
+  ok: boolean;
+  raw: any;
+};
+
 function applyDefaultCountryCode(digitsOnly: string): string {
   const d = String(digitsOnly ?? '').replace(/\D+/g, '');
   if (!d) return d;
@@ -117,6 +122,21 @@ export class EvolutionClient {
     throw new Error(this._formatAxiosError(lastErr));
   }
 
+  private async _postCandidates(paths: string[], payloads: any[]): Promise<any> {
+    let lastErr: unknown;
+    for (const path of paths) {
+      for (const payload of payloads) {
+        try {
+          return await this._postWithInstanceFallback(path, payload);
+        } catch (e) {
+          lastErr = e;
+          // Try next candidate
+        }
+      }
+    }
+    throw lastErr ?? new Error('Evolution request failed');
+  }
+
   async sendText({
     toPhone,
     toWaId,
@@ -187,5 +207,84 @@ export class EvolutionClient {
         : null;
 
     return { messageId, raw };
+  }
+
+  async deleteMessage({
+    remoteMessageId,
+    toPhone,
+    toWaId,
+  }: {
+    remoteMessageId: string;
+    toPhone?: string;
+    toWaId?: string;
+  }): Promise<EvolutionActionResult> {
+    const id = String(remoteMessageId ?? '').trim();
+    if (!id) throw new Error('remoteMessageId is required');
+
+    // Some Evolution deployments need the chat JID/number for delete operations.
+    // We'll provide both "number" (normalized destination) and "remoteJid".
+    const number = normalizeDestNumber({ toPhone, toWaId });
+    const remoteJid = (toWaId ?? '').trim();
+
+    const paths = [
+      '/message/delete',
+      '/message/deleteMessage',
+      '/message/revoke',
+      '/chat/deleteMessage',
+      '/chat/revokeMessage',
+    ];
+
+    const payloads = [
+      { id, number },
+      { messageId: id, number },
+      { remoteMessageId: id, number },
+      { id, remoteJid: remoteJid || undefined },
+      { messageId: id, remoteJid: remoteJid || undefined },
+      { key: { id, remoteJid: remoteJid || undefined }, number },
+      { message: { key: { id, remoteJid: remoteJid || undefined } }, number },
+    ];
+
+    const res = await this._postCandidates(paths, payloads);
+    return { ok: true, raw: res.data };
+  }
+
+  async editTextMessage({
+    remoteMessageId,
+    toPhone,
+    toWaId,
+    text,
+  }: {
+    remoteMessageId: string;
+    toPhone?: string;
+    toWaId?: string;
+    text: string;
+  }): Promise<EvolutionActionResult> {
+    const id = String(remoteMessageId ?? '').trim();
+    if (!id) throw new Error('remoteMessageId is required');
+    const trimmed = String(text ?? '').trim();
+    if (!trimmed) throw new Error('Text is empty');
+
+    const number = normalizeDestNumber({ toPhone, toWaId });
+    const remoteJid = (toWaId ?? '').trim();
+
+    const paths = [
+      '/message/edit',
+      '/message/editText',
+      '/message/updateText',
+      '/message/updateMessage',
+    ];
+
+    const payloads = [
+      { id, number, text: trimmed },
+      { messageId: id, number, text: trimmed },
+      { remoteMessageId: id, number, text: trimmed },
+      { id, remoteJid: remoteJid || undefined, text: trimmed },
+      { messageId: id, remoteJid: remoteJid || undefined, text: trimmed },
+      { key: { id, remoteJid: remoteJid || undefined }, number, text: trimmed },
+      { message: { key: { id, remoteJid: remoteJid || undefined } }, number, text: trimmed },
+    ];
+
+    const res = await this._postCandidates(paths, payloads);
+    return { ok: true, raw: res.data };
   }
 }

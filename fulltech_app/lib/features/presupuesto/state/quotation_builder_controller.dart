@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:dio/dio.dart';
 
 import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
@@ -477,6 +478,17 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
 
     final nowIso = DateTime.now().toIso8601String();
 
+    bool isNetworkError(Object e) {
+      if (e is DioException) {
+        return e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout ||
+            e.type == DioExceptionType.sendTimeout;
+      }
+      final msg = e.toString();
+      return msg.contains('SocketException') || msg.contains('Failed host lookup');
+    }
+
     try {
       // 1) Always persist locally first.
       await _db.upsertCotizacion(
@@ -547,16 +559,31 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
       };
 
       Map<String, dynamic>? remote;
-      if (active.remoteCreated) {
-        remote = await _api.updateQuotation(localId, payload);
-      } else {
-        try {
-          remote = await _api.createQuotation(payload);
-        } catch (e) {
-          // If server doesn't accept client-supplied id, or it already exists,
-          // attempt an update as a fallback.
+      try {
+        if (active.remoteCreated) {
           remote = await _api.updateQuotation(localId, payload);
+        } else {
+          try {
+            remote = await _api.createQuotation(payload);
+          } catch (_) {
+            // If server doesn't accept client-supplied id, or it already exists,
+            // attempt an update as a fallback.
+            remote = await _api.updateQuotation(localId, payload);
+          }
         }
+      } catch (e) {
+        if (isNetworkError(e)) {
+          // Offline: enqueue and return the local pending record.
+          await _db.enqueueSync(
+            module: 'quotations',
+            op: 'upsert',
+            entityId: localId,
+            payloadJson: jsonEncode(payload),
+          );
+          state = state.copyWith(isSaving: false, clearError: true);
+          return localRow;
+        }
+        rethrow;
       }
 
       final remoteId = (remote['id'] ?? localId).toString();

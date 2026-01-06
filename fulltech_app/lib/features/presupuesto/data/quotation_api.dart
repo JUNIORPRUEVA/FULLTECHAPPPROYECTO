@@ -3,6 +3,10 @@ import 'package:dio/dio.dart';
 class QuotationApi {
   final Dio _dio;
 
+  static final Options _noOfflineQueue = Options(
+    extra: const {'offlineQueue': false},
+  );
+
   QuotationApi(this._dio);
 
   Future<Map<String, dynamic>> listQuotationsPaged({
@@ -50,7 +54,11 @@ class QuotationApi {
   Future<Map<String, dynamic>> createQuotation(
     Map<String, dynamic> payload,
   ) async {
-    final res = await _dio.post('/quotations', data: payload);
+    final res = await _dio.post(
+      '/quotations',
+      data: payload,
+      options: _noOfflineQueue,
+    );
     return (res.data['item'] as Map).cast<String, dynamic>();
   }
 
@@ -58,17 +66,27 @@ class QuotationApi {
     String id,
     Map<String, dynamic> payload,
   ) async {
-    final res = await _dio.put('/quotations/$id', data: payload);
+    final res = await _dio.put(
+      '/quotations/$id',
+      data: payload,
+      options: _noOfflineQueue,
+    );
     return (res.data['item'] as Map).cast<String, dynamic>();
   }
 
   Future<Map<String, dynamic>> duplicateQuotation(String id) async {
-    final res = await _dio.post('/quotations/$id/duplicate');
+    final res = await _dio.post(
+      '/quotations/$id/duplicate',
+      options: _noOfflineQueue,
+    );
     return (res.data['item'] as Map).cast<String, dynamic>();
   }
 
   Future<void> deleteQuotation(String id) async {
-    await _dio.delete('/quotations/$id');
+    await _dio.delete(
+      '/quotations/$id',
+      options: _noOfflineQueue,
+    );
   }
 
   Future<Map<String, dynamic>> sendQuotation(
@@ -84,6 +102,7 @@ class QuotationApi {
         if (to != null) 'to': to,
         if (message != null) 'message': message,
       },
+      options: _noOfflineQueue,
     );
     return (res.data as Map).cast<String, dynamic>();
   }

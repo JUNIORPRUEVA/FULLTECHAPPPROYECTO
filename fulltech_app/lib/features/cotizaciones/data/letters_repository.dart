@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
@@ -26,6 +27,15 @@ class LettersRepository {
   final LocalDb _db;
 
   final _uuid = const Uuid();
+
+  static const _syncModule = 'letters';
+
+  bool _isNetworkError(DioException e) {
+    return e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout;
+  }
 
   Future<List<LetterRecord>> listLocal({
     required String empresaId,
@@ -159,6 +169,27 @@ class LettersRepository {
 
       await _db.upsertCarta(row: synced.toLocalRow());
       return synced;
+    } on DioException catch (e) {
+      if (_isNetworkError(e)) {
+        await _db.enqueueSync(
+          module: _syncModule,
+          op: 'upsert',
+          entityId: localId,
+          payloadJson: jsonEncode(draft.toCreatePayload()),
+        );
+
+        // Keep as pending (do not mark error on offline).
+        final pending = draft.copyWith(syncStatus: SyncStatus.pending, lastError: null);
+        await _db.upsertCarta(row: pending.toLocalRow());
+        return pending;
+      }
+
+      final failed = draft.copyWith(
+        syncStatus: SyncStatus.error,
+        lastError: e.toString(),
+      );
+      await _db.upsertCarta(row: failed.toLocalRow());
+      return failed;
     } catch (e) {
       final failed = draft.copyWith(
         syncStatus: SyncStatus.error,
@@ -177,7 +208,73 @@ class LettersRepository {
       await _lettersApi.deleteLetter(id);
     } on DioException catch (e) {
       // If it doesn't exist remotely, keep local delete.
-      if (e.response?.statusCode != 404) rethrow;
+      if (e.response?.statusCode == 404) return;
+      if (_isNetworkError(e)) {
+        await _db.enqueueSync(
+          module: _syncModule,
+          op: 'delete',
+          entityId: id,
+          payloadJson: jsonEncode(<String, dynamic>{}),
+        );
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  /// Processes queued sync items for letters.
+  ///
+  /// This is used by the global AutoSync wrapper.
+  Future<void> syncPending() async {
+    final items = await _db.getPendingSyncItems();
+    for (final item in items) {
+      if (item.module != _syncModule) continue;
+
+      try {
+        if (item.op == 'upsert') {
+          final payload = jsonDecode(item.payloadJson) as Map<String, dynamic>;
+
+          final existing = await getLocal(item.entityId);
+
+          Map<String, dynamic> server;
+          if (existing == null) {
+            server = await _lettersApi.createLetter(payload);
+          } else {
+            server = await _lettersApi.updateLetter(item.entityId, payload);
+          }
+
+          final it = server['item'];
+          if (it is Map<String, dynamic>) {
+            final empresaId = (it['empresa_id'] ?? it['empresaId'] ?? existing?.empresaId ?? '').toString();
+            final synced = LetterRecord.fromServerJson(it, empresaId: empresaId, syncStatus: SyncStatus.synced);
+            await _db.upsertCarta(row: synced.toLocalRow());
+          }
+
+          await _db.markSyncItemSent(item.id);
+          continue;
+        }
+
+        if (item.op == 'delete') {
+          try {
+            await _lettersApi.deleteLetter(item.entityId);
+          } on DioException catch (e) {
+            if (e.response?.statusCode != 404) rethrow;
+          }
+          await _db.markSyncItemSent(item.id);
+          continue;
+        }
+
+        await _db.markSyncItemSent(item.id);
+      } catch (e) {
+        await _db.markSyncItemError(item.id);
+        try {
+          final existing = await getLocal(item.entityId);
+          if (existing != null) {
+            final failed = existing.copyWith(syncStatus: SyncStatus.error, lastError: e.toString());
+            await _db.upsertCarta(row: failed.toLocalRow());
+          }
+        } catch (_) {}
+      }
     }
   }
 

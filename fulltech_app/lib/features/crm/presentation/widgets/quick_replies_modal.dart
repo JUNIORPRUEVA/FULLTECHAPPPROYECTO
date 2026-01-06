@@ -11,10 +11,7 @@ import '../../../auth/state/auth_state.dart';
 class QuickRepliesModal extends ConsumerStatefulWidget {
   final void Function(CrmQuickReply reply) onSelect;
 
-  const QuickRepliesModal({
-    super.key,
-    required this.onSelect,
-  });
+  const QuickRepliesModal({super.key, required this.onSelect});
 
   @override
   ConsumerState<QuickRepliesModal> createState() => _QuickRepliesModalState();
@@ -88,7 +85,7 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
     return AlertDialog(
       title: Row(
         children: [
-          const Expanded(child: Text('Mensajes rápidos')),
+          const Expanded(child: Text('Plantillas')),
           if (_isAdmin)
             IconButton(
               tooltip: 'Crear plantilla',
@@ -107,6 +104,7 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
           children: [
             TextField(
               controller: _searchCtrl,
+              autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'Buscar',
                 prefixIcon: Icon(Icons.search),
@@ -137,12 +135,38 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
               ),
             const SizedBox(height: 8),
             Flexible(
               child: _items.isEmpty
-                  ? const Center(child: Text('Sin plantillas'))
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Sin plantillas'),
+                            if (_isAdmin) ...[
+                              const SizedBox(height: 8),
+                              FilledButton.icon(
+                                onPressed: () async {
+                                  final created = await _openUpsertDialog(
+                                    context,
+                                  );
+                                  if (created == true) await _load();
+                                },
+                                icon: const Icon(Icons.add),
+                                label: const Text('Crear la primera'),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    )
                   : ListView.separated(
                       shrinkWrap: true,
                       itemCount: _items.length,
@@ -150,15 +174,22 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                       itemBuilder: (context, i) {
                         final r = _items[i];
                         return ListTile(
-                          title: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          title: Text(
+                            r.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           subtitle: Text(
                             r.content,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                           leading: CircleAvatar(
-                            backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                            child: Text(r.category.isNotEmpty ? r.category[0] : '?'),
+                            backgroundColor:
+                                theme.colorScheme.surfaceContainerHighest,
+                            child: Text(
+                              r.category.isNotEmpty ? r.category[0] : '?',
+                            ),
                           ),
                           trailing: _isAdmin
                               ? Row(
@@ -167,7 +198,10 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                                     IconButton(
                                       tooltip: 'Editar',
                                       onPressed: () async {
-                                        final ok = await _openUpsertDialog(context, existing: r);
+                                        final ok = await _openUpsertDialog(
+                                          context,
+                                          existing: r,
+                                        );
                                         if (ok == true) await _load();
                                       },
                                       icon: const Icon(Icons.edit),
@@ -178,22 +212,34 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                                         final ok = await showDialog<bool>(
                                           context: context,
                                           builder: (context) => AlertDialog(
-                                            title: const Text('Eliminar plantilla'),
-                                            content: Text('¿Eliminar "${r.title}"?'),
+                                            title: const Text(
+                                              'Eliminar plantilla',
+                                            ),
+                                            content: Text(
+                                              '¿Eliminar "${r.title}"?',
+                                            ),
                                             actions: [
                                               TextButton(
-                                                onPressed: () => Navigator.pop(context, false),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  false,
+                                                ),
                                                 child: const Text('Cancelar'),
                                               ),
                                               FilledButton(
-                                                onPressed: () => Navigator.pop(context, true),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  true,
+                                                ),
                                                 child: const Text('Eliminar'),
                                               ),
                                             ],
                                           ),
                                         );
                                         if (ok != true) return;
-                                        await ref.read(crmRepositoryProvider).deleteQuickReply(r.id);
+                                        await ref
+                                            .read(crmRepositoryProvider)
+                                            .deleteQuickReply(r.id);
                                         await _load();
                                       },
                                       icon: const Icon(Icons.delete_outline),
@@ -231,6 +277,7 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
     String category = existing?.category ?? 'Ventas';
     bool isActive = existing?.isActive ?? true;
     bool allowComment = existing?.allowComment ?? true;
+    String? formError;
 
     return showDialog<bool>(
       context: context,
@@ -238,7 +285,9 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
         return StatefulBuilder(
           builder: (context, setLocal) {
             return AlertDialog(
-              title: Text(existing == null ? 'Nueva plantilla' : 'Editar plantilla'),
+              title: Text(
+                existing == null ? 'Nueva plantilla' : 'Editar plantilla',
+              ),
               content: SizedBox(
                 width: 520,
                 child: Column(
@@ -246,17 +295,47 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                   children: [
                     TextField(
                       controller: titleCtrl,
-                      decoration: const InputDecoration(labelText: 'Título', isDense: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Título',
+                        isDense: true,
+                      ),
                     ),
+                    if (formError != null) ...[
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          formError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       value: category,
-                      decoration: const InputDecoration(labelText: 'Categoría', isDense: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Categoría',
+                        isDense: true,
+                      ),
                       items: const [
-                        DropdownMenuItem(value: 'Ventas', child: Text('Ventas')),
-                        DropdownMenuItem(value: 'Soporte', child: Text('Soporte')),
-                        DropdownMenuItem(value: 'Entrega', child: Text('Entrega')),
-                        DropdownMenuItem(value: 'Promos', child: Text('Promos')),
+                        DropdownMenuItem(
+                          value: 'Ventas',
+                          child: Text('Ventas'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Soporte',
+                          child: Text('Soporte'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Entrega',
+                          child: Text('Entrega'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Promos',
+                          child: Text('Promos'),
+                        ),
                       ],
                       onChanged: (v) {
                         if (v == null) return;
@@ -267,8 +346,9 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                     TextField(
                       controller: keywordsCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'Keywords (coma separada)',
-                        hintText: 'Ej: ubicacion, donde quedan, direccion, mapa',
+                        labelText: 'Palabras clave (separadas por coma)',
+                        hintText:
+                            'Ej: ubicacion, donde quedan, direccion, mapa',
                         isDense: true,
                       ),
                     ),
@@ -279,7 +359,8 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                       maxLines: 8,
                       decoration: const InputDecoration(
                         labelText: 'Contenido',
-                        hintText: 'Usa variables: {nombre} {telefono} {producto} {precio} {empresa}',
+                        hintText:
+                            'Usa variables: {nombre} {telefono} {producto} {precio} {empresa}',
                         isDense: true,
                       ),
                     ),
@@ -309,7 +390,15 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                     final title = titleCtrl.text.trim();
                     final content = contentCtrl.text.trim();
                     final keywords = keywordsCtrl.text.trim();
-                    if (title.isEmpty || content.isEmpty) return;
+                    if (title.isEmpty || content.isEmpty) {
+                      setLocal(() {
+                        formError = 'Título y contenido son requeridos.';
+                      });
+                      return;
+                    }
+                    setLocal(() {
+                      formError = null;
+                    });
 
                     final repo = ref.read(crmRepositoryProvider);
                     if (existing == null) {

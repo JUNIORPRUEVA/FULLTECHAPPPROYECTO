@@ -1087,7 +1087,7 @@ model CrmChat {
   last_message_preview String?
   last_message_at      DateTime?
   unread_count         Int       @default(0)
-  status               String    @default("activo")
+  status               String    @default("primer_contacto")
   created_at           DateTime  @default(now())
   updated_at           DateTime  @updatedAt
 

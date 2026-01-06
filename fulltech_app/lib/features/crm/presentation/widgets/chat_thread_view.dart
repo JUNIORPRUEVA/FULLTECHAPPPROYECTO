@@ -103,6 +103,11 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final online = ref.watch(crmOnlineProvider).maybeWhen(
+          data: (v) => v,
+          orElse: () => true,
+        );
+
     final threadsState = ref.watch(crmThreadsControllerProvider);
     final thread = threadsState.items
         .where((t) => t.id == widget.threadId)
@@ -120,6 +125,9 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
         : (thread?.phone ?? thread?.waId ?? 'Chat');
 
     final subtitle = thread?.phone ?? thread?.waId ?? '';
+    final statusText = online ? 'Conectado' : 'Offline';
+    final statusColor =
+        online ? theme.colorScheme.primary : theme.colorScheme.error;
 
     return Card(
       child: Column(
@@ -171,6 +179,15 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                             color: theme.colorScheme.onSurface.withOpacity(0.7),
                           ),
                         ),
+                      Text(
+                        statusText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -246,7 +263,11 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                             padding: const EdgeInsets.all(12),
                             itemCount: state.items.length,
                             itemBuilder: (context, i) {
-                              return MessageBubble(message: state.items[i]);
+                              return MessageBubble(
+                                message: state.items[i],
+                                displayName: thread?.displayName,
+                                phone: thread?.phone,
+                              );
                             },
                           ),
                           if (_pendingNewCount > 0 && !_isNearBottom)

@@ -18,7 +18,9 @@ class PunchRemoteDataSource {
     final response = await dio.post(
       '/attendance/punches',
       data: dto.toJson(),
-      options: Options().copyWith(
+      options: Options(
+        extra: const {'offlineQueue': false},
+      ).copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
       ),
@@ -82,7 +84,9 @@ class PunchRemoteDataSource {
     final response = await dio.put(
       '/attendance/punches/$id',
       data: updates,
-      options: Options().copyWith(
+      options: Options(
+        extra: const {'offlineQueue': false},
+      ).copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
       ),
@@ -94,7 +98,9 @@ class PunchRemoteDataSource {
   Future<void> deletePunch(String id, {CancelToken? cancelToken}) async {
     await dio.delete(
       '/attendance/punches/$id',
-      options: Options().copyWith(
+      options: Options(
+        extra: const {'offlineQueue': false},
+      ).copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
       ),

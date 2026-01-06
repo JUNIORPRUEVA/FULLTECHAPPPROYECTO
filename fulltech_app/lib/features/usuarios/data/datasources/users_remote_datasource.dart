@@ -9,6 +9,10 @@ import '../models/user_model.dart';
 class UsersRemoteDataSource {
   final Dio _dio;
 
+  static final Options _noOfflineQueue = Options(
+    extra: const {'offlineQueue': false},
+  );
+
   UsersRemoteDataSource(this._dio);
 
   static String _dateOnly(DateTime dt) {
@@ -69,7 +73,7 @@ class UsersRemoteDataSource {
     convertDate('fecha_ingreso_empresa');
     convertDate('licencia_conducir_fecha_vencimiento');
 
-    final res = await _dio.post('/users', data: normalized);
+    final res = await _dio.post('/users', data: normalized, options: _noOfflineQueue);
     final data = res.data as Map<String, dynamic>;
     return UserModel.fromJson(data['item'] as Map<String, dynamic>);
   }
@@ -86,23 +90,27 @@ class UsersRemoteDataSource {
     convertDate('fecha_ingreso_empresa');
     convertDate('licencia_conducir_fecha_vencimiento');
 
-    final res = await _dio.put('/users/$id', data: normalized);
+    final res = await _dio.put(
+      '/users/$id',
+      data: normalized,
+      options: _noOfflineQueue,
+    );
     final data = res.data as Map<String, dynamic>;
     return UserModel.fromJson(data['item'] as Map<String, dynamic>);
   }
 
   Future<void> deleteUser(String id) async {
-    await _dio.delete('/users/$id');
+    await _dio.delete('/users/$id', options: _noOfflineQueue);
   }
 
   Future<UserModel> blockUser(String id) async {
-    final res = await _dio.patch('/users/$id/block');
+    final res = await _dio.patch('/users/$id/block', options: _noOfflineQueue);
     final data = res.data as Map<String, dynamic>;
     return UserModel.fromJson(data['item'] as Map<String, dynamic>);
   }
 
   Future<UserModel> unblockUser(String id) async {
-    final res = await _dio.patch('/users/$id/unblock');
+    final res = await _dio.patch('/users/$id/unblock', options: _noOfflineQueue);
     final data = res.data as Map<String, dynamic>;
     return UserModel.fromJson(data['item'] as Map<String, dynamic>);
   }

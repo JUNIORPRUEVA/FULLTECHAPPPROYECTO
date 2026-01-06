@@ -6,6 +6,8 @@ class OperationsApi {
 
   OperationsApi(this._dio);
 
+  static final _noOfflineQueue = Options(extra: const {'offlineQueue': false});
+
   Map<String, dynamic> _ensureOk(dynamic raw) {
     if (raw is Map<String, dynamic>) {
       if (raw['ok'] == true) {
@@ -20,7 +22,7 @@ class OperationsApi {
   }
 
   Future<Map<String, dynamic>> createJob(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/operations/jobs', data: payload);
+    final res = await _dio.post('/operations/jobs', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
@@ -56,37 +58,37 @@ class OperationsApi {
   }
 
   Future<Map<String, dynamic>> patchJob(String id, Map<String, dynamic> patch) async {
-    final res = await _dio.patch('/operations/jobs/$id', data: patch);
+    final res = await _dio.patch('/operations/jobs/$id', data: patch, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> submitSurvey(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/operations/surveys', data: payload);
+    final res = await _dio.post('/operations/surveys', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> scheduleJob(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/operations/schedules', data: payload);
+    final res = await _dio.post('/operations/schedules', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> startInstallation(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/operations/installations/start', data: payload);
+    final res = await _dio.post('/operations/installations/start', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> completeInstallation(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/operations/installations/complete', data: payload);
+    final res = await _dio.post('/operations/installations/complete', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> createWarrantyTicket(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/operations/warranty-tickets', data: payload);
+    final res = await _dio.post('/operations/warranty-tickets', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> patchWarrantyTicket(String id, Map<String, dynamic> patch) async {
-    final res = await _dio.patch('/operations/warranty-tickets/$id', data: patch);
+    final res = await _dio.patch('/operations/warranty-tickets/$id', data: patch, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
@@ -101,7 +103,7 @@ class OperationsApi {
       ),
     });
 
-    final res = await _dio.post('/uploads/operations', data: form);
+    final res = await _dio.post('/uploads/operations', data: form, options: _noOfflineQueue);
     final data = res.data;
     if (data is Map<String, dynamic>) return data;
     throw Exception('Respuesta inválida del servidor');

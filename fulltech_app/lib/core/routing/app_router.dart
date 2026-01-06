@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -35,6 +36,7 @@ import '../../features/configuracion/screens/configuracion_screen.dart';
 import '../../features/configuracion/screens/company_settings_screen.dart';
 import '../../features/configuracion/screens/theme_settings_screen.dart';
 import '../../features/configuracion/screens/display_settings_screen.dart';
+import '../../features/configuracion/screens/api_endpoint_settings_screen.dart';
 import '../../features/usuarios/presentation/pages/user_detail_page.dart';
 import '../../features/usuarios/presentation/pages/usuarios_list_page.dart';
 import '../../features/usuarios/presentation/pages/user_form_page.dart';
@@ -314,6 +316,18 @@ GoRouter createRouter(Ref ref) {
               return isAdmin ? null : AppRoutes.configuracion;
             },
             builder: (c, s) => const CompanySettingsScreen(),
+          ),
+          GoRoute(
+            path: 'servidor',
+            redirect: (context, state) {
+              if (!kDebugMode) return AppRoutes.configuracion;
+              final auth = ref.read(authControllerProvider);
+              if (auth is! AuthAuthenticated) return AppRoutes.login;
+              final role = auth.user.role;
+              final isAdmin = role == 'admin' || role == 'administrador';
+              return isAdmin ? null : AppRoutes.configuracion;
+            },
+            builder: (c, s) => const ApiEndpointSettingsScreen(),
           ),
           GoRoute(path: 'tema', builder: (c, s) => const ThemeSettingsScreen()),
           GoRoute(

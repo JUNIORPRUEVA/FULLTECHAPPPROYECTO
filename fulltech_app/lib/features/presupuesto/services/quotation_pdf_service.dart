@@ -6,7 +6,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../configuracion/models/company_profile.dart';
-import '../models/quotation_models.dart';
 import '../state/quotation_builder_state.dart';
 
 PdfColor _rgb(int r, int g, int b) => PdfColor(r / 255, g / 255, b / 255);

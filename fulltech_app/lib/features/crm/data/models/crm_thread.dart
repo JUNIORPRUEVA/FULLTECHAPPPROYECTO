@@ -86,4 +86,26 @@ class CrmThread {
           (json['assigned_user_id'] ?? json['assignedUserId']) as String?,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'waId': waId,
+      'phone': phone,
+      'displayName': displayName,
+      'lastMessagePreview': lastMessagePreview,
+      'lastMessageType': lastMessageType,
+      'lastMessageAt': lastMessageAt?.toIso8601String(),
+      'lastMessageFromMe': lastMessageFromMe,
+      'lastMessageStatus': lastMessageStatus,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'unreadCount': unreadCount,
+      'status': status,
+      'important': important,
+      'productId': productId,
+      'internalNote': internalNote,
+      'assignedUserId': assignedUserId,
+    };
+  }
 }

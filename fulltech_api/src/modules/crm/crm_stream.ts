@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 export type CrmStreamEvent =
   | { type: 'chat.updated'; chatId: string }
   | { type: 'message.new'; chatId: string; messageId: string }
+  | { type: 'message.updated'; chatId: string; messageId: string }
   | { type: 'message.status'; chatId: string; remoteMessageId: string; status: string };
 
 const emitter = new EventEmitter();

@@ -1,0 +1,5620 @@
+{
+  "generated_at": "2026-01-06T01:57:55.634Z",
+  "sources": {
+    "prisma": "fulltech_api/prisma/schema.prisma",
+    "sql_dir": "fulltech_api/sql",
+    "scripts_dir": "fulltech_api/scripts"
+  },
+  "tables": [
+    {
+      "name": "ai_message_audits",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "chat_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "final_text",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "message_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "suggested_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "suggestion_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "used_knowledge",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        }
+      ],
+      "unique": [],
+      "fk": [],
+      "indexes": [
+        {
+          "name": "idx_ai_message_audits_chat_id",
+          "columns": [
+            "chat_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_ai_message_audits_chat_id ON ai_message_audits(chat_id);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-03_ai_settings_and_suggestions.sql"
+      }
+    },
+    {
+      "name": "ai_settings",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "business_data",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb"
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "nullable": false,
+          "default": "TRUE"
+        },
+        {
+          "name": "id",
+          "type": "int",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "prompt_version",
+          "type": "int",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "quick_replies_enabled",
+          "type": "boolean",
+          "nullable": false,
+          "default": "TRUE"
+        },
+        {
+          "name": "rules",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "system_prompt",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "tone",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [],
+      "indexes": [],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-03_ai_settings_and_suggestions.sql"
+      }
+    },
+    {
+      "name": "ai_suggestions",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "chat_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "customer_text",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "last_customer_message_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "suggestion_text",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "used_knowledge",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'[]'::jsonb"
+        }
+      ],
+      "unique": [],
+      "fk": [],
+      "indexes": [
+        {
+          "name": "idx_ai_suggestions_chat_id",
+          "columns": [
+            "chat_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_ai_suggestions_chat_id ON ai_suggestions(chat_id);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-03_ai_settings_and_suggestions.sql"
+      }
+    },
+    {
+      "name": "audit_log",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "action",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "entity",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "entity_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "meta",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "actor_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "actor   Usuario @relation(fields: [actor_user_id], references: [id])"
+        },
+        {
+          "column": "company_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"audit_log\" ADD CONSTRAINT \"audit_log_company_id_fkey\" FOREIGN KEY (\"company_id\") REFERENCES \"Empresa\"(\"id\")"
+        },
+        {
+          "column": "actor_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"audit_log\" ADD CONSTRAINT \"audit_log_actor_user_id_fkey\" FOREIGN KEY (\"actor_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([actor_user_id])"
+        },
+        {
+          "raw": "@@index([entity])"
+        },
+        {
+          "raw": "@@index([entity_id])"
+        },
+        {
+          "raw": "@@index([created_at])"
+        },
+        {
+          "name": "audit_log_company_id_idx",
+          "columns": [
+            "company_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"audit_log_company_id_idx\" ON \"audit_log\"(\"company_id\");"
+        },
+        {
+          "name": "audit_log_actor_user_id_idx",
+          "columns": [
+            "actor_user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"audit_log_actor_user_id_idx\" ON \"audit_log\"(\"actor_user_id\");"
+        },
+        {
+          "name": "audit_log_entity_idx",
+          "columns": [
+            "entity"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"audit_log_entity_idx\" ON \"audit_log\"(\"entity\");"
+        },
+        {
+          "name": "audit_log_entity_id_idx",
+          "columns": [
+            "entity_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"audit_log_entity_id_idx\" ON \"audit_log\"(\"entity_id\");"
+        },
+        {
+          "name": "audit_log_created_at_idx",
+          "columns": [
+            "created_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"audit_log_created_at_idx\" ON \"audit_log\"(\"created_at\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "AuditLog"
+      }
+    },
+    {
+      "name": "CategoriaProducto",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([empresa_id, nombre])"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa   Empresa    @relation(fields: [empresa_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([is_active])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "CategoriaProducto"
+      }
+    },
+    {
+      "name": "Cliente",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "Cliente"
+      }
+    },
+    {
+      "name": "company_settings",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        }
+      ],
+      "unique": [
+        {
+          "columns": [
+            "empresa_id"
+          ],
+          "raw": "empresa_id           String   @unique @db.Uuid"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        }
+      ],
+      "indexes": [],
+      "source": {
+        "kind": "prisma",
+        "model": "CompanySettings"
+      }
+    },
+    {
+      "name": "crm_chat_meta",
+      "pk": [
+        "chat_id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "chat_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "important",
+          "type": "boolean",
+          "nullable": false,
+          "default": "FALSE"
+        },
+        {
+          "name": "internal_note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "product_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "chat_id",
+          "refTable": "crm_chats",
+          "refColumn": "id",
+          "raw": "chat_id uuid PRIMARY KEY REFERENCES crm_chats(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "crm_chat_meta_product_id_idx",
+          "columns": [
+            "product_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_chat_meta_product_id_idx\n    ON crm_chat_meta (product_id);"
+        },
+        {
+          "name": "crm_chat_meta_important_idx",
+          "columns": [
+            "important"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_chat_meta_important_idx\n    ON crm_chat_meta (important);"
+        }
+      ],
+      "source": {
+        "kind": "ts_sql",
+        "file": "fulltech_api/scripts/create_crm_whatsapp_tables.ts"
+      }
+    },
+    {
+      "name": "crm_chats",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "last_message_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "last_message_preview",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'activo'"
+        },
+        {
+          "name": "unread_count",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "wa_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([wa_id])"
+        },
+        {
+          "columns": [
+            "wa_id"
+          ],
+          "raw": "wa_id text NOT NULL UNIQUE"
+        }
+      ],
+      "fk": [],
+      "indexes": [
+        {
+          "raw": "@@index([last_message_at])"
+        },
+        {
+          "name": "crm_chats_last_message_at_idx",
+          "columns": [
+            "last_message_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_chats_last_message_at_idx\n    ON crm_chats (last_message_at);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "CrmChat"
+      }
+    },
+    {
+      "name": "crm_messages",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "body",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "chat_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "direction",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "from_me",
+          "type": "boolean",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "media_mime",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "media_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "media_size",
+          "type": "integer",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "media_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "message_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "message_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "quoted_message_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "remote_message_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'received'"
+        },
+        {
+          "name": "sync_version",
+          "type": "int",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "thread_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "timestamp",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "text",
+          "nullable": false,
+          "default": "'text'"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [
+        {
+          "columns": [
+            "remote_message_id"
+          ],
+          "raw": "remote_message_id text UNIQUE"
+        }
+      ],
+      "fk": [
+        {
+          "column": "chat_id",
+          "refTable": "CrmChat",
+          "refColumn": "id",
+          "raw": "chat CrmChat @relation(fields: [chat_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa_id UUID NOT NULL REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "thread_id",
+          "refTable": "crm_threads",
+          "refColumn": "id",
+          "raw": "thread_id UUID NOT NULL REFERENCES crm_threads(id) ON DELETE CASCADE"
+        },
+        {
+          "column": "chat_id",
+          "refTable": "crm_chats",
+          "refColumn": "id",
+          "raw": "chat_id uuid NOT NULL REFERENCES crm_chats(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([chat_id, timestamp(sort: Desc)])"
+        },
+        {
+          "name": "crm_messages_thread_created_idx",
+          "columns": [
+            "thread_id",
+            "created_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_messages_thread_created_idx\n  ON crm_messages(thread_id, created_at);"
+        },
+        {
+          "name": "crm_messages_chat_id_timestamp_idx",
+          "columns": [
+            "chat_id",
+            "timestamp DESC"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_messages_chat_id_timestamp_idx\n    ON crm_messages (chat_id, timestamp DESC);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "CrmChatMessage"
+      }
+    },
+    {
+      "name": "crm_messages_legacy",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "thread_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa   @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "thread_id",
+          "refTable": "CrmThread",
+          "refColumn": "id",
+          "raw": "thread  CrmThread @relation(fields: [thread_id], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([thread_id, created_at])"
+        },
+        {
+          "raw": "@@index([empresa_id])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "CrmMessage"
+      }
+    },
+    {
+      "name": "crm_tasks",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "fecha_hora",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "nota",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'pendiente'"
+        },
+        {
+          "name": "sync_version",
+          "type": "int",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "thread_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "tipo",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa_id UUID NOT NULL REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "thread_id",
+          "refTable": "crm_threads",
+          "refColumn": "id",
+          "raw": "thread_id UUID NOT NULL REFERENCES crm_threads(id) ON DELETE CASCADE"
+        },
+        {
+          "column": "assigned_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "assigned_user_id UUID NOT NULL REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "crm_tasks_assigned_fecha_idx",
+          "columns": [
+            "assigned_user_id",
+            "fecha_hora"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_tasks_assigned_fecha_idx\n  ON crm_tasks(assigned_user_id, fecha_hora);"
+        },
+        {
+          "name": "crm_tasks_status_idx",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_tasks_status_idx\n  ON crm_tasks(status);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-02_crm_customers.sql"
+      }
+    },
+    {
+      "name": "crm_tasks_legacy",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "thread_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa       Empresa   @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "thread_id",
+          "refTable": "CrmThread",
+          "refColumn": "id",
+          "raw": "thread        CrmThread @relation(fields: [thread_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "assigned_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "assigned_user Usuario   @relation(\"CrmTaskAssignedUser\", fields: [assigned_user_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([assigned_user_id, fecha_hora])"
+        },
+        {
+          "raw": "@@index([empresa_id, status])"
+        },
+        {
+          "raw": "@@index([empresa_id, fecha_hora])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "CrmTask"
+      }
+    },
+    {
+      "name": "crm_threads",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "canal",
+          "type": "text",
+          "nullable": false,
+          "default": "'whatsapp'"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "estado_crm",
+          "type": "text",
+          "nullable": false,
+          "default": "'pendiente'"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "last_message_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "last_message_preview",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "phone_number",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "nullable": false,
+          "default": "FALSE"
+        },
+        {
+          "name": "primary_interest",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sync_version",
+          "type": "int",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa_id UUID NOT NULL REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "customers",
+          "refColumn": "id",
+          "raw": "customer_id UUID NULL REFERENCES customers(id)"
+        },
+        {
+          "column": "assigned_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "assigned_user_id UUID NULL REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "crm_threads_phone_idx",
+          "columns": [
+            "phone_number"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_threads_phone_idx ON crm_threads(phone_number);"
+        },
+        {
+          "name": "crm_threads_estado_idx",
+          "columns": [
+            "estado_crm"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_threads_estado_idx ON crm_threads(estado_crm);"
+        },
+        {
+          "name": "crm_threads_assigned_idx",
+          "columns": [
+            "assigned_user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_threads_assigned_idx ON crm_threads(assigned_user_id);"
+        },
+        {
+          "name": "crm_threads_last_message_at_idx",
+          "columns": [
+            "last_message_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS crm_threads_last_message_at_idx ON crm_threads(last_message_at);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-02_crm_customers.sql"
+      }
+    },
+    {
+      "name": "crm_threads_legacy",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([empresa_id, phone_number])"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa       Empresa      @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "Customer",
+          "refColumn": "id",
+          "raw": "customer      Customer?    @relation(fields: [customer_id], references: [id])"
+        },
+        {
+          "column": "assigned_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "assigned_user Usuario?     @relation(\"CrmThreadAssignedUser\", fields: [assigned_user_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id, phone_number])"
+        },
+        {
+          "raw": "@@index([empresa_id, estado_crm])"
+        },
+        {
+          "raw": "@@index([empresa_id, assigned_user_id])"
+        },
+        {
+          "raw": "@@index([empresa_id, last_message_at])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "CrmThread"
+      }
+    },
+    {
+      "name": "crm_webhook_events",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "event_id",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "event_type",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "headers",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "ip_address",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "payload",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "processed",
+          "type": "boolean",
+          "nullable": true,
+          "default": "false"
+        },
+        {
+          "name": "processed_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "processing_error",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "raw_body",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "nullable": true,
+          "default": "'evolution'"
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "columns": [
+            "event_id"
+          ],
+          "raw": "event_id text NOT NULL UNIQUE"
+        }
+      ],
+      "fk": [],
+      "indexes": [
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        },
+        {
+          "raw": "@@index([event_type])"
+        },
+        {
+          "raw": "@@index([processed])"
+        },
+        {
+          "name": "idx_webhook_events_created_at",
+          "columns": [
+            "created_at DESC"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX idx_webhook_events_created_at ON crm_webhook_events(created_at DESC);"
+        },
+        {
+          "name": "idx_webhook_events_event_type",
+          "columns": [
+            "event_type"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX idx_webhook_events_event_type ON crm_webhook_events(event_type);"
+        },
+        {
+          "name": "idx_webhook_events_processed",
+          "columns": [
+            "processed"
+          ],
+          "where": "WHERE NOT processed",
+          "raw": "CREATE INDEX idx_webhook_events_processed ON crm_webhook_events(processed) WHERE NOT processed;"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "CrmWebhookEvent"
+      }
+    },
+    {
+      "name": "customers",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "direccion",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "notas",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "origen",
+          "type": "text",
+          "nullable": false,
+          "default": "'whatsapp'"
+        },
+        {
+          "name": "sync_version",
+          "type": "int",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "tags",
+          "type": "text[]",
+          "nullable": false,
+          "default": "'{}'"
+        },
+        {
+          "name": "telefono",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "ubicacion_mapa",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa_id UUID NOT NULL REFERENCES \"Empresa\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "customers_empresa_idx",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS customers_empresa_idx ON customers(empresa_id);"
+        },
+        {
+          "name": "customers_telefono_idx",
+          "columns": [
+            "telefono"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS customers_telefono_idx ON customers(telefono);"
+        }
+      ],
+      "source": {
+        "kind": "sql",
+        "file": "fulltech_api/sql/2026-01-02_crm_customers.sql"
+      }
+    },
+    {
+      "name": "customers_legacy",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "direccion",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "nombre",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "notas",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "origen",
+          "type": "text",
+          "nullable": false,
+          "default": "'whatsapp'"
+        },
+        {
+          "name": "sync_version",
+          "type": "integer",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "tags",
+          "type": "text[]",
+          "nullable": true,
+          "default": "'{}'"
+        },
+        {
+          "name": "telefono",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "ubicacion_mapa",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([empresa_id, telefono])"
+        },
+        {
+          "raw": "UNIQUE(empresa_id, telefono)"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa    Empresa     @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa_id uuid NOT NULL REFERENCES \"Empresa\"(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([telefono])"
+        },
+        {
+          "name": "customers_legacy_empresa_id_idx",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS customers_legacy_empresa_id_idx\n    ON customers_legacy (empresa_id);"
+        },
+        {
+          "name": "customers_legacy_telefono_idx",
+          "columns": [
+            "telefono"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS customers_legacy_telefono_idx\n    ON customers_legacy (telefono);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "Customer"
+      }
+    },
+    {
+      "name": "Empresa",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        }
+      ],
+      "unique": [],
+      "fk": [],
+      "indexes": [],
+      "source": {
+        "kind": "prisma",
+        "model": "Empresa"
+      }
+    },
+    {
+      "name": "inventory_audit_items",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "action_taken",
+          "type": "\"auditaction\"",
+          "nullable": false,
+          "default": "'PENDIENTE'"
+        },
+        {
+          "name": "audit_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "counted_qty",
+          "type": "int",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "diff_qty",
+          "type": "int",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "expected_qty",
+          "type": "int",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "explanation",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "producto_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason",
+          "type": "\"auditreason\"",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "audit_id",
+          "refTable": "InventoryAudit",
+          "refColumn": "id",
+          "raw": "audit    InventoryAudit @relation(fields: [audit_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "producto Producto       @relation(fields: [producto_id], references: [id])"
+        },
+        {
+          "column": "producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "ALTER TABLE inventory_audit_items\n        ADD CONSTRAINT fk_inventory_audit_items_producto\n        FOREIGN KEY (producto_id) REFERENCES \"Producto\"(id)"
+        },
+        {
+          "column": "audit_id",
+          "refTable": "inventory_audits",
+          "refColumn": "id",
+          "raw": "ALTER TABLE inventory_audit_items\n        ADD CONSTRAINT fk_inventory_audit_items_audit\n        FOREIGN KEY (audit_id) REFERENCES inventory_audits(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([audit_id])"
+        },
+        {
+          "raw": "@@index([producto_id])"
+        },
+        {
+          "name": "idx_iai_audit_id",
+          "columns": [
+            "audit_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_iai_audit_id ON inventory_audit_items(audit_id);"
+        },
+        {
+          "name": "idx_iai_producto_id",
+          "columns": [
+            "producto_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_iai_producto_id ON inventory_audit_items(producto_id);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "InventoryAuditItem"
+      }
+    },
+    {
+      "name": "inventory_audits",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "audit_from_date",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "audit_to_date",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "\"auditstatus\"",
+          "nullable": false,
+          "default": "'BORRADOR'"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "week_label",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa    Empresa              @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by Usuario              @relation(fields: [created_by_user_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE inventory_audits\n        ADD CONSTRAINT fk_inventory_audits_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE inventory_audits\n        ADD CONSTRAINT fk_inventory_audits_user\n        FOREIGN KEY (created_by_user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([week_label])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        },
+        {
+          "name": "idx_ia_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_ia_empresa_id ON inventory_audits(empresa_id);"
+        },
+        {
+          "name": "idx_ia_week_label",
+          "columns": [
+            "week_label"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_ia_week_label ON inventory_audits(week_label);"
+        },
+        {
+          "name": "idx_ia_status",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_ia_status ON inventory_audits(status);"
+        },
+        {
+          "name": "idx_ia_created_at_desc",
+          "columns": [
+            "created_at DESC"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_ia_created_at_desc ON inventory_audits(created_at DESC);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "InventoryAudit"
+      }
+    },
+    {
+      "name": "letter_exports",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "file_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "format",
+          "type": "text",
+          "nullable": false,
+          "default": "'PDF'"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "letter_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "letter_id",
+          "refTable": "Letter",
+          "refColumn": "id",
+          "raw": "letter Letter @relation(fields: [letter_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "letter_id",
+          "refTable": "letters",
+          "refColumn": "id",
+          "raw": "letter_id uuid NOT NULL REFERENCES letters(id) ON DELETE CASCADE"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([letter_id])"
+        },
+        {
+          "name": "letter_exports_letter_id_idx",
+          "columns": [
+            "letter_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS letter_exports_letter_id_idx ON letter_exports(letter_id);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "LetterExport"
+      }
+    },
+    {
+      "name": "letters",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "body",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "customer_email",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "customer_phone",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "letter_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "quotation_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'DRAFT'"
+        },
+        {
+          "name": "subject",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa   Empresa    @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "user      Usuario    @relation(fields: [user_id], references: [id])"
+        },
+        {
+          "column": "quotation_id",
+          "refTable": "Quotation",
+          "refColumn": "id",
+          "raw": "quotation Quotation? @relation(fields: [quotation_id], references: [id], onDelete: SetNull)"
+        },
+        {
+          "column": "company_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "company_id uuid NOT NULL REFERENCES \"Empresa\"(id) ON DELETE CASCADE"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "user_id uuid NOT NULL REFERENCES \"Usuario\"(id) ON DELETE CASCADE"
+        },
+        {
+          "column": "quotation_id",
+          "refTable": "quotations",
+          "refColumn": "id",
+          "raw": "quotation_id uuid NULL REFERENCES quotations(id) ON DELETE SET NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([user_id])"
+        },
+        {
+          "raw": "@@index([quotation_id])"
+        },
+        {
+          "raw": "@@index([letter_type])"
+        },
+        {
+          "raw": "@@index([created_at])"
+        },
+        {
+          "name": "letters_company_id_idx",
+          "columns": [
+            "company_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS letters_company_id_idx ON letters(company_id);"
+        },
+        {
+          "name": "letters_user_id_idx",
+          "columns": [
+            "user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS letters_user_id_idx ON letters(user_id);"
+        },
+        {
+          "name": "letters_quotation_id_idx",
+          "columns": [
+            "quotation_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS letters_quotation_id_idx ON letters(quotation_id);"
+        },
+        {
+          "name": "letters_letter_type_idx",
+          "columns": [
+            "letter_type"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS letters_letter_type_idx ON letters(letter_type);"
+        },
+        {
+          "name": "letters_created_at_idx",
+          "columns": [
+            "created_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS letters_created_at_idx ON letters(created_at);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "Letter"
+      }
+    },
+    {
+      "name": "operations_installation_reports",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_by_tech_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "tech_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "work_done_summary",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "job_id",
+          "refTable": "OperationsJob",
+          "refColumn": "id",
+          "raw": "job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "created_by_tech_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by Usuario @relation(\"OperationsInstallationReportCreator\", fields: [created_by_tech_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([job_id])"
+        },
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "OperationsInstallationReport"
+      }
+    },
+    {
+      "name": "operations_jobs",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_tech_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "crm_customer_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by Usuario @relation(\"OperationsJobCreator\", fields: [created_by_user_id], references: [id])"
+        },
+        {
+          "column": "assigned_tech_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "assigned_tech Usuario? @relation(\"OperationsJobAssignedTech\", fields: [assigned_tech_id], references: [id])"
+        },
+        {
+          "column": "crm_customer_id",
+          "refTable": "Customer",
+          "refColumn": "id",
+          "raw": "crm_customer Customer @relation(fields: [crm_customer_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([crm_customer_id])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "raw": "@@index([priority])"
+        },
+        {
+          "raw": "@@index([assigned_tech_id])"
+        },
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        },
+        {
+          "raw": "@@index([deleted_at])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "OperationsJob"
+      }
+    },
+    {
+      "name": "operations_schedule",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_tech_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "customer_availability_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "scheduled_date",
+          "type": "date",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "columns": [
+            "job_id"
+          ],
+          "raw": "job_id                String @unique @db.Uuid"
+        }
+      ],
+      "fk": [
+        {
+          "column": "job_id",
+          "refTable": "OperationsJob",
+          "refColumn": "id",
+          "raw": "job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "assigned_tech_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "assigned_tech Usuario @relation(\"OperationsScheduleAssignedTech\", fields: [assigned_tech_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([job_id])"
+        },
+        {
+          "raw": "@@index([scheduled_date])"
+        },
+        {
+          "raw": "@@index([assigned_tech_id])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "OperationsSchedule"
+      }
+    },
+    {
+      "name": "operations_survey_media",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "survey_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "survey_id",
+          "refTable": "OperationsSurvey",
+          "refColumn": "id",
+          "raw": "survey OperationsSurvey @relation(fields: [survey_id], references: [id], onDelete: Cascade)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([survey_id])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "OperationsSurveyMedia"
+      }
+    },
+    {
+      "name": "operations_surveys",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "address_confirmed",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_by_tech_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "future_opportunities",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "site_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "columns": [
+            "job_id"
+          ],
+          "raw": "job_id           String @unique @db.Uuid"
+        }
+      ],
+      "fk": [
+        {
+          "column": "job_id",
+          "refTable": "OperationsJob",
+          "refColumn": "id",
+          "raw": "job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "created_by_tech_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by Usuario @relation(\"OperationsSurveyCreator\", fields: [created_by_tech_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([job_id])"
+        },
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "OperationsSurvey"
+      }
+    },
+    {
+      "name": "operations_warranty_tickets",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "assigned_tech_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "job_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "resolution_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "job_id",
+          "refTable": "OperationsJob",
+          "refColumn": "id",
+          "raw": "job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "assigned_tech_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "assigned_tech Usuario? @relation(\"OperationsWarrantyAssignedTech\", fields: [assigned_tech_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([job_id])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "raw": "@@index([assigned_tech_id])"
+        },
+        {
+          "raw": "@@index([reported_at(sort: Desc)])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "OperationsWarrantyTicket"
+      }
+    },
+    {
+      "name": "payroll_employee_summaries",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "base_salary_amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "commissions_amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "nullable": false,
+          "default": "'DOP'"
+        },
+        {
+          "name": "employee_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "gross_amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "net_amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "other_deductions_amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "other_earnings_amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "\"payrollemployeestatus\"",
+          "nullable": false,
+          "default": "'READY'"
+        },
+        {
+          "name": "statutory_deductions_amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([run_id, employee_user_id], name: \"payroll_summary_run_employee\")"
+        }
+      ],
+      "fk": [
+        {
+          "column": "run_id",
+          "refTable": "PayrollRun",
+          "refColumn": "id",
+          "raw": "run        PayrollRun        @relation(fields: [run_id], references: [id])"
+        },
+        {
+          "column": "employee_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "employee   Usuario           @relation(fields: [employee_user_id], references: [id])"
+        },
+        {
+          "column": "run_id",
+          "refTable": "payroll_runs",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_employee_summaries\" ADD CONSTRAINT \"payroll_employee_summaries_run_id_fkey\" FOREIGN KEY (\"run_id\") REFERENCES \"payroll_runs\"(\"id\")"
+        },
+        {
+          "column": "employee_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_employee_summaries\" ADD CONSTRAINT \"payroll_employee_summaries_employee_user_id_fkey\" FOREIGN KEY (\"employee_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([run_id])"
+        },
+        {
+          "raw": "@@index([employee_user_id])"
+        },
+        {
+          "name": "payroll_employee_summaries_run_id_idx",
+          "columns": [
+            "run_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_employee_summaries_run_id_idx\" ON \"payroll_employee_summaries\"(\"run_id\");"
+        },
+        {
+          "name": "payroll_employee_summaries_employee_user_id_idx",
+          "columns": [
+            "employee_user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_employee_summaries_employee_user_id_idx\" ON \"payroll_employee_summaries\"(\"employee_user_id\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PayrollEmployeeSummary"
+      }
+    },
+    {
+      "name": "payroll_line_items",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "concept_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "concept_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "employee_summary_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "meta",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "\"payrolllineitemtype\"",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "employee_summary_id",
+          "refTable": "PayrollEmployeeSummary",
+          "refColumn": "id",
+          "raw": "employee_summary PayrollEmployeeSummary @relation(fields: [employee_summary_id], references: [id])"
+        },
+        {
+          "column": "employee_summary_id",
+          "refTable": "payroll_employee_summaries",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_line_items\" ADD CONSTRAINT \"payroll_line_items_employee_summary_id_fkey\" FOREIGN KEY (\"employee_summary_id\") REFERENCES \"payroll_employee_summaries\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([employee_summary_id])"
+        },
+        {
+          "raw": "@@index([concept_code])"
+        },
+        {
+          "name": "payroll_line_items_employee_summary_id_idx",
+          "columns": [
+            "employee_summary_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_line_items_employee_summary_id_idx\" ON \"payroll_line_items\"(\"employee_summary_id\");"
+        },
+        {
+          "name": "payroll_line_items_concept_code_idx",
+          "columns": [
+            "concept_code"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_line_items_concept_code_idx\" ON \"payroll_line_items\"(\"concept_code\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PayrollLineItem"
+      }
+    },
+    {
+      "name": "payroll_movements",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "amount",
+          "type": "decimal(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "approved_by_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "concept_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "concept_name",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "effective_date",
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "employee_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "movement_type",
+          "type": "\"payrollmovementtype\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "period_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "source",
+          "type": "\"payrollmovementsource\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "\"payrollmovementstatus\"",
+          "nullable": false,
+          "default": "'PENDING'"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa     Empresa        @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "employee_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "employee    Usuario        @relation(fields: [employee_user_id], references: [id])"
+        },
+        {
+          "column": "period_id",
+          "refTable": "PayrollPeriod",
+          "refColumn": "id",
+          "raw": "period      PayrollPeriod? @relation(fields: [period_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by  Usuario        @relation(\"PayrollMovementCreatedBy\", fields: [created_by_user_id], references: [id])"
+        },
+        {
+          "column": "approved_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "approved_by Usuario?       @relation(\"PayrollMovementApprovedBy\", fields: [approved_by_user_id], references: [id])"
+        },
+        {
+          "column": "company_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_movements\" ADD CONSTRAINT \"payroll_movements_company_id_fkey\" FOREIGN KEY (\"company_id\") REFERENCES \"Empresa\"(\"id\")"
+        },
+        {
+          "column": "employee_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_movements\" ADD CONSTRAINT \"payroll_movements_employee_user_id_fkey\" FOREIGN KEY (\"employee_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        },
+        {
+          "column": "period_id",
+          "refTable": "payroll_periods",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_movements\" ADD CONSTRAINT \"payroll_movements_period_id_fkey\" FOREIGN KEY (\"period_id\") REFERENCES \"payroll_periods\"(\"id\")"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_movements\" ADD CONSTRAINT \"payroll_movements_created_by_user_id_fkey\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        },
+        {
+          "column": "approved_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_movements\" ADD CONSTRAINT \"payroll_movements_approved_by_user_id_fkey\" FOREIGN KEY (\"approved_by_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([employee_user_id])"
+        },
+        {
+          "raw": "@@index([period_id])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "raw": "@@index([effective_date])"
+        },
+        {
+          "name": "payroll_movements_company_id_idx",
+          "columns": [
+            "company_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_movements_company_id_idx\" ON \"payroll_movements\"(\"company_id\");"
+        },
+        {
+          "name": "payroll_movements_employee_user_id_idx",
+          "columns": [
+            "employee_user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_movements_employee_user_id_idx\" ON \"payroll_movements\"(\"employee_user_id\");"
+        },
+        {
+          "name": "payroll_movements_period_id_idx",
+          "columns": [
+            "period_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_movements_period_id_idx\" ON \"payroll_movements\"(\"period_id\");"
+        },
+        {
+          "name": "payroll_movements_status_idx",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_movements_status_idx\" ON \"payroll_movements\"(\"status\");"
+        },
+        {
+          "name": "payroll_movements_effective_date_idx",
+          "columns": [
+            "effective_date"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_movements_effective_date_idx\" ON \"payroll_movements\"(\"effective_date\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PayrollMovement"
+      }
+    },
+    {
+      "name": "payroll_payslips",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "employee_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "pdf_url",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "run_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "snapshot",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([run_id, employee_user_id], name: \"payroll_payslip_run_employee\")"
+        }
+      ],
+      "fk": [
+        {
+          "column": "run_id",
+          "refTable": "PayrollRun",
+          "refColumn": "id",
+          "raw": "run      PayrollRun @relation(fields: [run_id], references: [id])"
+        },
+        {
+          "column": "employee_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "employee Usuario    @relation(fields: [employee_user_id], references: [id])"
+        },
+        {
+          "column": "run_id",
+          "refTable": "payroll_runs",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_payslips\" ADD CONSTRAINT \"payroll_payslips_run_id_fkey\" FOREIGN KEY (\"run_id\") REFERENCES \"payroll_runs\"(\"id\")"
+        },
+        {
+          "column": "employee_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_payslips\" ADD CONSTRAINT \"payroll_payslips_employee_user_id_fkey\" FOREIGN KEY (\"employee_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([run_id])"
+        },
+        {
+          "raw": "@@index([employee_user_id])"
+        },
+        {
+          "name": "payroll_payslips_run_id_idx",
+          "columns": [
+            "run_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_payslips_run_id_idx\" ON \"payroll_payslips\"(\"run_id\");"
+        },
+        {
+          "name": "payroll_payslips_employee_user_id_idx",
+          "columns": [
+            "employee_user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_payslips_employee_user_id_idx\" ON \"payroll_payslips\"(\"employee_user_id\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PayrollPayslip"
+      }
+    },
+    {
+      "name": "payroll_periods",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "date_from",
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "date_to",
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "half",
+          "type": "\"payrollperiodhalf\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "month",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "\"payrollperiodstatus\"",
+          "nullable": false,
+          "default": "'OPEN'"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([empresa_id, year, month, half], name: \"payroll_period_company_year_month_half\")"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa   Empresa           @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "company_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_periods\" ADD CONSTRAINT \"payroll_periods_company_id_fkey\" FOREIGN KEY (\"company_id\") REFERENCES \"Empresa\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([year, month])"
+        },
+        {
+          "name": "payroll_periods_company_id_idx",
+          "columns": [
+            "company_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_periods_company_id_idx\" ON \"payroll_periods\"(\"company_id\");"
+        },
+        {
+          "name": "payroll_periods_year_month_idx",
+          "columns": [
+            "year",
+            "month"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_periods_year_month_idx\" ON \"payroll_periods\"(\"year\", \"month\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PayrollPeriod"
+      }
+    },
+    {
+      "name": "payroll_runs",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "approved_by_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "paid_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "paid_by_user_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "period_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "\"payrollrunstatus\"",
+          "nullable": false,
+          "default": "'DRAFT'"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa     Empresa       @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "period_id",
+          "refTable": "PayrollPeriod",
+          "refColumn": "id",
+          "raw": "period      PayrollPeriod @relation(fields: [period_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by  Usuario       @relation(\"PayrollRunCreatedBy\", fields: [created_by_user_id], references: [id])"
+        },
+        {
+          "column": "approved_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "approved_by Usuario?      @relation(\"PayrollRunApprovedBy\", fields: [approved_by_user_id], references: [id])"
+        },
+        {
+          "column": "paid_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "paid_by     Usuario?      @relation(\"PayrollRunPaidBy\", fields: [paid_by_user_id], references: [id])"
+        },
+        {
+          "column": "company_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_runs\" ADD CONSTRAINT \"payroll_runs_company_id_fkey\" FOREIGN KEY (\"company_id\") REFERENCES \"Empresa\"(\"id\")"
+        },
+        {
+          "column": "period_id",
+          "refTable": "payroll_periods",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_runs\" ADD CONSTRAINT \"payroll_runs_period_id_fkey\" FOREIGN KEY (\"period_id\") REFERENCES \"payroll_periods\"(\"id\")"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_runs\" ADD CONSTRAINT \"payroll_runs_created_by_user_id_fkey\" FOREIGN KEY (\"created_by_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        },
+        {
+          "column": "approved_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_runs\" ADD CONSTRAINT \"payroll_runs_approved_by_user_id_fkey\" FOREIGN KEY (\"approved_by_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        },
+        {
+          "column": "paid_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"payroll_runs\" ADD CONSTRAINT \"payroll_runs_paid_by_user_id_fkey\" FOREIGN KEY (\"paid_by_user_id\") REFERENCES \"Usuario\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([period_id])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "name": "payroll_runs_company_id_idx",
+          "columns": [
+            "company_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_runs_company_id_idx\" ON \"payroll_runs\"(\"company_id\");"
+        },
+        {
+          "name": "payroll_runs_period_id_idx",
+          "columns": [
+            "period_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_runs_period_id_idx\" ON \"payroll_runs\"(\"period_id\");"
+        },
+        {
+          "name": "payroll_runs_status_idx",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"payroll_runs_status_idx\" ON \"payroll_runs\"(\"status\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PayrollRun"
+      }
+    },
+    {
+      "name": "product_maintenances",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "attachment_urls",
+          "type": "text[]",
+          "nullable": false,
+          "default": "'{}'::text[]"
+        },
+        {
+          "name": "cost",
+          "type": "numeric(12,2)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "internal_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "issue_category",
+          "type": "\"issuecategory\"",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "maintenance_type",
+          "type": "\"maintenancetype\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "producto_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status_after",
+          "type": "\"producthealthstatus\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status_before",
+          "type": "\"producthealthstatus\"",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "warranty_case_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa       Empresa       @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "producto      Producto      @relation(fields: [producto_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by    Usuario       @relation(fields: [created_by_user_id], references: [id])"
+        },
+        {
+          "column": "warranty_case_id",
+          "refTable": "WarrantyCase",
+          "refColumn": "id",
+          "raw": "warranty_case WarrantyCase? @relation(fields: [warranty_case_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE product_maintenances\n        ADD CONSTRAINT fk_product_maintenances_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "ALTER TABLE product_maintenances\n        ADD CONSTRAINT fk_product_maintenances_producto\n        FOREIGN KEY (producto_id) REFERENCES \"Producto\"(id)"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE product_maintenances\n        ADD CONSTRAINT fk_product_maintenances_user\n        FOREIGN KEY (created_by_user_id) REFERENCES \"Usuario\"(id)"
+        },
+        {
+          "column": "warranty_case_id",
+          "refTable": "warranty_cases",
+          "refColumn": "id",
+          "raw": "ALTER TABLE product_maintenances\n        ADD CONSTRAINT fk_product_maintenances_warranty_case\n        FOREIGN KEY (warranty_case_id) REFERENCES warranty_cases(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([producto_id])"
+        },
+        {
+          "raw": "@@index([created_by_user_id])"
+        },
+        {
+          "raw": "@@index([status_after])"
+        },
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        },
+        {
+          "raw": "@@index([deleted_at])"
+        },
+        {
+          "name": "idx_pm_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pm_empresa_id ON product_maintenances(empresa_id);"
+        },
+        {
+          "name": "idx_pm_producto_id",
+          "columns": [
+            "producto_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pm_producto_id ON product_maintenances(producto_id);"
+        },
+        {
+          "name": "idx_pm_created_by_user_id",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pm_created_by_user_id ON product_maintenances(created_by_user_id);"
+        },
+        {
+          "name": "idx_pm_status_after",
+          "columns": [
+            "status_after"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pm_status_after ON product_maintenances(status_after);"
+        },
+        {
+          "name": "idx_pm_created_at_desc",
+          "columns": [
+            "created_at DESC"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pm_created_at_desc ON product_maintenances(created_at DESC);"
+        },
+        {
+          "name": "idx_pm_deleted_at",
+          "columns": [
+            "deleted_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_pm_deleted_at ON product_maintenances(deleted_at);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "ProductMaintenance"
+      }
+    },
+    {
+      "name": "Producto",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "categoria_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "precio_compra",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "precio_venta",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "total_cost",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "total_price",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": "0"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa   Empresa           @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "categoria_id",
+          "refTable": "CategoriaProducto",
+          "refColumn": "id",
+          "raw": "categoria CategoriaProducto @relation(fields: [categoria_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([categoria_id])"
+        },
+        {
+          "raw": "@@index([search_count])"
+        },
+        {
+          "raw": "@@index([product_type])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "Producto"
+      }
+    },
+    {
+      "name": "ProductoItem",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "cantidad",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "child_producto_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "costo_unitario",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "parent_producto_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "precio_unitario",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([parent_producto_id, child_producto_id])"
+        }
+      ],
+      "fk": [
+        {
+          "column": "parent_producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "parent_producto Producto @relation(\"ParentProducto\", fields: [parent_producto_id], references: [id])"
+        },
+        {
+          "column": "child_producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "child_producto  Producto @relation(\"ChildProducto\", fields: [child_producto_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([parent_producto_id])"
+        },
+        {
+          "raw": "@@index([child_producto_id])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "ProductoItem"
+      }
+    },
+    {
+      "name": "punch_records",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "address_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "datetime_local",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "datetime_utc",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamptz",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "device_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "device_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "is_manual_edit",
+          "type": "boolean",
+          "nullable": false,
+          "default": "FALSE"
+        },
+        {
+          "name": "location_accuracy",
+          "type": "double",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "location_lat",
+          "type": "decimal(10,",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "location_lng",
+          "type": "decimal(11,",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "location_missing",
+          "type": "boolean",
+          "nullable": false,
+          "default": "FALSE"
+        },
+        {
+          "name": "location_provider",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "platform",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sync_status",
+          "type": "\"syncstatus\"",
+          "nullable": false,
+          "default": "'SYNCED'"
+        },
+        {
+          "name": "timezone",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "\"punchtype\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "user    Usuario @relation(fields: [user_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa_id UUID NOT NULL REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "user_id UUID NOT NULL REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([user_id])"
+        },
+        {
+          "raw": "@@index([datetime_utc(sort: Desc)])"
+        },
+        {
+          "raw": "@@index([type])"
+        },
+        {
+          "raw": "@@index([sync_status])"
+        },
+        {
+          "raw": "@@index([deleted_at])"
+        },
+        {
+          "name": "punch_records_empresa_idx",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS punch_records_empresa_idx ON punch_records(empresa_id);"
+        },
+        {
+          "name": "punch_records_user_idx",
+          "columns": [
+            "user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS punch_records_user_idx ON punch_records(user_id);"
+        },
+        {
+          "name": "punch_records_datetime_utc_idx",
+          "columns": [
+            "datetime_utc DESC"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS punch_records_datetime_utc_idx ON punch_records(datetime_utc DESC);"
+        },
+        {
+          "name": "punch_records_type_idx",
+          "columns": [
+            "type"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS punch_records_type_idx ON punch_records(type);"
+        },
+        {
+          "name": "punch_records_sync_status_idx",
+          "columns": [
+            "sync_status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS punch_records_sync_status_idx ON punch_records(sync_status);"
+        },
+        {
+          "name": "punch_records_deleted_at_idx",
+          "columns": [
+            "deleted_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS punch_records_deleted_at_idx ON punch_records(deleted_at);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "PunchRecord"
+      }
+    },
+    {
+      "name": "quick_replies",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "allow_comment",
+          "type": "boolean",
+          "nullable": false,
+          "default": "TRUE"
+        },
+        {
+          "name": "category",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "TRUE"
+        },
+        {
+          "name": "keywords",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [],
+      "indexes": [
+        {
+          "name": "quick_replies_category_idx",
+          "columns": [
+            "category"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS quick_replies_category_idx\n    ON quick_replies (category);"
+        },
+        {
+          "name": "quick_replies_is_active_idx",
+          "columns": [
+            "is_active"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS quick_replies_is_active_idx\n    ON quick_replies (is_active);"
+        }
+      ],
+      "source": {
+        "kind": "ts_sql",
+        "file": "fulltech_api/scripts/create_crm_whatsapp_tables.ts"
+      }
+    },
+    {
+      "name": "quotation_items",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "cantidad",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "discount_amount",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "discount_pct",
+          "type": "decimal(6, 2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "line_subtotal",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "line_total",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "product_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "quotation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "unit_cost",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "unit_price",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "quotation_id",
+          "refTable": "Quotation",
+          "refColumn": "id",
+          "raw": "quotation Quotation @relation(fields: [quotation_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "product_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "product   Producto? @relation(fields: [product_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([quotation_id])"
+        },
+        {
+          "raw": "@@index([product_id])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "QuotationItem"
+      }
+    },
+    {
+      "name": "quotations",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "itbis_amount",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "itbis_rate",
+          "type": "decimal(6, 4)",
+          "nullable": false,
+          "default": "0.18"
+        },
+        {
+          "name": "subtotal",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "total",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [
+        {
+          "raw": "@@unique([empresa_id, numero])"
+        }
+      ],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa  Empresa         @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "Customer",
+          "refColumn": "id",
+          "raw": "customer Customer?       @relation(fields: [customer_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "creator  Usuario         @relation(\"QuotationCreator\", fields: [created_by_user_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([customer_id])"
+        },
+        {
+          "raw": "@@index([created_at])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "Quotation"
+      }
+    },
+    {
+      "name": "RulesContent",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "category",
+          "type": "\"rulescategory\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "TRUE"
+        },
+        {
+          "name": "order_index",
+          "type": "integer",
+          "nullable": false,
+          "default": "0"
+        },
+        {
+          "name": "role_visibility",
+          "type": "\"userrole\"[]",
+          "nullable": false,
+          "default": "ARRAY[]::\"UserRole\"[]"
+        },
+        {
+          "name": "title",
+          "type": "varchar(200)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "visible_to_all",
+          "type": "boolean",
+          "nullable": false,
+          "default": "TRUE"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa            Empresa       @relation(\"RulesContentEmpresa\", fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by         Usuario       @relation(\"RulesContentCreator\", fields: [created_by_user_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa_id UUID NOT NULL REFERENCES \"Empresa\"(id) ON DELETE CASCADE"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by_user_id UUID NOT NULL REFERENCES \"Usuario\"(id) ON DELETE RESTRICT"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id, category])"
+        },
+        {
+          "raw": "@@index([empresa_id, is_active])"
+        },
+        {
+          "raw": "@@index([empresa_id, updated_at])"
+        },
+        {
+          "name": "idx_rules_content_empresa_category",
+          "columns": [
+            "empresa_id",
+            "category"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_rules_content_empresa_category\n  ON \"RulesContent\" (empresa_id, category);"
+        },
+        {
+          "name": "idx_rules_content_empresa_active",
+          "columns": [
+            "empresa_id",
+            "is_active"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_rules_content_empresa_active\n  ON \"RulesContent\" (empresa_id, is_active);"
+        },
+        {
+          "name": "idx_rules_content_empresa_updated",
+          "columns": [
+            "empresa_id",
+            "updated_at DESC"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_rules_content_empresa_updated\n  ON \"RulesContent\" (empresa_id, updated_at DESC);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "RulesContent"
+      }
+    },
+    {
+      "name": "sale_evidence",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "caption",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "sale_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "type",
+          "type": "\"salesevidencetype\"",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "url_or_path",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "sale_id",
+          "refTable": "SalesRecord",
+          "refColumn": "id",
+          "raw": "sale SalesRecord @relation(fields: [sale_id], references: [id], onDelete: Cascade)"
+        },
+        {
+          "column": "sale_id",
+          "refTable": "sales",
+          "refColumn": "id",
+          "raw": "ALTER TABLE sale_evidence\n        ADD CONSTRAINT fk_sale_evidence_sale\n        FOREIGN KEY (sale_id) REFERENCES sales(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([sale_id])"
+        },
+        {
+          "raw": "@@index([type])"
+        },
+        {
+          "name": "idx_sale_evidence_sale_id",
+          "columns": [
+            "sale_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sale_evidence_sale_id ON sale_evidence(sale_id);"
+        },
+        {
+          "name": "idx_sale_evidence_type",
+          "columns": [
+            "type"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sale_evidence_type ON sale_evidence(type);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "SalesEvidence"
+      }
+    },
+    {
+      "name": "sales",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "amount",
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "channel",
+          "type": "\"saleschannel\"",
+          "nullable": false,
+          "default": "'other'"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_document",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_phone",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "deleted",
+          "type": "boolean",
+          "nullable": false,
+          "default": "false"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "details",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "detalles",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "evidence_required",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "payment_method",
+          "type": "\"salespaymentmethod\"",
+          "nullable": true,
+          "default": "'other'"
+        },
+        {
+          "name": "product_or_service",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "sold_at",
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "\"salesstatus\"",
+          "nullable": true,
+          "default": "'confirmed'"
+        },
+        {
+          "name": "sync_version",
+          "type": "int",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "thread_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "user    Usuario @relation(\"SalesRecordCreator\", fields: [user_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "empresas",
+          "refColumn": "id",
+          "raw": "CONSTRAINT fk_sales_empresa FOREIGN KEY (empresa_id) REFERENCES empresas(id) ON DELETE RESTRICT"
+        },
+        {
+          "column": "thread_id",
+          "refTable": "crm_threads",
+          "refColumn": "id",
+          "raw": "CONSTRAINT fk_sales_thread FOREIGN KEY (thread_id) REFERENCES crm_threads(id) ON DELETE SET NULL"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "customers",
+          "refColumn": "id",
+          "raw": "CONSTRAINT fk_sales_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE sales\n        ADD CONSTRAINT fk_sales_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE sales\n        ADD CONSTRAINT fk_sales_user\n        FOREIGN KEY (user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([user_id])"
+        },
+        {
+          "raw": "@@index([sold_at])"
+        },
+        {
+          "raw": "@@index([channel])"
+        },
+        {
+          "raw": "@@index([status])"
+        },
+        {
+          "raw": "@@index([deleted])"
+        },
+        {
+          "name": "idx_sales_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_empresa_id ON sales(empresa_id);"
+        },
+        {
+          "name": "idx_sales_thread_id",
+          "columns": [
+            "thread_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_thread_id ON sales(thread_id);"
+        },
+        {
+          "name": "idx_sales_customer_id",
+          "columns": [
+            "customer_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id);"
+        },
+        {
+          "name": "idx_sales_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_empresa_id ON sales(empresa_id);"
+        },
+        {
+          "name": "idx_sales_user_id",
+          "columns": [
+            "user_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_user_id ON sales(user_id);"
+        },
+        {
+          "name": "idx_sales_sold_at",
+          "columns": [
+            "sold_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_sold_at ON sales(sold_at);"
+        },
+        {
+          "name": "idx_sales_channel",
+          "columns": [
+            "channel"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_channel ON sales(channel);"
+        },
+        {
+          "name": "idx_sales_status",
+          "columns": [
+            "status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);"
+        },
+        {
+          "name": "idx_sales_deleted",
+          "columns": [
+            "deleted"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_deleted ON sales(deleted);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "SalesRecord"
+      }
+    },
+    {
+      "name": "sales_legacy",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "customer_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "detalles",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "sync_version",
+          "type": "int",
+          "nullable": false,
+          "default": "1"
+        },
+        {
+          "name": "thread_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(12,2)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa  Empresa    @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "thread_id",
+          "refTable": "CrmThread",
+          "refColumn": "id",
+          "raw": "thread   CrmThread? @relation(fields: [thread_id], references: [id])"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "Customer",
+          "refColumn": "id",
+          "raw": "customer Customer?  @relation(fields: [customer_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE sales_legacy\n        ADD CONSTRAINT fk_sales_legacy_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "thread_id",
+          "refTable": "crm_threads_legacy",
+          "refColumn": "id",
+          "raw": "ALTER TABLE sales_legacy\n        ADD CONSTRAINT fk_sales_legacy_thread\n        FOREIGN KEY (thread_id) REFERENCES crm_threads_legacy(id)"
+        },
+        {
+          "column": "customer_id",
+          "refTable": "customers_legacy",
+          "refColumn": "id",
+          "raw": "ALTER TABLE sales_legacy\n        ADD CONSTRAINT fk_sales_legacy_customer\n        FOREIGN KEY (customer_id) REFERENCES customers_legacy(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([thread_id])"
+        },
+        {
+          "raw": "@@index([customer_id])"
+        },
+        {
+          "name": "idx_sales_legacy_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_legacy_empresa_id ON sales_legacy(empresa_id);"
+        },
+        {
+          "name": "idx_sales_legacy_thread_id",
+          "columns": [
+            "thread_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_legacy_thread_id ON sales_legacy(thread_id);"
+        },
+        {
+          "name": "idx_sales_legacy_customer_id",
+          "columns": [
+            "customer_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_sales_legacy_customer_id ON sales_legacy(customer_id);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "Sale"
+      }
+    },
+    {
+      "name": "statutory_config",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "active",
+          "type": "boolean",
+          "nullable": false,
+          "default": "true"
+        },
+        {
+          "name": "company_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "config",
+          "type": "jsonb",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "company_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE \"statutory_config\" ADD CONSTRAINT \"statutory_config_company_id_fkey\" FOREIGN KEY (\"company_id\") REFERENCES \"Empresa\"(\"id\")"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([year])"
+        },
+        {
+          "raw": "@@index([active])"
+        },
+        {
+          "name": "statutory_config_company_id_idx",
+          "columns": [
+            "company_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"statutory_config_company_id_idx\" ON \"statutory_config\"(\"company_id\");"
+        },
+        {
+          "name": "statutory_config_year_idx",
+          "columns": [
+            "year"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"statutory_config_year_idx\" ON \"statutory_config\"(\"year\");"
+        },
+        {
+          "name": "statutory_config_active_idx",
+          "columns": [
+            "active"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS \"statutory_config_active_idx\" ON \"statutory_config\"(\"active\");"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "StatutoryConfig"
+      }
+    },
+    {
+      "name": "Usuario",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "fecha_ingreso_empresa",
+          "type": "date",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "fecha_nacimiento",
+          "type": "date",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "licencia_conducir_fecha_vencimiento",
+          "type": "date",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "metadata",
+          "type": "jsonb",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "salario_mensual",
+          "type": "decimal(12, 2)",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        }
+      ],
+      "indexes": [],
+      "source": {
+        "kind": "prisma",
+        "model": "Usuario"
+      }
+    },
+    {
+      "name": "Venta",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "cliente_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "uuid("
+        },
+        {
+          "name": "monto",
+          "type": "decimal(12, 2)",
+          "nullable": false,
+          "default": null
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa Empresa @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "cliente_id",
+          "refTable": "Cliente",
+          "refColumn": "id",
+          "raw": "cliente Cliente @relation(fields: [cliente_id], references: [id])"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([cliente_id])"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "Venta"
+      }
+    },
+    {
+      "name": "warranty_cases",
+      "pk": [
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "attachment_urls",
+          "type": "text[]",
+          "nullable": false,
+          "default": "'{}'::text[]"
+        },
+        {
+          "name": "closed_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "empresa_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "problem_description",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "producto_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "received_date",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "resolution_notes",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "sent_date",
+          "type": "timestamp(3)",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "supplier_name",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "supplier_ticket",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp(3)",
+          "nullable": false,
+          "default": "now()"
+        },
+        {
+          "name": "warranty_status",
+          "type": "\"warrantystatus\"",
+          "nullable": false,
+          "default": "'ABIERTO'"
+        }
+      ],
+      "unique": [],
+      "fk": [
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "empresa      Empresa              @relation(fields: [empresa_id], references: [id])"
+        },
+        {
+          "column": "producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "producto     Producto             @relation(fields: [producto_id], references: [id])"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "created_by   Usuario              @relation(fields: [created_by_user_id], references: [id])"
+        },
+        {
+          "column": "empresa_id",
+          "refTable": "Empresa",
+          "refColumn": "id",
+          "raw": "ALTER TABLE warranty_cases\n        ADD CONSTRAINT fk_warranty_cases_empresa\n        FOREIGN KEY (empresa_id) REFERENCES \"Empresa\"(id)"
+        },
+        {
+          "column": "producto_id",
+          "refTable": "Producto",
+          "refColumn": "id",
+          "raw": "ALTER TABLE warranty_cases\n        ADD CONSTRAINT fk_warranty_cases_producto\n        FOREIGN KEY (producto_id) REFERENCES \"Producto\"(id)"
+        },
+        {
+          "column": "created_by_user_id",
+          "refTable": "Usuario",
+          "refColumn": "id",
+          "raw": "ALTER TABLE warranty_cases\n        ADD CONSTRAINT fk_warranty_cases_user\n        FOREIGN KEY (created_by_user_id) REFERENCES \"Usuario\"(id)"
+        }
+      ],
+      "indexes": [
+        {
+          "raw": "@@index([empresa_id])"
+        },
+        {
+          "raw": "@@index([producto_id])"
+        },
+        {
+          "raw": "@@index([warranty_status])"
+        },
+        {
+          "raw": "@@index([created_at(sort: Desc)])"
+        },
+        {
+          "raw": "@@index([deleted_at])"
+        },
+        {
+          "name": "idx_wc_empresa_id",
+          "columns": [
+            "empresa_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_wc_empresa_id ON warranty_cases(empresa_id);"
+        },
+        {
+          "name": "idx_wc_producto_id",
+          "columns": [
+            "producto_id"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_wc_producto_id ON warranty_cases(producto_id);"
+        },
+        {
+          "name": "idx_wc_status",
+          "columns": [
+            "warranty_status"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_wc_status ON warranty_cases(warranty_status);"
+        },
+        {
+          "name": "idx_wc_created_at_desc",
+          "columns": [
+            "created_at DESC"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_wc_created_at_desc ON warranty_cases(created_at DESC);"
+        },
+        {
+          "name": "idx_wc_deleted_at",
+          "columns": [
+            "deleted_at"
+          ],
+          "where": null,
+          "raw": "CREATE INDEX IF NOT EXISTS idx_wc_deleted_at ON warranty_cases(deleted_at);"
+        }
+      ],
+      "source": {
+        "kind": "prisma",
+        "model": "WarrantyCase"
+      }
+    }
+  ]
+}

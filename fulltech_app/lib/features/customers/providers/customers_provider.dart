@@ -3,11 +3,12 @@ import 'package:fulltech_app/core/providers/dio_provider.dart';
 import 'package:fulltech_app/core/utils/debouncer.dart';
 import 'package:fulltech_app/features/customers/data/models/customer_response.dart';
 import 'package:fulltech_app/features/customers/data/repositories/customers_repository.dart';
+import 'package:fulltech_app/features/auth/state/auth_providers.dart';
 
 /// Repository provider
 final customersRepositoryProvider = Provider<CustomersRepository>((ref) {
   final dio = ref.watch(dioProvider);
-  return CustomersRepository(dio);
+  return CustomersRepository(dio, db: ref.watch(localDbProvider));
 });
 
 /// State for customer list

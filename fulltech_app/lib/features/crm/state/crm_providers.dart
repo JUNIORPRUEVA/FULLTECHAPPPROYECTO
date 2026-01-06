@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/state/auth_providers.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/app_config.dart';
+import '../../../core/state/api_endpoint_settings_provider.dart';
 import '../../catalogo/state/catalog_providers.dart';
 import '../../catalogo/models/producto.dart';
 import '../data/datasources/crm_remote_datasource.dart';
@@ -28,10 +30,32 @@ import 'customers_controller.dart';
 import 'customers_state.dart';
 
 final crmApiClientProvider = Provider<ApiClient>((ref) {
+  // Rebuild client when the API endpoint setting changes.
+  ref.watch(apiEndpointSettingsProvider);
+  if (kDebugMode) {
+    debugPrint('[CRM] baseUrl=${AppConfig.crmApiBaseUrl}');
+  }
   return ApiClient.forBaseUrl(
     ref.watch(localDbProvider),
     AppConfig.crmApiBaseUrl,
   );
+});
+
+final crmOnlineProvider = StreamProvider<bool>((ref) async* {
+  bool isOnline(List<ConnectivityResult> results) =>
+      results.any((r) => r != ConnectivityResult.none);
+
+  try {
+    final initial = await Connectivity().checkConnectivity();
+    yield isOnline(initial);
+  } catch (_) {
+    // If we can't determine, assume online to avoid false negatives.
+    yield true;
+  }
+
+  await for (final results in Connectivity().onConnectivityChanged) {
+    yield isOnline(results);
+  }
 });
 
 final crmRemoteDataSourceProvider = Provider<CrmRemoteDataSource>((ref) {
@@ -39,7 +63,10 @@ final crmRemoteDataSourceProvider = Provider<CrmRemoteDataSource>((ref) {
 });
 
 final crmRepositoryProvider = Provider<CrmRepository>((ref) {
-  return CrmRepository(ref.watch(crmRemoteDataSourceProvider));
+  return CrmRepository(
+    ref.watch(crmRemoteDataSourceProvider),
+    ref.watch(localDbProvider),
+  );
 });
 
 final crmThreadsControllerProvider =
@@ -73,7 +100,11 @@ final crmProductsProvider = StreamProvider<List<Producto>>((ref) async* {
     final productos = await api.listProductos(includeInactive: true);
     await db.clearStore(store: store);
     for (final p in productos) {
-      await db.upsertEntity(store: store, id: p.id, json: jsonEncode(p.toJson()));
+      await db.upsertEntity(
+        store: store,
+        id: p.id,
+        json: jsonEncode(p.toJson()),
+      );
     }
     return productos;
   }
@@ -122,15 +153,15 @@ final crmRealtimeProvider = Provider<void>((ref) {
     timer = null;
 
     // Always refresh threads once for any CRM event.
+    // Controllers are offline-first (cache local then refresh), so this keeps
+    // immediate backend updates while maintaining a local base.
     // ignore: unawaited_futures
     ref.read(crmThreadsControllerProvider.notifier).refresh();
 
     final selected = ref.read(selectedThreadIdProvider);
     if (selected != null && pendingChatIds.contains(selected)) {
       // ignore: unawaited_futures
-      ref
-          .read(crmMessagesControllerProvider(selected).notifier)
-          .loadInitial();
+      ref.read(crmMessagesControllerProvider(selected).notifier).loadInitial();
     }
     pendingChatIds.clear();
   }
@@ -139,23 +170,40 @@ final crmRealtimeProvider = Provider<void>((ref) {
     timer ??= Timer(const Duration(milliseconds: 250), flush);
   }
 
-  final sub = client.stream().listen((evt) {
-    if (evt.type == 'message.new' && evt.chatId != null) {
-      pendingChatIds.add(evt.chatId!);
-      scheduleFlush();
-      return;
-    }
-    if (evt.type == 'chat.updated' && evt.chatId != null) {
-      pendingChatIds.add(evt.chatId!);
-      scheduleFlush();
-      return;
-    }
-    if (evt.type == 'message.status' && evt.chatId != null) {
-      pendingChatIds.add(evt.chatId!);
-      scheduleFlush();
-      return;
-    }
-  });
+  final sub = client.stream().listen(
+    (evt) {
+      if (evt.type == 'message.new' && evt.chatId != null) {
+        pendingChatIds.add(evt.chatId!);
+        scheduleFlush();
+        return;
+      }
+      if (evt.type == 'message.updated' && evt.chatId != null) {
+        pendingChatIds.add(evt.chatId!);
+        scheduleFlush();
+        return;
+      }
+      if (evt.type == 'chat.updated' && evt.chatId != null) {
+        pendingChatIds.add(evt.chatId!);
+        scheduleFlush();
+        return;
+      }
+      if (evt.type == 'message.status' && evt.chatId != null) {
+        pendingChatIds.add(evt.chatId!);
+        scheduleFlush();
+        return;
+      }
+    },
+    onError: (e) {
+      if (kDebugMode) {
+        debugPrint('[CRM][SSE] stream onError: $e');
+      }
+    },
+    onDone: () {
+      if (kDebugMode) {
+        debugPrint('[CRM][SSE] stream onDone');
+      }
+    },
+  );
 
   ref.onDispose(() async {
     timer?.cancel();
@@ -177,8 +225,8 @@ final crmMessagesControllerProvider =
 
 final crmChatStatsControllerProvider =
     StateNotifierProvider<CrmChatStatsController, CrmChatStatsState>((ref) {
-  return CrmChatStatsController(repo: ref.watch(crmRepositoryProvider));
-});
+      return CrmChatStatsController(repo: ref.watch(crmRepositoryProvider));
+    });
 
 final customersRemoteDataSourceProvider = Provider<CustomersRemoteDataSource>((
   ref,

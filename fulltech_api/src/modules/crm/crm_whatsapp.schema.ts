@@ -16,9 +16,22 @@ export const crmChatMessagesListQuerySchema = z.object({
 
 export const crmSendTextSchema = z.object({
   text: z.string().min(1).max(4000),
+  // If true, backend will only record the message and will not call Evolution.
+  // Requires remoteMessageId so status webhooks can match.
+  skipEvolution: z.boolean().optional(),
+  remoteMessageId: z.string().max(200).optional().nullable(),
   aiSuggestionId: z.string().uuid().optional().nullable(),
   aiSuggestedText: z.string().max(8000).optional().nullable(),
   aiUsedKnowledge: z.array(z.string()).max(50).optional().nullable(),
+});
+
+export const crmOutboundSendTextSchema = crmSendTextSchema.extend({
+  // A normal WhatsApp phone number (any format, backend will normalize).
+  phone: z.string().min(6).max(40),
+  // Optional CRM status; defaults to "primer_contacto" when creating a new chat.
+  status: z.string().max(50).optional(),
+  // Optional label for the chat.
+  displayName: z.string().max(200).optional(),
 });
 
 export const crmSendMediaFieldsSchema = z.object({
@@ -26,6 +39,28 @@ export const crmSendMediaFieldsSchema = z.object({
   type: z
     .enum(['image', 'video', 'audio', 'document'])
     .optional(),
+});
+
+export const crmRecordMediaSchema = z.object({
+  mediaUrl: z.string().min(1).max(4000),
+  mimeType: z.string().max(200).optional().nullable(),
+  size: z.coerce.number().int().min(0).optional().nullable(),
+  fileName: z.string().max(500).optional().nullable(),
+  caption: z.string().max(4000).optional().nullable(),
+  type: z.enum(['image', 'video', 'audio', 'document']).optional(),
+
+  // If true, backend will only record and will not call Evolution.
+  // Requires remoteMessageId so status webhooks can match.
+  skipEvolution: z.boolean().optional(),
+  remoteMessageId: z.string().max(200).optional().nullable(),
+});
+
+export const crmEditChatMessageSchema = z.object({
+  text: z.string().min(1).max(4000),
+});
+
+export const crmDeleteChatMessageSchema = z.object({
+  // Reserved for future options (forEveryone, etc).
 });
 
 export const crmMarkReadSchema = z.object({});

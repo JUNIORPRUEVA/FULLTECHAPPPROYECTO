@@ -7,6 +7,8 @@ class SalesApi {
 
   SalesApi(this._dio);
 
+  static final _noOfflineQueue = Options(extra: const {'offlineQueue': false});
+
   Map<String, dynamic> _ensureOk(dynamic raw) {
     if (raw is Map<String, dynamic>) {
       if (raw['ok'] == true) {
@@ -54,22 +56,22 @@ class SalesApi {
   }
 
   Future<Map<String, dynamic>> createSale(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/sales', data: payload);
+    final res = await _dio.post('/sales', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> updateSale(String id, Map<String, dynamic> patch) async {
-    final res = await _dio.put('/sales/$id', data: patch);
+    final res = await _dio.put('/sales/$id', data: patch, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> deleteSale(String id) async {
-    final res = await _dio.delete('/sales/$id');
+    final res = await _dio.delete('/sales/$id', options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 
   Future<Map<String, dynamic>> addEvidence(String saleId, Map<String, dynamic> payload) async {
-    final res = await _dio.post('/sales/$saleId/evidence', data: payload);
+    final res = await _dio.post('/sales/$saleId/evidence', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);
   }
 

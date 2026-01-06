@@ -8,6 +8,7 @@ import 'crm_chats_page.dart';
 import 'crm_customers_page_enhanced.dart';
 import '../widgets/crm_top_bar.dart';
 import '../widgets/evolution_config_dialog.dart';
+import '../widgets/crm_keyboard_shortcuts.dart';
 import '../../state/crm_providers.dart';
 
 class CrmHomePage extends ConsumerWidget {
@@ -29,25 +30,39 @@ class CrmHomePage extends ConsumerWidget {
             final controller = DefaultTabController.of(context);
             final tabs = _CrmTabs(controller: controller);
 
-            return Column(
+            return Stack(
               children: [
-                AnimatedBuilder(
-                  animation: controller,
-                  builder: (context, _) {
-                    final isChats = controller.index == 0;
-                    if (isChats) {
-                      return CrmTopBar(trailing: tabs);
-                    }
-                    return _TabsOnlyBar(child: tabs);
-                  },
+                Column(
+                  children: [
+                    AnimatedBuilder(
+                      animation: controller,
+                      builder: (context, _) {
+                        final isChats = controller.index == 0;
+                        if (isChats) {
+                          return CrmTopBar(trailing: tabs);
+                        }
+                        return _TabsOnlyBar(child: tabs);
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          const CrmChatsPage(),
+                          const CrmCustomersPageEnhanced(),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      const CrmChatsPage(),
-                      const CrmCustomersPageEnhanced(),
-                    ],
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: FloatingActionButton.small(
+                    heroTag: 'crmShortcutsFabHome',
+                    tooltip: 'Atajos de teclado',
+                    onPressed: () => showCrmKeyboardShortcutsDialog(context),
+                    child: const Icon(Icons.keyboard),
                   ),
                 ),
               ],

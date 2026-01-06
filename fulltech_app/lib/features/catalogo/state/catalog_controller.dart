@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/storage/local_db.dart';
+import '../../../core/services/offline_http_queue.dart';
 import '../data/catalog_api.dart';
 import '../models/categoria_producto.dart';
 import '../models/producto.dart';
@@ -17,6 +20,17 @@ class CatalogController extends StateNotifier<CatalogState> {
 
   static const _storeCategorias = 'catalog_categories';
   static const _storeProductos = 'catalog_products';
+
+  static const _uuid = Uuid();
+
+  bool _isNetworkError(Object e) {
+    if (e is DioException) {
+      return e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+    }
+    return OfflineHttpQueue.isNetworkError(e);
+  }
 
   CatalogController({
     required CatalogApi api,
@@ -184,8 +198,36 @@ class CatalogController extends StateNotifier<CatalogState> {
       state = state.copyWith(isLoading: false, categorias: updated, error: null);
       return categoria;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      return null;
+      if (!_isNetworkError(e) || state.isOnline) {
+        state = state.copyWith(isLoading: false, error: e.toString());
+        return null;
+      }
+
+      // Offline-first: create locally + queue the request.
+      final localId = _uuid.v4();
+      final local = CategoriaProducto(
+        id: localId,
+        nombre: nombre,
+        descripcion: (descripcion?.trim().isEmpty ?? true) ? null : descripcion!.trim(),
+        isActive: true,
+      );
+
+      final updated = [...state.categorias, local]..sort((a, b) => a.nombre.compareTo(b.nombre));
+      await _cacheCategorias(updated);
+
+      await OfflineHttpQueue.enqueue(
+        _db,
+        method: 'POST',
+        path: '/catalog/categories',
+        data: {
+          'id': localId,
+          'nombre': local.nombre,
+          if (local.descripcion != null) 'descripcion': local.descripcion,
+        },
+      );
+
+      state = state.copyWith(isLoading: false, categorias: updated, error: null);
+      return local;
     }
   }
 
@@ -209,8 +251,52 @@ class CatalogController extends StateNotifier<CatalogState> {
       await loadProductos();
       return producto;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      return null;
+      if (!_isNetworkError(e) || state.isOnline) {
+        state = state.copyWith(isLoading: false, error: e.toString());
+        return null;
+      }
+
+      final localId = _uuid.v4();
+      final local = Producto(
+        id: localId,
+        nombre: nombre,
+        precioCompra: precioCompra,
+        precioVenta: precioVenta,
+        imagenUrl: imagenUrl,
+        categoriaId: categoriaId,
+        categoria: state.categorias.firstWhere(
+          (c) => c.id == categoriaId,
+          orElse: () => CategoriaProducto(id: categoriaId, nombre: '', descripcion: null, isActive: true),
+        ),
+        searchCount: 0,
+        isActive: true,
+      );
+
+      final cachedAll = await _readCachedProductos();
+      final nextAll = [...cachedAll, local];
+      await _cacheProductos(nextAll);
+
+      await OfflineHttpQueue.enqueue(
+        _db,
+        method: 'POST',
+        path: '/catalog/products',
+        data: {
+          'id': localId,
+          'nombre': local.nombre,
+          'product_type': 'simple',
+          'precio_compra': local.precioCompra,
+          'precio_venta': local.precioVenta,
+          'imagen_url': local.imagenUrl,
+          'categoria_id': local.categoriaId,
+        },
+      );
+
+      state = state.copyWith(
+        isLoading: false,
+        productos: _applyProductFilters(nextAll),
+        error: null,
+      );
+      return local;
     }
   }
 
@@ -236,9 +322,62 @@ class CatalogController extends StateNotifier<CatalogState> {
       await loadProductos();
       return producto;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      return null;
+      if (!_isNetworkError(e) || state.isOnline) {
+        state = state.copyWith(isLoading: false, error: e.toString());
+        return null;
+      }
+
+      final cachedAll = await _readCachedProductos();
+      final nextAll = cachedAll
+          .map((p) => p.id == id
+              ? Producto(
+                  id: id,
+                  nombre: nombre,
+                  precioCompra: precioCompra,
+                  precioVenta: precioVenta,
+                  imagenUrl: imagenUrl,
+                  categoriaId: categoriaId,
+                  categoria: state.categorias.firstWhere(
+                    (c) => c.id == categoriaId,
+                    orElse: () => CategoriaProducto(id: categoriaId, nombre: '', descripcion: null, isActive: true),
+                  ),
+                  searchCount: p.searchCount,
+                  isActive: p.isActive,
+                )
+              : p)
+          .toList();
+
+      await _cacheProductos(nextAll);
+      await OfflineHttpQueue.enqueue(
+        _db,
+        method: 'PUT',
+        path: '/catalog/products/$id',
+        data: {
+          'nombre': nombre,
+          'precio_compra': precioCompra,
+          'precio_venta': precioVenta,
+          'imagen_url': imagenUrl,
+          'categoria_id': categoriaId,
+        },
+      );
+
+      state = state.copyWith(isLoading: false, productos: _applyProductFilters(nextAll), error: null);
+      return nextAll.firstWhere((p) => p.id == id, orElse: () => localFromInputs(id));
     }
+  }
+
+  Producto localFromInputs(String id) {
+    return Producto(
+      id: id,
+      nombre: '',
+      precioCompra: 0,
+      precioVenta: 0,
+      imagenUrl: '',
+      categoriaId: '',
+      categoria: null,
+      searchCount: 0,
+      isActive: true,
+    );
   }
 
   Future<bool> deleteProducto(String id) async {
@@ -249,8 +388,23 @@ class CatalogController extends StateNotifier<CatalogState> {
       await loadProductos();
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      return false;
+      if (!_isNetworkError(e) || state.isOnline) {
+        state = state.copyWith(isLoading: false, error: e.toString());
+        return false;
+      }
+
+      final cachedAll = await _readCachedProductos();
+      final nextAll = cachedAll.where((p) => p.id != id).toList();
+      await _cacheProductos(nextAll);
+
+      await OfflineHttpQueue.enqueue(
+        _db,
+        method: 'DELETE',
+        path: '/catalog/products/$id',
+      );
+
+      state = state.copyWith(isLoading: false, productos: _applyProductFilters(nextAll), error: null);
+      return true;
     }
   }
 

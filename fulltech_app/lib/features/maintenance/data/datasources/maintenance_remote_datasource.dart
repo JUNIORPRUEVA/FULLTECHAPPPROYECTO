@@ -6,6 +6,8 @@ class MaintenanceRemoteDataSource {
 
   MaintenanceRemoteDataSource(this.dio);
 
+  static const _noOfflineQueueExtra = {'offlineQueue': false};
+
   Map<String, dynamic> _createMaintenancePayload(CreateMaintenanceDto dto) {
     return {
       'producto_id': dto.productoId,
@@ -75,6 +77,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -136,6 +139,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -148,6 +152,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -186,6 +191,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -247,6 +253,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -259,6 +266,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -276,6 +284,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -330,6 +339,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -367,6 +377,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );
@@ -383,6 +394,7 @@ class MaintenanceRemoteDataSource {
       options: Options().copyWith(
         sendTimeout: _defaultOptions.sendTimeout,
         receiveTimeout: _defaultOptions.receiveTimeout,
+        extra: _noOfflineQueueExtra,
       ),
       cancelToken: cancelToken,
     );

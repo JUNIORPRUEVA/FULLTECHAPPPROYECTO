@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/module_page.dart';
@@ -28,6 +29,13 @@ class ConfiguracionScreen extends ConsumerWidget {
           title: 'Empresa',
           description: 'Datos de la empresa y logo.',
           route: '${AppRoutes.configuracion}/empresa',
+        ),
+      if (isAdmin && kDebugMode)
+        _SettingsCardModel(
+          icon: Icons.cloud_sync,
+          title: 'Servidor',
+          description: 'Cambiar API nube/local.',
+          route: '${AppRoutes.configuracion}/servidor',
         ),
       _SettingsCardModel(
         icon: Icons.palette,

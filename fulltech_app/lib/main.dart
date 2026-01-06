@@ -4,11 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
-import 'core/services/api_client.dart';
+import 'core/services/api_endpoint_settings.dart';
 import 'core/storage/local_db.dart';
 import 'features/auth/state/auth_providers.dart';
+import 'features/auth/state/auth_state.dart';
+import 'core/services/app_config.dart';
+import 'core/state/api_endpoint_settings_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,14 +50,36 @@ Future<void> main() async {
 
   final db = getLocalDb();
   await db.init();
-  final api = await ApiClient.create(db);
+
+  // Apply API endpoint overrides only when the persisted session is admin.
+  // This keeps the login screen stable (cloud) for non-admins.
+  ApiEndpointSettings? savedSettings;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    savedSettings = loadApiEndpointSettings(prefs);
+  } catch (_) {
+    savedSettings = null;
+  }
+
+  try {
+    final session = await db.readSession();
+    final role = session?.user.role;
+    final isAdmin = role == 'admin' || role == 'administrador';
+    if (kDebugMode && isAdmin && savedSettings != null) {
+      applyApiEndpointSettings(savedSettings);
+    } else {
+      // Force cloud defaults for unauthenticated/non-admin usage.
+      AppConfig.setRuntimeApiBaseUrlOverride(null);
+      AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
+    }
+  } catch (_) {
+    AppConfig.setRuntimeApiBaseUrlOverride(null);
+    AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
+  }
 
   runApp(
     ProviderScope(
-      overrides: [
-        localDbProvider.overrideWithValue(db),
-        apiClientProvider.overrideWithValue(api),
-      ],
+      overrides: [localDbProvider.overrideWithValue(db)],
       child: const _Bootstrapper(),
     ),
   );
@@ -67,13 +93,70 @@ class _Bootstrapper extends ConsumerStatefulWidget {
 }
 
 class _BootstrapperState extends ConsumerState<_Bootstrapper> {
+  ProviderSubscription<AuthState>? _authSub;
+  ProviderSubscription<ApiEndpointSettings>? _apiSettingsSub;
+
+  void _enforceApiForRole() {
+    final auth = ref.read(authControllerProvider);
+    if (auth is AuthUnknown) return;
+
+    final settings = ref.read(apiEndpointSettingsProvider);
+
+    // Never allow local override in non-debug builds.
+    if (!kDebugMode) {
+      AppConfig.setRuntimeApiBaseUrlOverride(null);
+      AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
+      return;
+    }
+
+    if (auth is AuthAuthenticated) {
+      final role = auth.user.role;
+      final isAdmin = role == 'admin' || role == 'administrador';
+      if (isAdmin) {
+        applyApiEndpointSettings(settings);
+      } else {
+        AppConfig.setRuntimeApiBaseUrlOverride(null);
+        AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
+      }
+      return;
+    }
+
+    // Unauthenticated: keep stable cloud defaults.
+    AppConfig.setRuntimeApiBaseUrlOverride(null);
+    AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
+  }
+
   @override
   void initState() {
     super.initState();
+
+    // Enforce endpoint rules when auth/settings change.
+    _authSub = ref.listenManual<AuthState>(authControllerProvider, (
+      prev,
+      next,
+    ) {
+      _enforceApiForRole();
+    });
+    _apiSettingsSub = ref.listenManual<ApiEndpointSettings>(
+      apiEndpointSettingsProvider,
+      (prev, next) {
+        _enforceApiForRole();
+      },
+    );
+
     // Restore existing session from local DB.
     Future.microtask(
       () => ref.read(authControllerProvider.notifier).bootstrap(),
     );
+
+    Future.microtask(_enforceApiForRole);
+  }
+
+  @override
+  void dispose() {
+    _authSub?.close();
+    _apiSettingsSub?.close();
+    super.dispose();
   }
 
   @override

@@ -1,17 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 import '../data/datasources/usuarios_remote_datasource.dart';
 import '../data/repositories/usuarios_repository.dart';
 import '../models/usuario_model.dart';
-import '../../../core/services/app_config.dart';
+import '../../auth/state/auth_providers.dart';
 
 // ========== PROVIDERS BÁSICOS ==========
 
 // Proveedor de UsuariosRepository
-final usuariosRepositoryProvider = Provider((ref) {
-  final dio = Dio(BaseOptions(
-    baseUrl: AppConfig.apiBaseUrl,
-  ));
+final usuariosRepositoryProvider = Provider<UsuariosRepository>((ref) {
+  final dio = ref.watch(apiClientProvider).dio;
   return UsuariosRepository(UsuariosRemoteDataSource(dio));
 });
 

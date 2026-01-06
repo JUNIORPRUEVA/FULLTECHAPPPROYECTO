@@ -3,6 +3,7 @@ import { authMiddleware } from '../../middleware/auth';
 import { requireRole } from '../../middleware/requireRole';
 import axios from 'axios';
 import { prisma } from '../../config/prisma';
+import { env } from '../../config/env';
 
 const router = Router();
 
@@ -17,8 +18,8 @@ router.get('/evolution/config', authMiddleware, async (req: Request, res: Respon
 
     if (!config) {
       return res.json({
-        instanceName: process.env.EVOLUTION_INSTANCE_NAME || '',
-        evolutionBaseUrl: process.env.EVOLUTION_BASE_URL || '',
+        instanceName: env.EVOLUTION_INSTANCE || env.EVOLUTION_INSTANCE_ID || '',
+        evolutionBaseUrl: env.EVOLUTION_BASE_URL || '',
         expectedPhoneNumber: process.env.EVOLUTION_EXPECTED_PHONE || '',
         lastVerified: null,
       });
@@ -41,9 +42,9 @@ router.get('/evolution/config', authMiddleware, async (req: Request, res: Respon
 // GET /api/integrations/evolution/status - Get Evolution instance status
 router.get('/evolution/status', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const baseUrl = process.env.EVOLUTION_BASE_URL;
-    const apiKey = process.env.EVOLUTION_API_KEY;
-    const instance = process.env.EVOLUTION_INSTANCE_NAME;
+    const baseUrl = env.EVOLUTION_BASE_URL;
+    const apiKey = env.EVOLUTION_API_KEY;
+    const instance = env.EVOLUTION_INSTANCE || env.EVOLUTION_INSTANCE_ID;
 
     if (!baseUrl || !apiKey || !instance) {
       return res.status(400).json({ error: 'Evolution not configured' });
@@ -81,8 +82,8 @@ router.get('/evolution/status', authMiddleware, async (req: Request, res: Respon
 // GET /api/integrations/evolution/ping - Test Evolution connectivity
 router.get('/evolution/ping', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const baseUrl = process.env.EVOLUTION_BASE_URL;
-    const apiKey = process.env.EVOLUTION_API_KEY;
+    const baseUrl = env.EVOLUTION_BASE_URL;
+    const apiKey = env.EVOLUTION_API_KEY;
 
     if (!baseUrl || !apiKey) {
       return res.status(400).json({ error: 'Evolution not configured' });

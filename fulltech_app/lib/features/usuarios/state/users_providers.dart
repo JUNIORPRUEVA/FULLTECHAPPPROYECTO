@@ -4,9 +4,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
+import '../../../core/services/offline_http_queue.dart';
+import '../../../core/storage/local_db.dart';
 import '../data/datasources/users_remote_datasource.dart';
 import '../data/repositories/users_repository.dart';
 import '../models/registered_user.dart';
@@ -39,13 +42,29 @@ final isAdminProvider = Provider<bool>((ref) {
 ///
 /// New code should prefer `usersRepositoryProvider`.
 final usersApiProvider = Provider<UsersApiCompat>((ref) {
-  return UsersApiCompat(ref.watch(apiClientProvider).dio);
+  return UsersApiCompat(ref.watch(apiClientProvider).dio, ref.watch(localDbProvider));
 });
 
 class UsersApiCompat {
   final Dio _dio;
+  final LocalDb _db;
 
-  UsersApiCompat(this._dio);
+  static const _uuid = Uuid();
+
+  static final Options _noOfflineQueue = Options(
+    extra: const {'offlineQueue': false},
+  );
+
+  UsersApiCompat(this._dio, this._db);
+
+  bool _isNetworkError(Object e) {
+    if (e is DioException) {
+      return e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+    }
+    return OfflineHttpQueue.isNetworkError(e);
+  }
 
   static String _dateOnly(DateTime dt) {
     final y = dt.year.toString().padLeft(4, '0');
@@ -117,9 +136,41 @@ class UsersApiCompat {
       'salario_mensual': salarioMensual,
     };
 
-    final res = await _dio.post('/users', data: payload);
-    final data = res.data as Map<String, dynamic>;
-    return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    try {
+      final res = await _dio.post('/users', data: payload, options: _noOfflineQueue);
+      final data = res.data as Map<String, dynamic>;
+      return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    } catch (e) {
+      if (_isNetworkError(e)) {
+        final localId = _uuid.v4();
+        await OfflineHttpQueue.enqueue(
+          _db,
+          method: 'POST',
+          path: '/users',
+          data: payload,
+          requestId: localId,
+        );
+
+        // Return a minimal placeholder so callers can continue the flow.
+        return RegisteredUser(
+          id: localId,
+          empresaId: '',
+          email: email,
+          nombreCompleto: nombreCompleto,
+          rol: rol,
+          telefono: telefono,
+          direccion: direccion,
+          fechaNacimiento: fechaNacimiento,
+          cedulaNumero: cedulaNumero,
+          fechaIngresoEmpresa: fechaIngresoEmpresa,
+          salarioMensual: salarioMensual,
+          estado: 'pendiente',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<RegisteredUser> updateUser(String id, Map<String, dynamic> patch) async {
@@ -133,23 +184,112 @@ class UsersApiCompat {
     convertDate('fecha_ingreso_empresa');
     convertDate('licencia_conducir_fecha_vencimiento');
 
-    final res = await _dio.put('/users/$id', data: normalized);
-    final data = res.data as Map<String, dynamic>;
-    return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    try {
+      final res = await _dio.put(
+        '/users/$id',
+        data: normalized,
+        options: _noOfflineQueue,
+      );
+      final data = res.data as Map<String, dynamic>;
+      return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    } catch (e) {
+      if (_isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          _db,
+          method: 'PUT',
+          path: '/users/$id',
+          data: normalized,
+        );
+
+        return RegisteredUser(
+          id: id,
+          empresaId: '',
+          email: (normalized['email'] ?? '') as String,
+          nombreCompleto: (normalized['nombre_completo'] ?? normalized['nombreCompleto'] ?? '') as String,
+          rol: (normalized['rol'] ?? normalized['role'] ?? 'usuario') as String,
+          telefono: (normalized['telefono'] ?? '') as String,
+          direccion: (normalized['direccion'] ?? '') as String,
+          estado: 'pendiente',
+          updatedAt: DateTime.now(),
+          createdAt: DateTime.now(),
+        );
+      }
+      rethrow;
+    }
   }
 
-  Future<void> deleteUser(String id) => _dio.delete('/users/$id');
+  Future<void> deleteUser(String id) async {
+    try {
+      await _dio.delete('/users/$id', options: _noOfflineQueue);
+    } catch (e) {
+      if (_isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          _db,
+          method: 'DELETE',
+          path: '/users/$id',
+        );
+        return;
+      }
+      rethrow;
+    }
+  }
 
   Future<RegisteredUser> blockUser(String id) async {
-    final res = await _dio.patch('/users/$id/block');
-    final data = res.data as Map<String, dynamic>;
-    return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    try {
+      final res = await _dio.patch('/users/$id/block', options: _noOfflineQueue);
+      final data = res.data as Map<String, dynamic>;
+      return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    } catch (e) {
+      if (_isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          _db,
+          method: 'PATCH',
+          path: '/users/$id/block',
+        );
+        return RegisteredUser(
+          id: id,
+          empresaId: '',
+          email: '',
+          nombreCompleto: '',
+          rol: 'usuario',
+          telefono: '',
+          direccion: '',
+          estado: 'bloqueado',
+          updatedAt: DateTime.now(),
+          createdAt: DateTime.now(),
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<RegisteredUser> unblockUser(String id) async {
-    final res = await _dio.patch('/users/$id/unblock');
-    final data = res.data as Map<String, dynamic>;
-    return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    try {
+      final res = await _dio.patch('/users/$id/unblock', options: _noOfflineQueue);
+      final data = res.data as Map<String, dynamic>;
+      return RegisteredUser.fromJson(data['item'] as Map<String, dynamic>);
+    } catch (e) {
+      if (_isNetworkError(e)) {
+        await OfflineHttpQueue.enqueue(
+          _db,
+          method: 'PATCH',
+          path: '/users/$id/unblock',
+        );
+        return RegisteredUser(
+          id: id,
+          empresaId: '',
+          email: '',
+          nombreCompleto: '',
+          rol: 'usuario',
+          telefono: '',
+          direccion: '',
+          estado: 'activo',
+          updatedAt: DateTime.now(),
+          createdAt: DateTime.now(),
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<UserDocsUploadResult> uploadUserDocs({

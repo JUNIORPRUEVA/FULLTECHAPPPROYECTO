@@ -9,11 +9,13 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'auth_session.dart';
 import 'local_db_interface.dart';
 import 'sync_queue_item.dart';
+import '../../offline/local_db/migrations/offline_schema_migrator.dart';
+import '../services/sync_signals.dart';
 
 class LocalDbIo implements LocalDb {
   sqflite.Database? _db;
 
-  static const _schemaVersion = 8;
+  static const _schemaVersion = 9;
 
   @override
   Future<void> init() async {
@@ -27,6 +29,9 @@ class LocalDbIo implements LocalDb {
     _db = await sqflite.openDatabase(
       dbPath,
       version: _schemaVersion,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON;');
+      },
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE auth_session(
@@ -350,6 +355,9 @@ class LocalDbIo implements LocalDb {
         await db.execute(
           'CREATE INDEX idx_operations_warranty_tickets_status ON operations_warranty_tickets(status);',
         );
+
+        // Additive + safe: ensure ALL backend tables exist locally, plus outbox tables.
+        await OfflineSchemaMigrator.migrateToLatest(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -676,6 +684,11 @@ class LocalDbIo implements LocalDb {
             'CREATE INDEX IF NOT EXISTS idx_operations_warranty_tickets_status ON operations_warranty_tickets(status);',
           );
         }
+
+        if (oldVersion < 9) {
+          // Additive + safe: ensure ALL backend tables exist locally, plus outbox tables.
+          await OfflineSchemaMigrator.migrateToLatest(db);
+        }
       },
     );
   }
@@ -746,6 +759,8 @@ class LocalDbIo implements LocalDb {
       },
       conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
     );
+
+    SyncSignals.instance.notifyQueueChanged();
   }
 
   @override
@@ -764,6 +779,8 @@ class LocalDbIo implements LocalDb {
       where: 'module = ? AND op = ? AND entity_id = ? AND status = 0',
       whereArgs: [module, op, entityId],
     );
+
+    SyncSignals.instance.notifyQueueChanged();
   }
 
   @override
@@ -777,6 +794,32 @@ class LocalDbIo implements LocalDb {
       {'status': 3},
       where: 'module = ? AND entity_id = ? AND status = 0',
       whereArgs: [module, entityId],
+    );
+
+    SyncSignals.instance.notifyQueueChanged();
+  }
+
+  @override
+  Future<void> retryErroredSyncItems({
+    String? module,
+    Duration minAge = const Duration(seconds: 30),
+  }) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final cutoffMs = nowMs - minAge.inMilliseconds;
+
+    final whereParts = <String>['status = 2', 'created_at_ms <= ?'];
+    final args = <Object?>[cutoffMs];
+    final m = module?.trim();
+    if (m != null && m.isNotEmpty) {
+      whereParts.add('module = ?');
+      args.add(m);
+    }
+
+    await _database.update(
+      'sync_queue',
+      {'status': 0},
+      where: whereParts.join(' AND '),
+      whereArgs: args,
     );
   }
 
@@ -1255,6 +1298,19 @@ class LocalDbIo implements LocalDb {
     );
 
     return rows.map((r) => r['json'] as String).toList();
+  }
+
+  @override
+  Future<String?> getEntityJson({required String store, required String id}) async {
+    final rows = await _database.query(
+      'store_entities',
+      columns: ['json'],
+      where: 'store = ? AND id = ?',
+      whereArgs: [store, id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['json'] as String?;
   }
 
   @override

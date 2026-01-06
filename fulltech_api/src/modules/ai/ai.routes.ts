@@ -13,9 +13,9 @@ import {
 
 export const aiRouter = Router();
 
-aiRouter.use(authMiddleware);
-
 aiRouter.get('/settings/public', expressAsyncHandler(getAiSettingsPublic));
+
+aiRouter.use(authMiddleware);
 aiRouter.get(
   '/settings',
   requireRole(['admin', 'administrador']),

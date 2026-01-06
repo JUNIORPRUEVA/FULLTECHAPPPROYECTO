@@ -199,6 +199,10 @@ class _StatusChip extends StatelessWidget {
     Color fg;
 
     switch (s) {
+      case 'primer_contacto':
+        bg = theme.colorScheme.tertiaryContainer;
+        fg = theme.colorScheme.onTertiaryContainer;
+        break;
       case 'pendiente':
         bg = theme.colorScheme.surfaceContainerHighest;
         fg = theme.colorScheme.onSurface;
@@ -237,6 +241,8 @@ class _StatusChip extends StatelessWidget {
 
   static String _label(String s) {
     switch (s) {
+      case 'primer_contacto':
+        return 'Primer contacto';
       case 'no_interesado':
         return 'No interesado';
       case 'compro':

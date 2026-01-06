@@ -9,6 +9,10 @@ import {
   crmChatMessagesListQuerySchema,
   crmChatsListQuerySchema,
   crmChatPatchSchema,
+  crmDeleteChatMessageSchema,
+  crmEditChatMessageSchema,
+  crmOutboundSendTextSchema,
+  crmRecordMediaSchema,
   crmSendMediaFieldsSchema,
   crmSendTextSchema,
 } from './crm_whatsapp.schema';
@@ -18,6 +22,36 @@ import {
   uploadCrmFile,
 } from './crm_whatsapp.upload';
 import { emitCrmEvent } from './crm_stream';
+
+function actorEmpresaId(req: Request): string {
+  const empresaId = (req as any)?.user?.empresaId as string | undefined;
+  if (!empresaId) throw new ApiError(401, 'Missing empresaId');
+  return empresaId;
+}
+
+let aiMessageAuditsExistsCache: boolean | null = null;
+let aiMessageAuditsExistsAtMs = 0;
+async function aiMessageAuditsTableExists(): Promise<boolean> {
+  const now = Date.now();
+  if (aiMessageAuditsExistsCache != null && now - aiMessageAuditsExistsAtMs < 60_000) {
+    return aiMessageAuditsExistsCache;
+  }
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
+      'SELECT to_regclass($1) as regclass',
+      'public.ai_message_audits',
+    );
+    const exists = Boolean(rows?.[0]?.regclass);
+    aiMessageAuditsExistsCache = exists;
+    aiMessageAuditsExistsAtMs = now;
+    return exists;
+  } catch {
+    aiMessageAuditsExistsCache = false;
+    aiMessageAuditsExistsAtMs = now;
+    return false;
+  }
+}
 
 function parseBeforeDate(raw?: string): Date | null {
   if (!raw) return null;
@@ -48,6 +82,172 @@ function toPhoneE164(raw: string | null | undefined): string | null {
   return d;
 }
 
+function applyDefaultCountryCode(digits: string): string {
+  const d = String(digits ?? '').replace(/\D+/g, '');
+  if (!d) return d;
+
+  if (d.length === 10) {
+    const cc = String(env.EVOLUTION_DEFAULT_COUNTRY_CODE ?? '1').replace(/\D+/g, '') || '1';
+    return `${cc}${d}`;
+  }
+  return d;
+}
+
+function normalizeOutboundPhone(raw: string): { phoneE164: string; waId: string } {
+  const digits = digitsOnly(String(raw ?? ''));
+  const normalized = applyDefaultCountryCode(digits);
+  if (!normalized) throw new ApiError(400, 'Invalid phone');
+  // Store WhatsApp id in the canonical JID format.
+  return { phoneE164: normalized, waId: `${normalized}@s.whatsapp.net` };
+}
+
+async function createAndSendTextForChat(opts: {
+  chatId: string;
+  waId: string;
+  phoneE164: string | null;
+  text: string;
+  skipEvolution: boolean;
+  remoteMessageId: string | null;
+  aiSuggestionId: string | null;
+  aiSuggestedText: string | null;
+  aiUsedKnowledge: string[] | null;
+}): Promise<any> {
+  const createdAt = new Date();
+
+  const pending = await prisma.crmChatMessage.create({
+    data: {
+      chat_id: opts.chatId,
+      direction: 'out',
+      message_type: 'text',
+      text: opts.text.trim(),
+      status: 'sent',
+      timestamp: createdAt,
+    },
+  });
+
+  try {
+    if (opts.skipEvolution) {
+      if (!opts.remoteMessageId || opts.remoteMessageId.trim().length === 0) {
+        throw new ApiError(400, 'remoteMessageId is required when skipEvolution=true');
+      }
+
+      const updated = await prisma.crmChatMessage.update({
+        where: { id: pending.id },
+        data: {
+          remote_message_id: opts.remoteMessageId.trim(),
+          status: 'sent',
+        },
+      });
+
+      await prisma.crmChat.update({
+        where: { id: opts.chatId },
+        data: {
+          last_message_preview: opts.text.trim().slice(0, 180),
+          last_message_at: createdAt,
+        },
+      });
+
+      emitCrmEvent({ type: 'message.new', chatId: opts.chatId, messageId: updated.id });
+      emitCrmEvent({ type: 'chat.updated', chatId: opts.chatId });
+
+      return updated;
+    }
+
+    const evo = new EvolutionClient();
+    const send = await evo.sendText({
+      toWaId: opts.waId,
+      toPhone: opts.phoneE164 ?? undefined,
+      text: opts.text.trim(),
+    });
+
+    const updated = await prisma.crmChatMessage.update({
+      where: { id: pending.id },
+      data: {
+        remote_message_id: send.messageId,
+        status: 'sent',
+      },
+    });
+
+    if (
+      opts.aiSuggestionId ||
+      opts.aiSuggestedText ||
+      (opts.aiUsedKnowledge && opts.aiUsedKnowledge.length)
+    ) {
+      if (await aiMessageAuditsTableExists()) {
+        const auditId = randomUUID();
+        await prisma.$executeRawUnsafe(
+          `
+          INSERT INTO ai_message_audits (id, chat_id, message_id, suggestion_id, suggested_text, final_text, used_knowledge)
+          VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::jsonb)
+          `,
+          auditId,
+          opts.chatId,
+          updated.id,
+          opts.aiSuggestionId,
+          opts.aiSuggestedText,
+          opts.text.trim(),
+          JSON.stringify(opts.aiUsedKnowledge ?? []),
+        );
+      }
+    }
+
+    await prisma.crmChat.update({
+      where: { id: opts.chatId },
+      data: {
+        last_message_preview: opts.text.trim().slice(0, 180),
+        last_message_at: createdAt,
+      },
+    });
+
+    emitCrmEvent({ type: 'message.new', chatId: opts.chatId, messageId: updated.id });
+    emitCrmEvent({ type: 'chat.updated', chatId: opts.chatId });
+
+    return updated;
+  } catch (e: any) {
+    console.error('[CRM] createAndSendTextForChat: Evolution send failed', {
+      chatId: opts.chatId,
+      waId: opts.waId,
+      phone: opts.phoneE164,
+      error: e?.message ?? String(e),
+    });
+
+    const updated = await prisma.crmChatMessage.update({
+      where: { id: pending.id },
+      data: {
+        status: 'failed',
+        error: e?.message ?? String(e),
+      },
+    });
+
+    if (
+      opts.aiSuggestionId ||
+      opts.aiSuggestedText ||
+      (opts.aiUsedKnowledge && opts.aiUsedKnowledge.length)
+    ) {
+      if (await aiMessageAuditsTableExists()) {
+        const auditId = randomUUID();
+        await prisma.$executeRawUnsafe(
+          `
+          INSERT INTO ai_message_audits (id, chat_id, message_id, suggestion_id, suggested_text, final_text, used_knowledge)
+          VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::jsonb)
+          `,
+          auditId,
+          opts.chatId,
+          updated.id,
+          opts.aiSuggestionId,
+          opts.aiSuggestedText,
+          opts.text.trim(),
+          JSON.stringify(opts.aiUsedKnowledge ?? []),
+        );
+      }
+    }
+
+    emitCrmEvent({ type: 'message.new', chatId: opts.chatId, messageId: updated.id });
+
+    return updated;
+  }
+}
+
 function toChatApiItem(chat: any) {
   const waId = String(chat.wa_id ?? chat.waId ?? '');
   const phoneCandidate = chat.phone ?? phoneFromWaId(waId);
@@ -67,7 +267,7 @@ function toChatApiItem(chat: any) {
     lastMessageText: chat.last_message_preview ?? null,
     lastMessageAt: chat.last_message_at ?? null,
     unreadCount: chat.unread_count ?? 0,
-    status: chat.status ?? 'activo',
+    status: chat.status ?? 'primer_contacto',
     // preferred names per spec
     isImportant: important,
     productId,
@@ -96,6 +296,25 @@ function toChatApiItem(chat: any) {
   };
 }
 
+export async function getChat(req: Request, res: Response) {
+  const chatId = req.params.chatId;
+
+  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  // Enrich with meta if available.
+  let merged: any = chat;
+  try {
+    const metaMap = await fetchChatMeta([chatId]);
+    const meta = metaMap.get(chatId);
+    if (meta) merged = { ...chat, ...meta };
+  } catch {
+    // ignore meta errors
+  }
+
+  res.json({ item: toChatApiItem(merged) });
+}
+
 function isMissingTableError(err: unknown, tableName: string): boolean {
   const lower = tableName.toLowerCase();
   const message = String((err as any)?.message ?? '');
@@ -122,20 +341,26 @@ async function crmChatMetaExists(): Promise<boolean> {
   }
 
   try {
-    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
-      'SELECT to_regclass($1) as regclass',
-      'public.crm_chat_meta',
+    // Avoid `to_regclass()` because Prisma can fail to deserialize Postgres `regclass`.
+    const rows = await prisma.$queryRawUnsafe<{ count: number }[]>(
+      `
+        SELECT COUNT(*)::int as count
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = $1
+      `,
+      'crm_chat_meta',
     );
 
-    const exists = Boolean(rows?.[0]?.regclass);
+    const exists = (rows?.[0]?.count ?? 0) > 0;
     crmChatMetaExistsCache = exists;
     crmChatMetaExistsAtMs = now;
     return exists;
   } catch {
-    // Be conservative: if we can't check, assume it doesn't exist to avoid runtime noise.
-    crmChatMetaExistsCache = false;
+    // If the existence probe fails, be optimistic and let later queries decide.
+    // (Missing-table errors are handled where relevant.)
+    crmChatMetaExistsCache = true;
     crmChatMetaExistsAtMs = now;
-    return false;
+    return true;
   }
 }
 
@@ -269,6 +494,158 @@ function toMessageApiItem(m: any) {
   };
 }
 
+export async function deleteChatMessage(req: Request, res: Response) {
+  const chatId = String(req.params.chatId ?? '').trim();
+  const messageId = String(req.params.messageId ?? '').trim();
+
+  if (!chatId) throw new ApiError(400, 'chatId is required');
+  if (!messageId) throw new ApiError(400, 'messageId is required');
+
+  const parsed = crmDeleteChatMessageSchema.safeParse(req.body ?? {});
+  if (!parsed.success) throw new ApiError(400, 'Invalid body', parsed.error.flatten());
+
+  const msg = await prisma.crmChatMessage.findFirst({
+    where: { id: messageId, chat_id: chatId },
+  });
+  if (!msg) throw new ApiError(404, 'Message not found');
+
+  if (String(msg.direction ?? 'in') !== 'out') {
+    throw new ApiError(403, 'Only outbound messages can be deleted');
+  }
+
+  const status = String(msg.status ?? '').trim().toLowerCase();
+  if (status === 'deleted') {
+    res.status(200).json({ item: toMessageApiItem(msg) });
+    return;
+  }
+
+  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  const remoteMessageId = (msg.remote_message_id ?? '').trim();
+  if (!remoteMessageId) {
+    throw new ApiError(409, 'Message has no remote_message_id; cannot delete on WhatsApp');
+  }
+
+  const evo = new EvolutionClient();
+  try {
+    await evo.deleteMessage({
+      remoteMessageId,
+      toWaId: String(chat.wa_id ?? ''),
+      toPhone: chat.phone ?? undefined,
+    });
+  } catch (e: any) {
+    console.error('[CRM] deleteChatMessage: Evolution delete failed', {
+      chatId,
+      messageId,
+      remoteMessageId,
+      error: e?.message ?? String(e),
+    });
+    throw new ApiError(502, 'Evolution delete failed', { error: e?.message ?? String(e) });
+  }
+
+  const updated = await prisma.crmChatMessage.update({
+    where: { id: msg.id },
+    data: {
+      status: 'deleted',
+      text: null,
+      media_url: null,
+      media_mime: null,
+      media_size: null,
+      media_name: null,
+      error: null,
+    },
+  });
+
+  // If the deleted message was the last preview, keep the UI consistent.
+  if (chat.last_message_at && updated.timestamp && chat.last_message_at.getTime() === updated.timestamp.getTime()) {
+    await prisma.crmChat.update({
+      where: { id: chatId },
+      data: { last_message_preview: 'Mensaje eliminado' },
+    });
+  }
+
+  emitCrmEvent({ type: 'message.updated', chatId, messageId: updated.id });
+  emitCrmEvent({ type: 'chat.updated', chatId });
+
+  res.status(200).json({ item: toMessageApiItem(updated) });
+}
+
+export async function editChatMessage(req: Request, res: Response) {
+  const chatId = String(req.params.chatId ?? '').trim();
+  const messageId = String(req.params.messageId ?? '').trim();
+
+  if (!chatId) throw new ApiError(400, 'chatId is required');
+  if (!messageId) throw new ApiError(400, 'messageId is required');
+
+  const parsed = crmEditChatMessageSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid body', parsed.error.flatten());
+  const newText = parsed.data.text.trim();
+
+  const msg = await prisma.crmChatMessage.findFirst({
+    where: { id: messageId, chat_id: chatId },
+  });
+  if (!msg) throw new ApiError(404, 'Message not found');
+
+  if (String(msg.direction ?? 'in') !== 'out') {
+    throw new ApiError(403, 'Only outbound messages can be edited');
+  }
+
+  const type = String(msg.message_type ?? 'text').toLowerCase();
+  if (type !== 'text') {
+    throw new ApiError(400, 'Only text messages can be edited');
+  }
+
+  const status = String(msg.status ?? '').trim().toLowerCase();
+  if (status === 'deleted') {
+    throw new ApiError(409, 'Deleted messages cannot be edited');
+  }
+
+  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  const remoteMessageId = (msg.remote_message_id ?? '').trim();
+  if (!remoteMessageId) {
+    throw new ApiError(409, 'Message has no remote_message_id; cannot edit on WhatsApp');
+  }
+
+  const evo = new EvolutionClient();
+  try {
+    await evo.editTextMessage({
+      remoteMessageId,
+      toWaId: String(chat.wa_id ?? ''),
+      toPhone: chat.phone ?? undefined,
+      text: newText,
+    });
+  } catch (e: any) {
+    console.error('[CRM] editChatMessage: Evolution edit failed', {
+      chatId,
+      messageId,
+      remoteMessageId,
+      error: e?.message ?? String(e),
+    });
+    throw new ApiError(502, 'Evolution edit failed', { error: e?.message ?? String(e) });
+  }
+
+  const updated = await prisma.crmChatMessage.update({
+    where: { id: msg.id },
+    data: { text: newText },
+  });
+
+  // If it was the last preview, update preview text.
+  if (chat.last_message_at && updated.timestamp && chat.last_message_at.getTime() === updated.timestamp.getTime()) {
+    await prisma.crmChat.update({
+      where: { id: chatId },
+      data: { last_message_preview: newText.slice(0, 180) },
+    });
+  }
+
+  emitCrmEvent({ type: 'message.updated', chatId, messageId: updated.id });
+  emitCrmEvent({ type: 'chat.updated', chatId });
+
+  res.status(200).json({ item: toMessageApiItem(updated) });
+}
+
 export async function listChats(req: Request, res: Response) {
   const parsed = crmChatsListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
@@ -279,7 +656,14 @@ export async function listChats(req: Request, res: Response) {
   const where: any = {};
 
   if (status && status.trim().length > 0) {
-    where.status = status.trim();
+    const s = status.trim();
+    // UX: treat "pendiente" as including "primer_contacto".
+    // This prevents users from seeing an empty list when most chats are still in first-contact.
+    if (s === 'pendiente') {
+      where.status = { in: ['pendiente', 'primer_contacto'] };
+    } else {
+      where.status = s;
+    }
   }
 
   if (search && search.trim().length > 0) {
@@ -294,34 +678,34 @@ export async function listChats(req: Request, res: Response) {
 
   const effectiveProductId = (productId ?? product_id ?? '').trim();
   if (effectiveProductId.length > 0) {
+    // If meta table doesn't exist, product filtering can't be applied.
+    // Don't hard-empty the list; just ignore the product filter.
     if (!(await crmChatMetaExists())) {
-      // If meta table doesn't exist, product filtering can't be applied.
-      res.json({ items: [], total: 0, page, limit });
-      return;
-    }
+      // proceed without adding where.id constraint
+    } else {
 
-    let rows: { chat_id: string }[] = [];
-    try {
-      rows = await prisma.$queryRawUnsafe<{ chat_id: string }[]>(
-        `SELECT chat_id FROM crm_chat_meta WHERE product_id = $1::text`,
-        effectiveProductId,
-      );
-    } catch (e) {
-      // If meta table doesn't exist, product filtering can't be applied.
-      // Return empty instead of 500 for safety.
-      if (isMissingTableError(e, 'crm_chat_meta')) {
+      let rows: { chat_id: string }[] = [];
+      try {
+        rows = await prisma.$queryRawUnsafe<{ chat_id: string }[]>(
+          `SELECT chat_id FROM crm_chat_meta WHERE product_id = $1::text`,
+          effectiveProductId,
+        );
+      } catch (e) {
+        // If meta table doesn't exist, treat as no product filter instead of empty.
+        if (isMissingTableError(e, 'crm_chat_meta')) {
+          rows = [];
+        } else {
+          throw e;
+        }
+      }
+      const ids = rows.map((r) => String(r.chat_id));
+      // If no matches, return empty quickly.
+      if (ids.length === 0) {
         res.json({ items: [], total: 0, page, limit });
         return;
       }
-      throw e;
+      where.id = { in: ids };
     }
-    const ids = rows.map((r) => String(r.chat_id));
-    // If no matches, return empty quickly.
-    if (ids.length === 0) {
-      res.json({ items: [], total: 0, page, limit });
-      return;
-    }
-    where.id = { in: ids };
   }
 
   const [items, total] = await Promise.all([
@@ -396,6 +780,45 @@ export async function patchChat(req: Request, res: Response) {
   emitCrmEvent({ type: 'chat.updated', chatId });
 
   res.json({ item: toChatApiItem(merged) });
+}
+
+export async function convertChatToCustomer(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const chatId = req.params.chatId;
+
+  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  const phoneCandidate = chat.phone ?? phoneFromWaId(String(chat.wa_id ?? ''));
+  const telefono = toPhoneE164(phoneCandidate);
+  if (!telefono) {
+    throw new ApiError(400, 'Chat has no valid phone; cannot create customer');
+  }
+
+  const existing = await prisma.customer.findFirst({
+    where: { empresa_id, telefono, deleted_at: null },
+  });
+
+  if (existing) {
+    res.json({ customer: existing, created: false });
+    return;
+  }
+
+  const name =
+    chat.display_name && chat.display_name.trim().length > 0
+      ? chat.display_name.trim()
+      : `Cliente WhatsApp ${telefono}`;
+
+  const created = await prisma.customer.create({
+    data: {
+      empresa_id,
+      nombre: name,
+      telefono,
+      origen: 'whatsapp',
+    },
+  });
+
+  res.json({ customer: created, created: true });
 }
 
 export async function listChatStats(_req: Request, res: Response) {
@@ -502,107 +925,77 @@ export async function sendTextMessage(req: Request, res: Response) {
   const aiSuggestedText = parsed.data.aiSuggestedText ?? null;
   const aiUsedKnowledge = parsed.data.aiUsedKnowledge ?? null;
 
-  const createdAt = new Date();
+  const skipEvolution = Boolean((parsed.data as any).skipEvolution ?? false);
+  const remoteMessageId = ((parsed.data as any).remoteMessageId ?? null) as string | null;
 
-  // Create message as pending so UI can show immediately.
-  const pending = await prisma.crmChatMessage.create({
-    data: {
-      chat_id: chatId,
-      direction: 'out',
-      message_type: 'text',
-      text: parsed.data.text.trim(),
-      status: 'sent',
-      timestamp: createdAt,
+  const updated = await createAndSendTextForChat({
+    chatId,
+    waId: chat.wa_id,
+    phoneE164: chat.phone ?? null,
+    text: parsed.data.text,
+    skipEvolution,
+    remoteMessageId,
+    aiSuggestionId,
+    aiSuggestedText,
+    aiUsedKnowledge,
+  });
+
+  res.status(201).json({
+    item: updated,
+    ...(skipEvolution ? { note: 'Recorded only (skipEvolution)' } : null),
+    ...(updated?.status === 'failed' ? { warning: 'Evolution send failed' } : null),
+  });
+}
+
+export async function sendOutboundTextMessage(req: Request, res: Response) {
+  const parsed = crmOutboundSendTextSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const statusRaw = String(parsed.data.status ?? '').trim();
+  const status = statusRaw.length > 0 ? statusRaw : null;
+  const displayNameRaw = String(parsed.data.displayName ?? '').trim();
+  const displayName = displayNameRaw.length > 0 ? displayNameRaw : null;
+
+  const normalized = normalizeOutboundPhone(parsed.data.phone);
+
+  // Upsert so user can message a number even if it was not in the list yet.
+  const chat = await prisma.crmChat.upsert({
+    where: { wa_id: normalized.waId },
+    create: {
+      wa_id: normalized.waId,
+      phone: normalized.phoneE164,
+      status: status ?? 'primer_contacto',
+      display_name: displayName,
+    },
+    update: {
+      phone: normalized.phoneE164,
+      ...(displayName ? { display_name: displayName } : null),
+      ...(status ? { status } : null),
     },
   });
 
-  try {
-    const evo = new EvolutionClient();
-    const send = await evo.sendText({
-      toWaId: chat.wa_id,
-      toPhone: chat.phone ?? undefined,
-      text: parsed.data.text.trim(),
-    });
+  const skipEvolution = Boolean((parsed.data as any).skipEvolution ?? false);
+  const remoteMessageId = ((parsed.data as any).remoteMessageId ?? null) as string | null;
 
-    const updated = await prisma.crmChatMessage.update({
-      where: { id: pending.id },
-      data: {
-        remote_message_id: send.messageId,
-        status: 'sent',
-      },
-    });
+  const updated = await createAndSendTextForChat({
+    chatId: chat.id,
+    waId: chat.wa_id,
+    phoneE164: chat.phone ?? normalized.phoneE164,
+    text: parsed.data.text,
+    skipEvolution,
+    remoteMessageId,
+    aiSuggestionId: parsed.data.aiSuggestionId ?? null,
+    aiSuggestedText: parsed.data.aiSuggestedText ?? null,
+    aiUsedKnowledge: (parsed.data.aiUsedKnowledge ?? null) as any,
+  });
 
-    if (aiSuggestionId || aiSuggestedText || (aiUsedKnowledge && aiUsedKnowledge.length)) {
-      const auditId = randomUUID();
-      await prisma.$executeRawUnsafe(
-        `
-        INSERT INTO ai_message_audits (id, chat_id, message_id, suggestion_id, suggested_text, final_text, used_knowledge)
-        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::jsonb)
-        `,
-        auditId,
-        chatId,
-        updated.id,
-        aiSuggestionId,
-        aiSuggestedText,
-        parsed.data.text.trim(),
-        JSON.stringify(aiUsedKnowledge ?? []),
-      );
-    }
-
-    await prisma.crmChat.update({
-      where: { id: chatId },
-      data: {
-        last_message_preview: parsed.data.text.trim().slice(0, 180),
-        last_message_at: createdAt,
-      },
-    });
-
-    emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
-    emitCrmEvent({ type: 'chat.updated', chatId });
-
-    res.status(201).json({ item: updated });
-  } catch (e: any) {
-    // Log full context so we can diagnose Evolution connectivity/auth issues in EasyPanel logs.
-    console.error('[CRM] sendTextMessage: Evolution send failed', {
-      chatId,
-      waId: chat.wa_id,
-      phone: chat.phone,
-      error: e?.message ?? String(e),
-    });
-
-    const updated = await prisma.crmChatMessage.update({
-      where: { id: pending.id },
-      data: {
-        status: 'failed',
-        error: e?.message ?? String(e),
-      },
-    });
-
-    if (aiSuggestionId || aiSuggestedText || (aiUsedKnowledge && aiUsedKnowledge.length)) {
-      const auditId = randomUUID();
-      await prisma.$executeRawUnsafe(
-        `
-        INSERT INTO ai_message_audits (id, chat_id, message_id, suggestion_id, suggested_text, final_text, used_knowledge)
-        VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::jsonb)
-        `,
-        auditId,
-        chatId,
-        updated.id,
-        aiSuggestionId,
-        aiSuggestedText,
-        parsed.data.text.trim(),
-        JSON.stringify(aiUsedKnowledge ?? []),
-      );
-    }
-
-    emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
-
-    // Return the failed message to the client so the UI can keep working.
-    res.status(201).json({
-      item: updated,
-      warning: 'Evolution send failed',
-    });
-  }
+  res.status(201).json({
+    chatId: chat.id,
+    chat: toChatApiItem(chat),
+    item: updated,
+    ...(skipEvolution ? { note: 'Recorded only (skipEvolution)' } : null),
+    ...(updated?.status === 'failed' ? { warning: 'Evolution send failed' } : null),
+  });
 }
 
 export async function sendMediaMessage(req: Request, res: Response) {
@@ -687,6 +1080,57 @@ export async function sendMediaMessage(req: Request, res: Response) {
       warning: 'Evolution send failed',
     });
   }
+}
+
+export async function recordMediaMessage(req: Request, res: Response) {
+  const chatId = req.params.chatId;
+
+  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  const parsed = crmRecordMediaSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const skipEvolution = Boolean((parsed.data as any).skipEvolution ?? false);
+  const remoteMessageId = ((parsed.data as any).remoteMessageId ?? null) as string | null;
+
+  if (skipEvolution) {
+    if (!remoteMessageId || remoteMessageId.trim().length === 0) {
+      throw new ApiError(400, 'remoteMessageId is required when skipEvolution=true');
+    }
+  }
+
+  const mediaType = parsed.data.type ?? 'image';
+  const createdAt = new Date();
+
+  const msg = await prisma.crmChatMessage.create({
+    data: {
+      chat_id: chatId,
+      direction: 'out',
+      message_type: mediaType,
+      text: parsed.data.caption?.trim() || null,
+      media_url: parsed.data.mediaUrl.trim(),
+      media_mime: parsed.data.mimeType?.trim() || null,
+      media_size: parsed.data.size ?? null,
+      media_name: parsed.data.fileName?.trim() || null,
+      remote_message_id: remoteMessageId?.trim() || null,
+      status: 'sent',
+      timestamp: createdAt,
+    },
+  });
+
+  await prisma.crmChat.update({
+    where: { id: chatId },
+    data: {
+      last_message_preview: parsed.data.caption?.trim().slice(0, 180) || `[${mediaType}]`,
+      last_message_at: createdAt,
+    },
+  });
+
+  emitCrmEvent({ type: 'message.new', chatId, messageId: msg.id });
+  emitCrmEvent({ type: 'chat.updated', chatId });
+
+  res.status(201).json({ item: msg, note: 'Recorded only (skipEvolution)' });
 }
 
 export async function markChatRead(req: Request, res: Response) {

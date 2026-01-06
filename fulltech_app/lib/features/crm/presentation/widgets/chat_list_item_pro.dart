@@ -25,6 +25,9 @@ class ChatListItemPro extends StatelessWidget {
         ? thread.displayName!.trim()
         : thread.phone ?? 'Sin nombre';
 
+    // Profile photo logic (not available in CrmThread yet).
+    final String? profilePhotoUrl = null;
+
     // Format last message
     final lastMessageDisplay = _formatLastMessage();
 
@@ -46,45 +49,79 @@ class ChatListItemPro extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               children: [
-                // Avatar with important badge
+                // Avatar with unread badge and important badge
                 Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: theme.colorScheme.primary.withOpacity(
-                        0.2,
-                      ),
-                      child: Text(
-                        _getInitials(displayName),
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                    ),
+                    profilePhotoUrl != null
+                        ? CircleAvatar(
+                            radius: 22,
+                            backgroundImage: NetworkImage(profilePhotoUrl),
+                            backgroundColor: theme.colorScheme.surfaceVariant,
+                          )
+                        : CircleAvatar(
+                            radius: 22,
+                            backgroundColor: theme.colorScheme.primary
+                                .withOpacity(0.18),
+                            child: Text(
+                              _getInitials(displayName),
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
                     if (thread.important)
                       Positioned(
-                        bottom: 0,
-                        right: 0,
+                        bottom: -2,
+                        right: -2,
                         child: Container(
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
                             color: Colors.amber.shade400,
                             shape: BoxShape.circle,
                           ),
-                          child: const Text(
-                            '⭐',
-                            style: TextStyle(fontSize: 10),
+                          child: const Icon(
+                            Icons.star,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    if (thread.unreadCount > 0)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white, width: 1),
+                          ),
+                          child: Text(
+                            thread.unreadCount > 99
+                                ? '99+'
+                                : thread.unreadCount.toString(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10,
+                            ),
                           ),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
 
                 // Center content (expanded)
                 Expanded(
@@ -100,7 +137,7 @@ class ChatListItemPro extends StatelessWidget {
                               displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall?.copyWith(
+                              style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -115,8 +152,10 @@ class ChatListItemPro extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
 
-                      // Phone number
-                      if (thread.phone != null && thread.phone!.isNotEmpty)
+                      // Phone number (if not shown as name)
+                      if ((thread.displayName ?? '').trim().isEmpty &&
+                          thread.phone != null &&
+                          thread.phone!.isNotEmpty)
                         Text(
                           thread.phone!,
                           maxLines: 1,
@@ -167,28 +206,7 @@ class ChatListItemPro extends StatelessWidget {
                     const SizedBox(height: 4),
 
                     // Status indicators
-                    if (thread.unreadCount > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          thread.unreadCount > 99
-                              ? '99+'
-                              : thread.unreadCount.toString(),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 10,
-                          ),
-                        ),
-                      )
-                    else if (thread.lastMessageFromMe)
+                    if (thread.unreadCount == 0 && thread.lastMessageFromMe)
                       Text(
                         _getMessageStatus(),
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -325,6 +343,8 @@ class _StatusChipMini extends StatelessWidget {
 
   String _statusLabel(String v) {
     switch (v.toLowerCase()) {
+      case 'primer_contacto':
+        return '1er';
       case 'pendiente':
         return 'Pend.';
       case 'interesado':
@@ -342,6 +362,7 @@ class _StatusChipMini extends StatelessWidget {
 
   Color _statusColor(String v) {
     switch (v.toLowerCase()) {
+      case 'primer_contacto':
       case 'pendiente':
         return Colors.orange;
       case 'interesado':

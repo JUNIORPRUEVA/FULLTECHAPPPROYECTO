@@ -3,6 +3,10 @@ import 'package:dio/dio.dart';
 class LettersApi {
   final Dio _dio;
 
+  static final Options _noOfflineQueue = Options(
+    extra: const {'offlineQueue': false},
+  );
+
   LettersApi(this._dio);
 
   Future<Map<String, dynamic>> listLettersPaged({
@@ -41,25 +45,39 @@ class LettersApi {
   }
 
   Future<Map<String, dynamic>> createLetter(Map<String, dynamic> payload) async {
-    final res = await _dio.post('/letters', data: payload);
+    final res = await _dio.post(
+      '/letters',
+      data: payload,
+      options: _noOfflineQueue,
+    );
     final data = res.data;
     if (data is Map<String, dynamic>) return data;
     throw Exception('Respuesta inválida del servidor');
   }
 
   Future<Map<String, dynamic>> updateLetter(String id, Map<String, dynamic> payload) async {
-    final res = await _dio.put('/letters/$id', data: payload);
+    final res = await _dio.put(
+      '/letters/$id',
+      data: payload,
+      options: _noOfflineQueue,
+    );
     final data = res.data;
     if (data is Map<String, dynamic>) return data;
     throw Exception('Respuesta inválida del servidor');
   }
 
   Future<void> deleteLetter(String id) async {
-    await _dio.delete('/letters/$id');
+    await _dio.delete(
+      '/letters/$id',
+      options: _noOfflineQueue,
+    );
   }
 
   Future<Map<String, dynamic>> markSent(String id) async {
-    final res = await _dio.post('/letters/$id/mark-sent');
+    final res = await _dio.post(
+      '/letters/$id/mark-sent',
+      options: _noOfflineQueue,
+    );
     final data = res.data;
     if (data is Map<String, dynamic>) return data;
     throw Exception('Respuesta inválida del servidor');
@@ -72,6 +90,7 @@ class LettersApi {
         'format': 'PDF',
         if (fileUrl != null) 'fileUrl': fileUrl,
       },
+      options: _noOfflineQueue,
     );
     final data = res.data;
     if (data is Map<String, dynamic>) return data;

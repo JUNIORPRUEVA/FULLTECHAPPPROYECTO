@@ -12,7 +12,7 @@ import '../../state/crm_providers.dart';
 import '../../state/crm_threads_state.dart';
 import '../../data/models/crm_thread.dart';
 import '../widgets/chat_list_item_pro.dart';
-import 'thread_chat_page.dart';
+import '../widgets/chat_thread_view.dart';
 import '../widgets/right_panel_crm.dart';
 
 class CrmChatsPage extends ConsumerStatefulWidget {
@@ -84,8 +84,8 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
     }
 
     final center = selectedId == null
-        ? const _EmptyPanel(text: 'Selecciona un chat')
-        : ThreadChatPanel(threadId: selectedId);
+      ? const _EmptyPanel(text: 'Selecciona un chat')
+      : ChatThreadView(threadId: selectedId);
 
     final right = selectedId == null
         ? const _EmptyPanel(text: 'Detalles')

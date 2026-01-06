@@ -35,6 +35,15 @@ abstract class LocalDb {
     required String entityId,
   });
 
+  /// Re-queues previously errored items (status=2) back to pending (status=0).
+  ///
+  /// This keeps compatibility with the existing `sync_queue` table.
+  /// Callers should throttle calls to avoid tight retry loops.
+  Future<void> retryErroredSyncItems({
+    String? module,
+    Duration minAge = const Duration(seconds: 30),
+  });
+
   Future<List<SyncQueueItem>> getPendingSyncItems();
   Future<void> markSyncItemSent(String id);
   Future<void> markSyncItemError(String id);
@@ -51,6 +60,14 @@ abstract class LocalDb {
 
   Future<List<String>> listEntitiesJson({
     required String store,
+  });
+
+  /// Reads a single cached entity JSON by id.
+  ///
+  /// Returns null when not found.
+  Future<String?> getEntityJson({
+    required String store,
+    required String id,
   });
 
   Future<void> deleteEntity({

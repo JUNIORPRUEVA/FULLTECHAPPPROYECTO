@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import multer from 'multer';
 
 export class ApiError extends Error {
   public statusCode: number;
@@ -18,6 +19,34 @@ export function notFoundHandler(req: Request, _res: Response, next: NextFunction
 }
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+  if (err instanceof multer.MulterError) {
+    const maxUploadMb = Number(process.env.MAX_UPLOAD_MB ?? 25);
+
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: 'File too large',
+        message: 'File too large',
+        code: 'PAYLOAD_TOO_LARGE',
+        details: {
+          multerCode: err.code,
+          field: err.field ?? null,
+          maxUploadMb: Number.isFinite(maxUploadMb) ? maxUploadMb : 25,
+        },
+      });
+    }
+
+    // Other Multer validation errors
+    return res.status(400).json({
+      error: err.message,
+      message: err.message,
+      code: 'UPLOAD_ERROR',
+      details: {
+        multerCode: err.code,
+        field: err.field ?? null,
+      },
+    });
+  }
+
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
       // Backward compatible key

@@ -463,8 +463,8 @@ class _MaintenanceListViewState extends ConsumerState<MaintenanceListView> {
     if (products != null) {
       for (final p in products) {
         if (p.id == record.productoId) {
-          fallbackImageUrl = (p.imagenUrl ?? '').trim();
-          fallbackProductName = (p.nombre ?? '').trim();
+          fallbackImageUrl = p.imagenUrl.trim();
+          fallbackProductName = p.nombre.trim();
           break;
         }
       }
@@ -512,8 +512,7 @@ class _MaintenanceListViewState extends ConsumerState<MaintenanceListView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              record.producto?.nombre ??
-                                  'Producto #${record.productoId}',
+                              productName,
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),

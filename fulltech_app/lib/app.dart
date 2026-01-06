@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/auto_sync.dart';
 import 'features/configuracion/state/theme_provider.dart';
-import 'features/ponchado/presentation/widgets/auto_attendance_sync.dart';
 
 class FulltechApp extends ConsumerWidget {
   const FulltechApp({super.key});
@@ -22,7 +22,7 @@ class FulltechApp extends ConsumerWidget {
       themeMode: themeMode,
       routerConfig: router,
       builder: (context, child) {
-        return AutoAttendanceSync(child: child ?? const SizedBox.shrink());
+        return AutoSync(child: child ?? const SizedBox.shrink());
       },
     );
   }

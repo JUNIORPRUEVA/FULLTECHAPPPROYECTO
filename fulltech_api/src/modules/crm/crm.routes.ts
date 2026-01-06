@@ -9,12 +9,18 @@ import {
   updateQuickReply,
 } from './crm_quick_replies.controller';
 import {
+  convertChatToCustomer,
+  deleteChatMessage,
+  editChatMessage,
+  getChat,
   listChats,
   listChatMessages,
   listChatStats,
   markChatRead,
   patchChat,
   postUpload,
+  recordMediaMessage,
+  sendOutboundTextMessage,
   sendMediaMessage,
   sendTextMessage,
   sseStream,
@@ -45,14 +51,25 @@ crmRouter.use(authMiddleware);
 
 crmRouter.get('/chats', expressAsyncHandler(listChats));
 crmRouter.get('/chats/stats', expressAsyncHandler(listChatStats));
+crmRouter.get('/chats/:chatId', expressAsyncHandler(getChat));
 crmRouter.get('/chats/:chatId/messages', expressAsyncHandler(listChatMessages));
+crmRouter.patch('/chats/:chatId/messages/:messageId', expressAsyncHandler(editChatMessage));
+crmRouter.delete('/chats/:chatId/messages/:messageId', expressAsyncHandler(deleteChatMessage));
 crmRouter.patch('/chats/:chatId', expressAsyncHandler(patchChat));
+crmRouter.post('/chats/:chatId/convert-to-customer', expressAsyncHandler(convertChatToCustomer));
 crmRouter.patch('/chats/:chatId/read', expressAsyncHandler(markChatRead));
 crmRouter.post('/chats/:chatId/messages/text', expressAsyncHandler(sendTextMessage));
+crmRouter.post('/chats/outbound/text', expressAsyncHandler(sendOutboundTextMessage));
 crmRouter.post(
   '/chats/:chatId/messages/media',
   uploadCrmFile,
   expressAsyncHandler(sendMediaMessage),
+);
+
+// Record-only helper for client direct Evolution sends.
+crmRouter.post(
+  '/chats/:chatId/messages/media-record',
+  expressAsyncHandler(recordMediaMessage),
 );
 
 crmRouter.get('/stream', expressAsyncHandler(sseStream));
