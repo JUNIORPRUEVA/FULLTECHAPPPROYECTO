@@ -78,7 +78,7 @@ class CrmThread {
       updatedAt: _dt(json['updated_at'] ?? json['updatedAt']),
       unreadCount: ((json['unread_count'] ?? json['unreadCount']) as num? ?? 0)
           .toInt(),
-      status: (json['status'] ?? 'activo') as String,
+      status: (json['status'] ?? 'primer_contacto') as String,
       important: (json['important'] as bool?) ?? false,
       productId: (json['product_id'] ?? json['productId']) as String?,
       internalNote: (json['internal_note'] ?? json['internalNote']) as String?,

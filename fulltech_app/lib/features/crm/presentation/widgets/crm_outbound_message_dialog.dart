@@ -2,7 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/app_config.dart';
+import '../../../catalogo/models/producto.dart';
+import '../../data/models/crm_thread.dart';
 import '../../state/crm_providers.dart';
+
+class CrmOutboundResult {
+  final String chatId;
+  final CrmThread? thread;
+
+  const CrmOutboundResult({required this.chatId, required this.thread});
+}
 
 class CrmOutboundMessageDialog extends ConsumerStatefulWidget {
   const CrmOutboundMessageDialog({super.key});
@@ -19,6 +28,7 @@ class _CrmOutboundMessageDialogState
   final _messageCtrl = TextEditingController();
 
   String _status = 'primer_contacto';
+  String? _productId;
   bool _sending = false;
   String? _error;
 
@@ -95,8 +105,23 @@ class _CrmOutboundMessageDialogState
         throw Exception('Respuesta inválida: falta chatId');
       }
 
+      CrmThread? thread;
+      final chat = result['chat'];
+      if (chat is Map) {
+        try {
+          thread = CrmThread.fromJson((chat as Map).cast<String, dynamic>());
+        } catch (_) {
+          // Ignore parse issues; we can still refresh by chatId.
+        }
+      }
+
+      if (_productId != null && _productId!.trim().isNotEmpty) {
+        final patched = await repo.patchChat(chatId, {'product_id': _productId});
+        thread = patched;
+      }
+
       if (!mounted) return;
-      Navigator.of(context).pop(chatId);
+      Navigator.of(context).pop(CrmOutboundResult(chatId: chatId, thread: thread));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -111,6 +136,9 @@ class _CrmOutboundMessageDialogState
     final theme = Theme.of(context);
     final phoneNormalized = _normalizePhoneForWhatsapp(_phoneCtrl.text);
     final waId = phoneNormalized.isEmpty ? '' : '$phoneNormalized@s.whatsapp.net';
+
+    final productsAsync = ref.watch(crmProductsProvider);
+    final products = productsAsync.asData?.value ?? const <Producto>[];
 
     final canSend = !_sending &&
         phoneNormalized.isNotEmpty &&
@@ -179,6 +207,27 @@ class _CrmOutboundMessageDialogState
               onChanged: _sending ? null : (v) => setState(() => _status = v!),
               decoration: const InputDecoration(
                 labelText: 'Estado del chat',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: _productId,
+              items: <DropdownMenuItem<String>>[
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('Producto (opcional)'),
+                ),
+                ...products.map(
+                  (p) => DropdownMenuItem<String>(
+                    value: p.id,
+                    child: Text(p.nombre),
+                  ),
+                ),
+              ],
+              onChanged: _sending ? null : (v) => setState(() => _productId = v),
+              decoration: const InputDecoration(
+                labelText: 'Producto a asignar',
                 isDense: true,
               ),
             ),

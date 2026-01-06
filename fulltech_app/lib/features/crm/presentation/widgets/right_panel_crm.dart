@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../data/models/crm_thread.dart';
 import '../../state/crm_providers.dart';
 import '../../../catalogo/models/producto.dart';
@@ -44,50 +43,13 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
     final nextAssigned = thread.assignedUserId ?? '';
     if (_assignedCtrl.text != nextAssigned) _assignedCtrl.text = nextAssigned;
 
-    final productsAsync = ref.watch(crmProductsProvider);
-
-    Producto? product;
-    productsAsync.whenData((items) {
-      product = items
-          .where((p) => p.id == thread.productId)
-          .cast<Producto?>()
-          .firstOrNull;
-    });
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1) Info (compacta) con icono flotante si es importante
-        Stack(
-          children: [
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: _InfoSection(thread: thread, product: product),
-              ),
-            ),
-            if (thread.important)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade400,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.amber.withOpacity(0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Text('⭐', style: TextStyle(fontSize: 14)),
-                ),
-              ),
-          ],
+        // 1) Estadísticas (arriba, más visible)
+        const Card(
+          margin: EdgeInsets.only(bottom: 8),
+          child: Padding(padding: EdgeInsets.all(12), child: _SummarySection()),
         ),
         // 2) Gestión (si hay scroll, que sea aquí)
         Expanded(
@@ -123,224 +85,7 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
             ),
           ),
         ),
-
-        // 3) Estadísticas
-        const Card(
-          margin: EdgeInsets.zero,
-          child: Padding(padding: EdgeInsets.all(12), child: _SummarySection()),
-        ),
       ],
-    );
-  }
-}
-
-class _InfoSection extends StatelessWidget {
-  final CrmThread thread;
-  final Producto? product;
-
-  const _InfoSection({required this.thread, required this.product});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    final name = (thread.displayName ?? '').trim().isNotEmpty
-        ? thread.displayName!.trim()
-        : 'Sin nombre';
-
-    final phone = _formatPhone(thread.phone);
-    final statusLabel = _statusLabel(thread.status);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: theme.colorScheme.surface,
-              radius: 22,
-              child: Text(_initials(name)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: theme.colorScheme.primary.withOpacity(0.2),
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.phone,
-                          size: 16,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            phone,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline,
-                        size: 16,
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'WhatsApp ID: ${thread.waId}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            _StatusChip(label: statusLabel),
-            if (product != null)
-              _ProductChip(product: product!)
-            else
-              _PlaceholderChip(label: 'Sin producto asignado'),
-          ],
-        ),
-      ],
-    );
-  }
-
-  static String _initials(String v) {
-    final parts = v.trim().split(RegExp(r'\s+'));
-    final a = parts.isNotEmpty ? parts.first : '';
-    final b = parts.length > 1 ? parts[1] : '';
-    final s = '${a.isNotEmpty ? a[0] : ''}${b.isNotEmpty ? b[0] : ''}'
-        .toUpperCase();
-    return s.isEmpty ? '?' : s;
-  }
-
-  static String _statusLabel(String raw) {
-    final v = raw.trim().toLowerCase();
-    switch (v) {
-      case 'primer_contacto':
-        return 'Primer contacto';
-      case 'pendiente':
-        return 'Pendiente';
-      case 'interesado':
-        return 'Interesado';
-      case 'reserva':
-        return 'Reserva';
-      case 'compro':
-        return 'Compró';
-      case 'no_interesado':
-        return 'No interesado';
-      case 'activo':
-        return 'Activo';
-      default:
-        final s = v.replaceAll('_', ' ');
-        if (s.isEmpty) return '—';
-        return '${s[0].toUpperCase()}${s.substring(1)}';
-    }
-  }
-
-  static String _formatPhone(String? raw) {
-    final v = (raw ?? '').trim();
-    if (v.isEmpty) return 'Sin teléfono';
-
-    // Extract only digits
-    final digits = v.replaceAll(RegExp(r'\D+'), '');
-    if (digits.isEmpty) return 'Sin teléfono';
-
-    // Format: +1(829)531-9442 style (professional)
-    if (digits.length == 10) {
-      // US format without country code: (XXX)XXX-XXXX
-      return '(${digits.substring(0, 3)})${digits.substring(3, 6)}-${digits.substring(6)}';
-    } else if (digits.length == 11 && digits.startsWith('1')) {
-      // +1 country code: +1(XXX)XXX-XXXX
-      final area = digits.substring(1, 4);
-      final mid = digits.substring(4, 7);
-      final tail = digits.substring(7);
-      return '+1($area)$mid-$tail';
-    } else if (digits.length >= 12) {
-      // International with longer country code: +[CC](area)mid-tail
-      // Assume last 10 digits are area-mid-tail
-      final ccEnd = digits.length - 10;
-      final cc = digits.substring(0, ccEnd);
-      final area = digits.substring(ccEnd, ccEnd + 3);
-      final mid = digits.substring(ccEnd + 3, ccEnd + 6);
-      final tail = digits.substring(ccEnd + 6);
-      return '+$cc($area)$mid-$tail';
-    } else if (digits.length == 11) {
-      // Other 11-digit formats
-      final cc = digits.substring(0, 1);
-      final area = digits.substring(1, 4);
-      final mid = digits.substring(4, 7);
-      final tail = digits.substring(7);
-      return '+$cc($area)$mid-$tail';
-    }
-
-    return v;
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String label;
-
-  const _StatusChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Chip(
-      label: Text(
-        'Estado: $label',
-        style: TextStyle(color: theme.colorScheme.onPrimary),
-      ),
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      side: BorderSide(color: theme.colorScheme.primary),
-      backgroundColor: theme.colorScheme.primary,
     );
   }
 }
@@ -392,24 +137,6 @@ class _ProductChip extends StatelessWidget {
   }
 
   static String _money(double v) => '\$${v.toStringAsFixed(2)}';
-}
-
-class _PlaceholderChip extends StatelessWidget {
-  final String label;
-
-  const _PlaceholderChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Chip(
-      label: Text(label, style: TextStyle(color: theme.colorScheme.onPrimary)),
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      side: BorderSide(color: theme.colorScheme.primary),
-      backgroundColor: theme.colorScheme.primary,
-    );
-  }
 }
 
 class _ActionsSection extends ConsumerWidget {
@@ -500,7 +227,8 @@ class _ActionsSection extends ConsumerWidget {
             if (v == null) return;
 
             final nextStatus = v.trim();
-            final needsConfirm = nextStatus == 'activo' || nextStatus == 'compro';
+            final needsConfirm =
+                nextStatus == 'activo' || nextStatus == 'compro';
 
             if (needsConfirm) {
               final label = nextStatus == 'activo' ? 'Activo' : 'Compró';
@@ -543,7 +271,9 @@ class _ActionsSection extends ConsumerWidget {
 
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Cliente agregado a la tabla de clientes')),
+                  const SnackBar(
+                    content: Text('Cliente agregado a la tabla de clientes'),
+                  ),
                 );
               } catch (e) {
                 if (!context.mounted) return;
@@ -973,6 +703,28 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
 class _SummarySection extends ConsumerWidget {
   const _SummarySection();
 
+  int _countFor(Map<String, int> by, List<String> keys) {
+    final wanted = keys.map(_normalizeKey).toSet();
+    for (final e in by.entries) {
+      if (wanted.contains(_normalizeKey(e.key))) return e.value;
+    }
+    return 0;
+  }
+
+  String _normalizeKey(String v) {
+    final s = v.trim().toLowerCase();
+    // normalize spaces/separators
+    final t = s.replaceAll(RegExp(r'\s+'), '_').replaceAll('-', '_');
+    // normalize common accents (no extra deps)
+    return t
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u')
+        .replaceAll('ñ', 'n');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -981,6 +733,46 @@ class _SummarySection extends ConsumerWidget {
     final stats = statsState.stats;
 
     final by = stats?.byStatus ?? const <String, int>{};
+
+    final entries = <_StatusEntry>[
+      _StatusEntry(
+        'Pendiente',
+        _countFor(by, const ['pendiente', 'pending']),
+        theme.colorScheme.primary, // azul (según theme)
+      ),
+      _StatusEntry(
+        'Interesado',
+        _countFor(by, const ['interesado', 'interested']),
+        theme.colorScheme.secondary, // verde (según theme)
+      ),
+      _StatusEntry(
+        'Reserva',
+        _countFor(by, const ['reserva', 'reserved']),
+        theme.colorScheme.primaryContainer,
+      ),
+      _StatusEntry(
+        'Compró',
+        _countFor(by, const ['compro', 'compró', 'comprado', 'bought']),
+        theme.colorScheme.onSurface.withOpacity(0.85), // “negro” visual
+      ),
+      _StatusEntry(
+        'No interesado',
+        _countFor(by, const [
+          'no_interesado',
+          'no interesado',
+          'not_interested',
+        ]),
+        theme.colorScheme.onSurfaceVariant.withOpacity(0.8),
+      ),
+    ];
+
+    final sumBreakdown = entries.fold<int>(0, (acc, e) => acc + e.value);
+    final total = stats?.total ?? sumBreakdown;
+    final effectiveEntries = (sumBreakdown == 0 && total > 0)
+        ? <_StatusEntry>[
+            _StatusEntry('Total', total, theme.colorScheme.primary),
+          ]
+        : entries;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1019,6 +811,15 @@ class _SummarySection extends ConsumerWidget {
               ),
             ],
           ),
+        _StatusStackedBar(
+          entries: effectiveEntries,
+          isLoading: statsState.loading && stats == null,
+        ),
+        const SizedBox(height: 8),
+        _StatusLegend(entries: effectiveEntries),
+        const SizedBox(height: 10),
+        _StatusReadableList(entries: effectiveEntries, total: total),
+        const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1032,6 +833,231 @@ class _SummarySection extends ConsumerWidget {
             _MiniStat(label: 'Compró', value: by['compro'] ?? 0),
             _MiniStat(label: 'No int.', value: by['no_interesado'] ?? 0),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusEntry {
+  final String label;
+  final int value;
+  final Color color;
+
+  const _StatusEntry(this.label, this.value, this.color);
+}
+
+class _StatusStackedBar extends StatelessWidget {
+  final List<_StatusEntry> entries;
+  final bool isLoading;
+
+  const _StatusStackedBar({required this.entries, required this.isLoading});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final nonZero = entries.where((e) => e.value > 0).toList();
+    final total = nonZero.fold<int>(0, (acc, e) => acc + e.value);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Distribución por estado',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.75),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              '$total',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.75),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            height: 14,
+            color: theme.colorScheme.surfaceContainerHighest,
+            child: isLoading
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: 0.35,
+                      child: Container(
+                        color: theme.colorScheme.primary.withOpacity(0.25),
+                      ),
+                    ),
+                  )
+                : (total <= 0
+                      ? const SizedBox.shrink()
+                      : Row(
+                          children: [
+                            for (final e in nonZero)
+                              Expanded(
+                                flex: e.value,
+                                child: Container(color: e.color),
+                              ),
+                          ],
+                        )),
+          ),
+        ),
+        if (!isLoading && total <= 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Sin datos para graficar',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StatusReadableList extends StatelessWidget {
+  final List<_StatusEntry> entries;
+  final int total;
+
+  const _StatusReadableList({required this.entries, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final nonZero = entries.where((e) => e.value > 0).toList();
+    final shown = nonZero.isEmpty ? entries : nonZero;
+
+    String pct(int v) {
+      if (total <= 0) return '0%';
+      final p = (v * 100 / total).round();
+      return '$p%';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Detalle por estado',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.75),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final e in shown)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: e.color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    e.label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${e.value}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  pct(e.value),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.65),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StatusLegend extends StatelessWidget {
+  final List<_StatusEntry> entries;
+
+  const _StatusLegend({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final nonZero = entries.where((e) => e.value > 0).toList();
+    final total = nonZero.fold<int>(0, (acc, e) => acc + e.value);
+
+    if (total <= 0) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      children: [
+        for (final e in nonZero)
+          _LegendItem(color: e.color, label: e.label, value: e.value),
+      ],
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+  final int value;
+
+  const _LegendItem({
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$value',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ],
     );

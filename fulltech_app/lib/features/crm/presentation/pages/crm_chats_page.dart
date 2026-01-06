@@ -13,6 +13,7 @@ import '../../state/crm_threads_state.dart';
 import '../../data/models/crm_thread.dart';
 import '../widgets/chat_list_item_pro.dart';
 import '../widgets/chat_thread_view.dart';
+import '../widgets/crm_outbound_message_dialog.dart';
 import '../widgets/right_panel_crm.dart';
 
 class CrmChatsPage extends ConsumerStatefulWidget {
@@ -26,6 +27,8 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
   final Debouncer _debouncer = Debouncer(
     delay: const Duration(milliseconds: 400),
   );
+
+  bool _isRightPanelOpen = true;
 
   @override
   void initState() {
@@ -84,14 +87,62 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
     }
 
     final center = selectedId == null
-      ? const _EmptyPanel(text: 'Selecciona un chat')
-      : ChatThreadView(threadId: selectedId);
+        ? const _EmptyPanel(text: 'Selecciona un chat')
+        : ChatThreadView(threadId: selectedId);
 
     final right = selectedId == null
         ? const _EmptyPanel(text: 'Detalles')
         : RightPanelCrm(threadId: selectedId);
 
     final rightWidth = (width * 0.28).clamp(340.0, 420.0);
+    const collapsedWidth = 34.0;
+
+    final rightColumn = SizedBox(
+      width: _isRightPanelOpen ? rightWidth : collapsedWidth,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: _isRightPanelOpen
+                ? right
+                : const Card(margin: EdgeInsets.zero, child: SizedBox.shrink()),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: SizedBox(
+                width: 32,
+                height: 32,
+                child: IconButton(
+                  tooltip:
+                      _isRightPanelOpen ? 'Ocultar panel' : 'Mostrar panel',
+                  onPressed: () {
+                    setState(() {
+                      _isRightPanelOpen = !_isRightPanelOpen;
+                    });
+                  },
+                  icon: Icon(
+                    _isRightPanelOpen
+                        ? Icons.chevron_right
+                        : Icons.chevron_left,
+                  ),
+                  iconSize: 22,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
 
     return Row(
       children: [
@@ -99,7 +150,7 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
         const SizedBox(width: 12),
         Expanded(child: center),
         const SizedBox(width: 12),
-        SizedBox(width: rightWidth, child: right),
+        rightColumn,
       ],
     );
   }
@@ -164,9 +215,11 @@ class _ThreadsList extends ConsumerWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return Card(
-      child: Column(
-        children: [
+    return Stack(
+      children: [
+        Card(
+          child: Column(
+            children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -217,6 +270,7 @@ class _ThreadsList extends ConsumerWidget {
                 }
 
                 return ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 72),
                   itemCount: items.length + 1,
                   itemBuilder: (context, index) {
                     if (index == items.length) {
@@ -262,8 +316,36 @@ class _ThreadsList extends ConsumerWidget {
               },
             ),
           ),
-        ],
-      ),
+            ],
+          ),
+        ),
+        Positioned(
+          right: 14,
+          top: 14,
+          child: FloatingActionButton(
+            heroTag: 'crm_new_outbound_chat_fab',
+            mini: true,
+            tooltip: 'Nuevo chat (número fuera de lista)'
+            ,
+            onPressed: () async {
+              final result = await showDialog<CrmOutboundResult>(
+                context: context,
+                builder: (_) => const CrmOutboundMessageDialog(),
+              );
+              if (result == null) return;
+
+              if (result.thread != null) {
+                await notifier.upsertLocalThread(result.thread!);
+              } else {
+                await notifier.refresh();
+              }
+
+              onSelect(result.chatId);
+            },
+            child: const Icon(Icons.chat_bubble_outline),
+          ),
+        ),
+      ],
     );
   }
 }

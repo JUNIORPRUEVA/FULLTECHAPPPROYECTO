@@ -103,10 +103,9 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final online = ref.watch(crmOnlineProvider).maybeWhen(
-          data: (v) => v,
-          orElse: () => true,
-        );
+    final online = ref
+        .watch(crmOnlineProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
 
     final threadsState = ref.watch(crmThreadsControllerProvider);
     final thread = threadsState.items
@@ -126,87 +125,183 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
 
     final subtitle = thread?.phone ?? thread?.waId ?? '';
     final statusText = online ? 'Conectado' : 'Offline';
-    final statusColor =
-        online ? theme.colorScheme.primary : theme.colorScheme.error;
+    final statusColor = online
+        ? theme.colorScheme.primary
+        : theme.colorScheme.error;
+
+    final productsAsync = ref.watch(crmProductsProvider);
+    final hasProductId = (thread?.productId ?? '').trim().isNotEmpty;
+    final product = !hasProductId
+        ? null
+        : (productsAsync.asData?.value ?? const <Producto>[])
+              .where((p) => p.id == thread!.productId)
+              .cast<Producto?>()
+              .firstOrNull;
 
     return Card(
       child: Column(
         children: [
           // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: theme.dividerColor, width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  child: Text(_initials(title)),
+          Builder(
+            builder: (context) {
+              Chip pill({
+                required String text,
+                required Color bg,
+                required Color fg,
+              }) {
+                return Chip(
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: BorderSide(color: bg),
+                  backgroundColor: bg,
+                  labelPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 0,
+                  ),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 180),
+                    child: Text(
+                      text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  labelStyle: theme.textTheme.labelSmall?.copyWith(
+                    color: fg,
+                    fontWeight: FontWeight.w800,
+                  ),
+                );
+              }
+
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium?.copyWith(
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: theme.dividerColor, width: 1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
+                      child: Text(
+                        _initials(title),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: title,
+                              style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
-                          ),
-                          if (thread != null)
-                            Chip(
-                              visualDensity: VisualDensity.compact,
-                              label: Text(thread.status),
+                            if (subtitle.isNotEmpty) ...[
+                              TextSpan(
+                                text: '  •  $subtitle',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.75),
+                                ),
+                              ),
+                            ],
+                            TextSpan(
+                              text: '  •  ',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.6,
+                                ),
+                              ),
                             ),
-                        ],
-                      ),
-                      if (subtitle.isNotEmpty)
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          ),
+                            TextSpan(
+                              text: statusText,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: statusColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
-                      Text(
-                        statusText,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (thread != null || hasProductId) ...[
+                      const SizedBox(width: 10),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 340),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (thread != null)
+                                pill(
+                                  text: thread.status.replaceAll('_', ' '),
+                                  bg: theme.colorScheme.primaryContainer,
+                                  fg: theme.colorScheme.onPrimaryContainer,
+                                ),
+                              if (thread != null && hasProductId)
+                                const SizedBox(width: 8),
+                              if (hasProductId)
+                                pill(
+                                  text:
+                                      (product?.nombre.trim().isNotEmpty ??
+                                          false)
+                                      ? product!.nombre.trim()
+                                      : (productsAsync.isLoading
+                                            ? 'Producto: Cargando...'
+                                            : 'Producto: No encontrado'),
+                                  bg: theme.colorScheme.secondaryContainer,
+                                  fg: theme.colorScheme.onSecondaryContainer,
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
-                  ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      tooltip: 'Refrescar',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 34,
+                        height: 34,
+                      ),
+                      onPressed: () async {
+                        await notifier.loadInitial();
+                        _scrollToBottom();
+                      },
+                      icon: const Icon(Icons.refresh, size: 20),
+                    ),
+                    if (widget.onOpenRightPanel != null)
+                      IconButton(
+                        tooltip: 'Gestión',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 34,
+                          height: 34,
+                        ),
+                        onPressed: widget.onOpenRightPanel,
+                        icon: const Icon(Icons.tune, size: 20),
+                      ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Refrescar',
-                  onPressed: () async {
-                    await notifier.loadInitial();
-                    _scrollToBottom();
-                  },
-                  icon: const Icon(Icons.refresh),
-                ),
-                if (widget.onOpenRightPanel != null)
-                  IconButton(
-                    tooltip: 'Gestión',
-                    onPressed: widget.onOpenRightPanel,
-                    icon: const Icon(Icons.tune),
-                  ),
-              ],
-            ),
+              );
+            },
           ),
 
           // Messages

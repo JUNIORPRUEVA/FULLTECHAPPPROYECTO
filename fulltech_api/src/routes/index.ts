@@ -22,6 +22,7 @@ import { quotationsRouter } from '../modules/quotations/quotations.routes';
 import { lettersRouter } from '../modules/letters/letters.routes';
 import { operationsRouter } from '../modules/operations/operations.routes';
 import { rulesRouter } from '../modules/rules/rules.routes';
+import { posRouter } from '../modules/pos/pos.routes';
 
 export const apiRouter = Router();
 
@@ -52,5 +53,6 @@ apiRouter.use('/letters', lettersRouter);
 apiRouter.use('/operations', operationsRouter);
 apiRouter.use('/rules', rulesRouter);
 apiRouter.use('/admin', adminRouter);
+apiRouter.use('/pos', posRouter);
 
 // TODO: Montar módulos restantes (operaciones, nómina, rrhh, guagua, etc.)

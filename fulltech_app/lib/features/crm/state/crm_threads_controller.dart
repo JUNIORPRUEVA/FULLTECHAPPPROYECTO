@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fulltech_app/core/utils/debouncer.dart';
+import 'dart:math' as math;
 
 import '../data/repositories/crm_repository.dart';
+import '../data/models/crm_thread.dart';
 import 'crm_threads_state.dart';
 
 class CrmThreadsController extends StateNotifier<CrmThreadsState> {
@@ -107,5 +109,33 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
 
   void setProductId(String? value) {
     state = state.copyWith(productId: value);
+  }
+
+  Future<void> upsertLocalThread(CrmThread thread) async {
+    final items = [...state.items];
+    final idx = items.indexWhere((t) => t.id == thread.id);
+    if (idx >= 0) {
+      items[idx] = thread;
+    } else {
+      items.insert(0, thread);
+    }
+
+    // Sort newest first (last message / updated).
+    items.sort((a, b) {
+      final aKey = a.lastMessageAt ?? a.updatedAt;
+      final bKey = b.lastMessageAt ?? b.updatedAt;
+      return bKey.compareTo(aKey);
+    });
+
+    state = state.copyWith(
+      items: items,
+      total: math.max(state.total, items.length),
+    );
+
+    try {
+      await _repo.cacheThreads([thread], replace: false);
+    } catch (_) {
+      // Ignore cache errors.
+    }
   }
 }

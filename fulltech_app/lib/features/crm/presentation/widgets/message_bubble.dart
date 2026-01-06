@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -29,19 +31,23 @@ class MessageBubble extends StatelessWidget {
     final isFailed = isMe && (status == 'failed' || status == 'error');
 
     final bg = isMe
-        ? theme.colorScheme.primaryContainer
-        : theme.colorScheme.surface;
+      ? theme.colorScheme.primaryContainer
+      : theme.colorScheme.surfaceVariant;
     final fg = isMe
         ? theme.colorScheme.onPrimaryContainer
         : theme.colorScheme.onSurface;
 
     final align = isMe ? Alignment.centerRight : Alignment.centerLeft;
 
+    // Chat-bubble style: rounded corners with a slightly tighter
+    // corner on the "tail" side.
+    const bigR = Radius.circular(18);
+    const tailR = Radius.circular(6);
     final bubbleRadius = BorderRadius.only(
-      topLeft: Radius.circular(isMe ? 14 : 4),
-      topRight: Radius.circular(isMe ? 4 : 14),
-      bottomLeft: const Radius.circular(14),
-      bottomRight: const Radius.circular(14),
+      topLeft: bigR,
+      topRight: bigR,
+      bottomLeft: isMe ? bigR : tailR,
+      bottomRight: isMe ? tailR : bigR,
     );
 
     final body = (message.body ?? '').trim();
@@ -94,7 +100,9 @@ class MessageBubble extends StatelessWidget {
     return Align(
       alignment: align,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: BoxConstraints(
+          maxWidth: math.min(520, MediaQuery.sizeOf(context).width * 0.72),
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
           child: Column(
@@ -111,7 +119,7 @@ class MessageBubble extends StatelessWidget {
                       : null,
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 10, 8),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
