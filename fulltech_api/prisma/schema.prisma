@@ -145,6 +145,7 @@ model Empresa {
   crm_threads   CrmThread[]
   crm_messages  CrmMessage[]
   crm_tasks     CrmTask[]
+  crm_chats     CrmChat[]
   punch_records PunchRecord[]
 
   // Maintenance & Warranty
@@ -1253,6 +1254,7 @@ model CrmTask {
 
 model CrmChat {
   id                   String    @id @default(uuid()) @db.Uuid
+  empresa_id           String    @db.Uuid
   wa_id                String
   display_name         String?
   phone                String?
@@ -1263,10 +1265,12 @@ model CrmChat {
   created_at           DateTime  @default(now())
   updated_at           DateTime  @updatedAt
 
+  empresa  Empresa           @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
   messages CrmChatMessage[]
 
   @@unique([wa_id])
   @@index([last_message_at])
+  @@index([empresa_id])
   @@map("crm_chats")
 }
 

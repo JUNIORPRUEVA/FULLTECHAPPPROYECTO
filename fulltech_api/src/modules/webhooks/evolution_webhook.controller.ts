@@ -454,6 +454,9 @@ async function processWebhookEvent(body: any, eventId: string | null) {
         unread_count: direction === 'in' ? 1 : 0,
         // Default bucket for new inbound/outbound conversations.
         status: 'primer_contacto',
+        empresa: {
+          connect: { id: env.DEFAULT_EMPRESA_ID },
+        },
       },
       update: {
         ...(parsed.displayName?.trim() ? { display_name: parsed.displayName.trim() } : null),

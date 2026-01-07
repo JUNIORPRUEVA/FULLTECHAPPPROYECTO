@@ -994,6 +994,9 @@ export async function sendOutboundTextMessage(req: Request, res: Response) {
       phone: normalized.phoneE164,
       status: status ?? 'primer_contacto',
       display_name: displayName,
+      empresa: {
+        connect: { id: env.DEFAULT_EMPRESA_ID },
+      },
     },
     update: {
       phone: normalized.phoneE164,
