@@ -11,6 +11,9 @@ class ApiClient {
   final Dio dio;
   final LocalDb db;
 
+  static bool _handlingUnauthorized = false;
+  static DateTime? _lastUnauthorizedAt;
+
   ApiClient._(this.dio, this.db);
 
   static Future<ApiClient> create(LocalDb db) async {
@@ -34,6 +37,12 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          // Correlation id for diagnostics (per-request).
+          options.extra.putIfAbsent(
+            'rid',
+            () => DateTime.now().microsecondsSinceEpoch.toString(),
+          );
+
           // Default behavior: allow offline queueing for write requests.
           // Modules can opt out via `Options(extra: {'offlineQueue': false})`.
           options.extra.putIfAbsent('offlineQueue', () => true);
@@ -50,6 +59,15 @@ class ApiClient {
           final session = await db.readSession();
           if (session != null) {
             options.headers['Authorization'] = 'Bearer ${session.token}';
+
+            // Safe diagnostics: log only token suffix.
+            if (kDebugMode && options.extra['logSse'] == true) {
+              final t = session.token;
+              final suffix = t.length <= 8 ? t : t.substring(t.length - 8);
+              debugPrint(
+                '[NET][${options.extra['rid']}] ${options.method} ${options.path} token=…$suffix baseUrl=${dio.options.baseUrl}',
+              );
+            }
           }
           handler.next(options);
         },
@@ -122,6 +140,7 @@ class ApiClient {
           // wipe the session in that case (it causes an immediate "bounce back" after login).
           final status = error.response?.statusCode;
           if (status == 401) {
+            final suppress = error.requestOptions.extra['suppressUnauthorizedEvent'] == true;
             final authHeader = error.requestOptions.headers['Authorization'];
             final hadAuthHeader = authHeader != null && authHeader.toString().trim().isNotEmpty;
 
@@ -134,13 +153,26 @@ class ApiClient {
               );
             }
 
-            if (hadAuthHeader) {
-              // Clear local session and data
-              if (kDebugMode) debugPrint('[AUTH] clearing local session due to $detail');
-              await db.clearSession();
+            if (hadAuthHeader && !suppress) {
+              final now = DateTime.now();
+              final recent = _lastUnauthorizedAt != null &&
+                  now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 2);
 
-              // Notify app layers (router/state) to force logout.
-              AuthEvents.unauthorized(status, detail);
+              // Debounce/lock: avoid clearing session + emitting unauthorized repeatedly.
+              if (!_handlingUnauthorized && !recent) {
+                _handlingUnauthorized = true;
+                _lastUnauthorizedAt = now;
+                try {
+                  if (kDebugMode) {
+                    debugPrint('[AUTH] clearing local session due to $detail');
+                  }
+                  await db.clearSession();
+                  AuthEvents.unauthorized(status, detail);
+                } finally {
+                  // Release lock shortly after to allow future real logouts.
+                  _handlingUnauthorized = false;
+                }
+              }
             }
           }
 

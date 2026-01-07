@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/state/auth_providers.dart';
+import '../../auth/state/auth_state.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/app_config.dart';
 import '../../../core/state/api_endpoint_settings_provider.dart';
@@ -143,6 +144,12 @@ final crmSseClientProvider = Provider<CrmSseClient>((ref) {
 });
 
 final crmRealtimeProvider = Provider<void>((ref) {
+  final auth = ref.watch(authControllerProvider);
+  if (auth is! AuthAuthenticated) {
+    // Don't connect SSE when unauthenticated/validating.
+    return;
+  }
+
   final client = ref.watch(crmSseClientProvider);
 
   final pendingChatIds = <String>{};
