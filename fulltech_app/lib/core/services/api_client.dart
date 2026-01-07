@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../storage/local_db.dart';
 import 'app_config.dart';
@@ -115,14 +116,28 @@ class ApiClient {
             }
           }
 
-          // Handle 401 (token invalidated) and 403 (access revoked) errors
-          if (error.response?.statusCode == 401 ||
-              error.response?.statusCode == 403) {
-            // Clear local session and data
-            await db.clearSession();
+          // Handle 401 (token invalidated) and 403 (access revoked) errors.
+          // IMPORTANT: Only force logout when the request was authenticated.
+          // Some endpoints may respond 401/403 for anonymous requests; we should not
+          // wipe the session in that case (it causes an immediate "bounce back" after login).
+          final status = error.response?.statusCode;
+          if (status == 401 || status == 403) {
+            final authHeader = error.requestOptions.headers['Authorization'];
+            final hadAuthHeader = authHeader != null && authHeader.toString().trim().isNotEmpty;
 
-            // Notify app layers (router/state) to force logout.
-            AuthEvents.unauthorized(error.response?.statusCode);
+            if (kDebugMode) {
+              debugPrint(
+                '[AUTH][HTTP] $status ${error.requestOptions.method} ${error.requestOptions.path} hadAuthHeader=$hadAuthHeader baseUrl=${dio.options.baseUrl}',
+              );
+            }
+
+            if (hadAuthHeader) {
+              // Clear local session and data
+              await db.clearSession();
+
+              // Notify app layers (router/state) to force logout.
+              AuthEvents.unauthorized(status);
+            }
           }
 
           handler.next(error);
