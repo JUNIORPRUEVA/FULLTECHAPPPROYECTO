@@ -12,6 +12,11 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { apiRouter } from './routes';
 import { webhooksRouter } from './modules/webhooks/webhooks.routes';
 import { runSqlMigrations } from './scripts/runSqlMigrations';
+import { bootstrapAdmin } from './scripts/bootstrap_admin';
+
+function truthy(value: string | undefined): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase());
+}
 
 const app = express();
 
@@ -85,6 +90,12 @@ app.use(errorHandler);
 
 void (async () => {
   await runSqlMigrations();
+
+  if (truthy(process.env.BOOTSTRAP_ADMIN)) {
+    // eslint-disable-next-line no-console
+    console.log('[BOOT] BOOTSTRAP_ADMIN enabled: ensuring admin user exists');
+    await bootstrapAdmin();
+  }
 
   app.listen(env.PORT, () => {
     // eslint-disable-next-line no-console

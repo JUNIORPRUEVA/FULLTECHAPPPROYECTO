@@ -2,7 +2,7 @@ import { prisma } from '../config/prisma';
 import '../config/env';
 import { hashPassword } from '../services/password';
 
-async function main() {
+export async function bootstrapAdmin(): Promise<void> {
   const empresaNombre = process.env.EMPRESA_NOMBRE ?? 'FULLTECH';
   const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@fulltech.com';
   const adminPassword = process.env.ADMIN_PASSWORD ?? 'Admin1234';
@@ -25,6 +25,7 @@ async function main() {
         posicion: 'admin',
         empresa_id: empresa.id,
         password_hash: passwordHash,
+        estado: 'activo',
       },
     });
 
@@ -41,10 +42,15 @@ async function main() {
       posicion: 'admin',
       empresa_id: empresa.id,
       password_hash: passwordHash,
+      estado: 'activo',
     },
   });
 
   console.log(`Admin creado: ${adminEmail} (empresa: ${empresaNombre})`);
+}
+
+async function main() {
+  await bootstrapAdmin();
 }
 
 main()
