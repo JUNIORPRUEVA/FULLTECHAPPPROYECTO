@@ -65,7 +65,8 @@ export async function createPunch(req: Request, res: Response) {
     // Disallow Sunday punches (best-effort based on UTC).
     // Client also enforces this using local time.
     if (datetimeUtc.getUTCDay() === 0) {
-      return res.status(403).json({ error: 'No se permite ponchar los domingos' });
+      // This is a business rule, not an auth/permission failure.
+      return res.status(400).json({ error: 'No se permite ponchar los domingos' });
     }
 
     const today = datetimeUtc.toISOString().split('T')[0];

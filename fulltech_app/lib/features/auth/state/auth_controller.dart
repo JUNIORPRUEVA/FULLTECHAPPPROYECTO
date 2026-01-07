@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/services/auth_events.dart';
 import '../../../core/services/auth_api.dart';
@@ -21,6 +22,11 @@ class AuthController extends StateNotifier<AuthState> {
         super(const AuthUnknown()) {
     _eventsSub = AuthEvents.stream.listen((event) async {
       if (event.type == AuthEventType.unauthorized) {
+        if (kDebugMode) {
+          debugPrint(
+            '[AUTH] unauthorized event status=${event.statusCode} detail=${event.detail ?? ''}',
+          );
+        }
         // Keep it idempotent: interceptor already cleared session.
         state = const AuthUnauthenticated();
       }
@@ -28,10 +34,18 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> bootstrap() async {
+    if (kDebugMode) debugPrint('[AUTH] bootstrap()');
     final session = await _db.readSession();
     if (session == null) {
+      if (kDebugMode) debugPrint('[AUTH] bootstrap: no session');
       state = const AuthUnauthenticated();
       return;
+    }
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AUTH] bootstrap: session found user=${session.user.email} role=${session.user.role}',
+      );
     }
 
     state = AuthAuthenticated(token: session.token, user: session.user);
@@ -41,13 +55,18 @@ class AuthController extends StateNotifier<AuthState> {
     required String email,
     required String password,
   }) async {
+    if (kDebugMode) debugPrint('[AUTH] login() email=$email');
     final result = await _api.login(email: email, password: password);
     final session = AuthSession(token: result.token, user: result.user);
     await _db.saveSession(session);
+    if (kDebugMode) {
+      debugPrint('[AUTH] login: saved session role=${session.user.role}');
+    }
     state = AuthAuthenticated(token: session.token, user: session.user);
   }
 
   Future<void> logout() async {
+    if (kDebugMode) debugPrint('[AUTH] logout()');
     await _db.clearSession();
     state = const AuthUnauthenticated();
   }

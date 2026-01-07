@@ -13,6 +13,7 @@ class CrmThread {
   final int unreadCount;
   final String status;
   final bool important;
+  final bool followUp;
   final String? productId;
   final String? internalNote;
   final String? assignedUserId;
@@ -32,6 +33,7 @@ class CrmThread {
     required this.unreadCount,
     required this.status,
     required this.important,
+    required this.followUp,
     required this.productId,
     required this.internalNote,
     required this.assignedUserId,
@@ -54,6 +56,10 @@ class CrmThread {
     final waId = (json['wa_id'] ?? json['waId'] ?? '') as String;
     final phone =
         (json['phone_e164'] ?? json['phoneE164'] ?? json['phone']) as String?;
+
+    final rawFollowUp =
+      json['follow_up'] ?? json['followUp'] ?? json['seguimiento'];
+    final followUp = rawFollowUp == true;
 
     return CrmThread(
       id: (json['id'] ?? '') as String,
@@ -80,6 +86,7 @@ class CrmThread {
           .toInt(),
       status: (json['status'] ?? 'primer_contacto') as String,
       important: (json['important'] as bool?) ?? false,
+        followUp: followUp,
       productId: (json['product_id'] ?? json['productId']) as String?,
       internalNote: (json['internal_note'] ?? json['internalNote']) as String?,
       assignedUserId:
@@ -103,6 +110,7 @@ class CrmThread {
       'unreadCount': unreadCount,
       'status': status,
       'important': important,
+      'followUp': followUp,
       'productId': productId,
       'internalNote': internalNote,
       'assignedUserId': assignedUserId,

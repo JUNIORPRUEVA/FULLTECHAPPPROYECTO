@@ -254,6 +254,7 @@ function toChatApiItem(chat: any) {
   const phoneE164 = toPhoneE164(phoneCandidate);
 
   const important = Boolean(chat.important ?? chat.is_important ?? false);
+  const followUp = Boolean(chat.follow_up ?? chat.followUp ?? false);
   const productId = chat.product_id ?? chat.productId ?? null;
   const internalNote = chat.internal_note ?? chat.note ?? null;
   const assignedUserId = chat.assigned_user_id ?? chat.assigned_to_user_id ?? null;
@@ -270,6 +271,7 @@ function toChatApiItem(chat: any) {
     status: chat.status ?? 'primer_contacto',
     // preferred names per spec
     isImportant: important,
+    followUp,
     productId,
     note: internalNote,
     assignedToUserId: assignedUserId,
@@ -277,7 +279,6 @@ function toChatApiItem(chat: any) {
     // backward compatible
     important,
     internalNote,
-    assignedUserId,
 
     // backward compatible snake_case
     wa_id: waId,
@@ -292,6 +293,7 @@ function toChatApiItem(chat: any) {
     internal_note: internalNote,
     assigned_user_id: assignedUserId,
     is_important: important,
+    follow_up: followUp,
     assigned_to_user_id: assignedUserId,
   };
 }
@@ -375,7 +377,7 @@ async function fetchChatMeta(chatIds: string[]): Promise<Map<string, any>> {
   try {
     rows = await prisma.$queryRawUnsafe<any[]>(
       `
-        SELECT chat_id, important, product_id, internal_note, assigned_user_id
+        SELECT chat_id, important, follow_up, product_id, internal_note, assigned_user_id
         FROM crm_chat_meta
         WHERE chat_id = ANY($1::uuid[])
       `,
@@ -397,6 +399,7 @@ async function upsertChatMeta(
   chatId: string,
   data: {
     important?: boolean;
+    follow_up?: boolean;
     product_id?: string | null;
     internal_note?: string | null;
     assigned_user_id?: string | null;
@@ -404,28 +407,48 @@ async function upsertChatMeta(
 ): Promise<void> {
   if (!(await crmChatMetaExists())) return;
 
-  const important = data.important ?? false;
-  const productId = data.product_id ?? null;
-  const internalNote = data.internal_note ?? null;
-  const assignedUserId = data.assigned_user_id ?? null;
+  const hasImportant = typeof data.important !== 'undefined';
+  const hasFollowUp = typeof data.follow_up !== 'undefined';
+  const hasProduct = typeof data.product_id !== 'undefined';
+  const hasNote = typeof data.internal_note !== 'undefined';
+  const hasAssigned = typeof data.assigned_user_id !== 'undefined';
+
+  const important = hasImportant ? (data.important as boolean) : null;
+  const followUp = hasFollowUp ? (data.follow_up as boolean) : null;
+  const productId = hasProduct ? (data.product_id as any) : null;
+  const internalNote = hasNote ? (data.internal_note as any) : null;
+  const assignedUserId = hasAssigned ? (data.assigned_user_id as any) : null;
 
   try {
     await prisma.$executeRawUnsafe(
       `
-        INSERT INTO crm_chat_meta (chat_id, important, product_id, internal_note, assigned_user_id, updated_at)
-        VALUES ($1::uuid, $2::boolean, $3::text, $4::text, $5::uuid, now())
+        INSERT INTO crm_chat_meta (chat_id, important, follow_up, product_id, internal_note, assigned_user_id, updated_at)
+        VALUES (
+          $1::uuid,
+          COALESCE($2::boolean, FALSE),
+          COALESCE($3::boolean, FALSE),
+          CASE WHEN $4::boolean THEN $5::text ELSE NULL END,
+          CASE WHEN $6::boolean THEN $7::text ELSE NULL END,
+          CASE WHEN $8::boolean THEN $9::uuid ELSE NULL END,
+          now()
+        )
         ON CONFLICT (chat_id)
         DO UPDATE SET
-          important = EXCLUDED.important,
-          product_id = EXCLUDED.product_id,
-          internal_note = EXCLUDED.internal_note,
-          assigned_user_id = EXCLUDED.assigned_user_id,
+          important = COALESCE($2::boolean, crm_chat_meta.important),
+          follow_up = COALESCE($3::boolean, crm_chat_meta.follow_up),
+          product_id = CASE WHEN $4::boolean THEN $5::text ELSE crm_chat_meta.product_id END,
+          internal_note = CASE WHEN $6::boolean THEN $7::text ELSE crm_chat_meta.internal_note END,
+          assigned_user_id = CASE WHEN $8::boolean THEN $9::uuid ELSE crm_chat_meta.assigned_user_id END,
           updated_at = now()
       `,
       chatId,
       important,
+      followUp,
+      hasProduct,
       productId,
+      hasNote,
       internalNote,
+      hasAssigned,
       assignedUserId,
     );
   } catch (e) {
@@ -736,16 +759,19 @@ export async function patchChat(req: Request, res: Response) {
   const {
     status,
     important,
+    follow_up,
     product_id,
     internal_note,
     assigned_user_id,
     isImportant,
+    followUp,
     productId,
     note,
     assignedToUserId,
   } = parsed.data;
 
   const effectiveImportant = typeof isImportant !== 'undefined' ? isImportant : important;
+  const effectiveFollowUp = typeof followUp !== 'undefined' ? followUp : follow_up;
   const effectiveProductId = typeof productId !== 'undefined' ? productId : product_id;
   const effectiveNote = typeof note !== 'undefined' ? note : internal_note;
   const effectiveAssigned =
@@ -761,12 +787,14 @@ export async function patchChat(req: Request, res: Response) {
   // Only upsert meta if any meta fields are provided.
   const hasMeta =
     typeof effectiveImportant !== 'undefined' ||
+    typeof effectiveFollowUp !== 'undefined' ||
     typeof effectiveProductId !== 'undefined' ||
     typeof effectiveNote !== 'undefined' ||
     typeof effectiveAssigned !== 'undefined';
   if (hasMeta) {
     await upsertChatMeta(chatId, {
       important: effectiveImportant,
+      follow_up: effectiveFollowUp,
       product_id: effectiveProductId,
       internal_note: effectiveNote,
       assigned_user_id: effectiveAssigned,

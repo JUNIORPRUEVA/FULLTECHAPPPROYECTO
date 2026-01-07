@@ -16,6 +16,12 @@ export function requireRole(roles: AppRole[]) {
     if (!role) {
       return next(new ApiError(401, 'Not authenticated'));
     }
+
+    // SUPERUSER BYPASS: admin always allowed.
+    if (role === 'admin' || (req.user as any).isSuperAdmin === true) {
+      return next();
+    }
+
     const normalized: AppRole = role === 'administrador' ? 'administrador' : (role as AppRole);
     const effectiveRoles = roles.flatMap((r) => (r === 'admin' || r === 'administrador' ? ['admin', 'administrador'] : [r]));
     if (!effectiveRoles.includes(normalized)) {

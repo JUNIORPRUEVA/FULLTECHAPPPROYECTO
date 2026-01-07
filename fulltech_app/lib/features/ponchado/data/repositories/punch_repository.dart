@@ -139,20 +139,12 @@ class PunchRepository {
 
       try {
         // Update local attempt counters (if present)
-        final localJsons = await db.listEntitiesJson(store: _store);
-        final localJson = localJsons
-            .map((e) => jsonDecode(e))
-            .whereType<Map<String, dynamic>>()
-            .firstWhere(
-              (m) => m['id'] == item.entityId,
-              orElse: () => <String, dynamic>{},
-            );
-
-        if (localJson.isNotEmpty) {
+        final localRaw = await db.getEntityJson(store: _store, id: item.entityId);
+        if (localRaw != null) {
+          final localJson = jsonDecode(localRaw) as Map<String, dynamic>;
           final attempts = (localJson['_syncAttempts'] as int? ?? 0) + 1;
           localJson['_syncAttempts'] = attempts;
-          localJson['_lastSyncAttemptMs'] =
-              DateTime.now().millisecondsSinceEpoch;
+          localJson['_lastSyncAttemptMs'] = DateTime.now().millisecondsSinceEpoch;
           await db.upsertEntity(
             store: _store,
             id: item.entityId,
@@ -183,15 +175,9 @@ class PunchRepository {
 
         // Mark local record as FAILED (best-effort)
         try {
-          final localJsons = await db.listEntitiesJson(store: _store);
-          final local = localJsons
-              .map((e) => jsonDecode(e))
-              .whereType<Map<String, dynamic>>()
-              .firstWhere(
-                (m) => m['id'] == item.entityId,
-                orElse: () => <String, dynamic>{},
-              );
-          if (local.isNotEmpty) {
+          final localRaw = await db.getEntityJson(store: _store, id: item.entityId);
+          if (localRaw != null) {
+            final local = jsonDecode(localRaw) as Map<String, dynamic>;
             local['syncStatus'] = 'FAILED';
             local['_lastSyncAttemptMs'] = DateTime.now().millisecondsSinceEpoch;
             await db.upsertEntity(

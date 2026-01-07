@@ -87,6 +87,7 @@ async function main() {
     CREATE TABLE IF NOT EXISTS crm_chat_meta (
       chat_id uuid PRIMARY KEY REFERENCES crm_chats(id) ON DELETE CASCADE,
       important boolean NOT NULL DEFAULT FALSE,
+      follow_up boolean NOT NULL DEFAULT FALSE,
       product_id text,
       internal_note text,
       assigned_user_id uuid,
@@ -103,6 +104,11 @@ async function main() {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS crm_chat_meta_important_idx
     ON crm_chat_meta (important);
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS crm_chat_meta_follow_up_idx
+    ON crm_chat_meta (follow_up);
   `);
 
   // eslint-disable-next-line no-console

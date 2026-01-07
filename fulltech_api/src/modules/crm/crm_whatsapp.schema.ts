@@ -68,12 +68,14 @@ export const crmMarkReadSchema = z.object({});
 export const crmChatPatchSchema = z.object({
   status: z.string().max(50).optional(),
   important: z.boolean().optional(),
+  follow_up: z.boolean().optional(),
   product_id: z.string().max(200).optional().nullable(),
   internal_note: z.string().max(5000).optional().nullable(),
   assigned_user_id: z.string().uuid().optional().nullable(),
 
   // Requested camelCase API fields (preferred)
   isImportant: z.boolean().optional(),
+  followUp: z.boolean().optional(),
   productId: z.string().max(200).optional().nullable(),
   note: z.string().max(5000).optional().nullable(),
   assignedToUserId: z.string().uuid().optional().nullable(),

@@ -48,8 +48,10 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
   bool _syncInProgress = false;
   DateTime _lastAttempt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  static const _minInterval = Duration(seconds: 2);
-  static const _periodicInterval = Duration(seconds: 45);
+  // Keep sync gentle: aggressive loops can feel like a freeze on desktop
+  // when local caches/queues grow large.
+  static const _minInterval = Duration(seconds: 10);
+  static const _periodicInterval = Duration(minutes: 2);
   static const _retryErroredMinAge = Duration(seconds: 30);
 
   @override
@@ -62,7 +64,12 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
         // Load permissions/UI settings ASAP after login.
         unawaited(ref.read(permissionsProvider.notifier).load());
         unawaited(_loadRemoteUiSettings());
-        _scheduleSync();
+
+        // Slight delay to let the UI settle after navigation.
+        Future.delayed(const Duration(seconds: 1), () {
+          if (!mounted) return;
+          _scheduleSync();
+        });
       } else {
         ref.read(permissionsProvider.notifier).clear();
       }

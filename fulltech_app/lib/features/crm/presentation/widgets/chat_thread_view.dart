@@ -407,76 +407,110 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (_aiEnabled) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Sugerencias IA',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
+                if (_aiEnabled)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceVariant,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
                       ),
-                      if (_aiSuggestions.isNotEmpty)
-                        TextButton(
-                          onPressed: _openAiSuggestionsModal,
-                          child: const Text('Ver más'),
-                        ),
-                    ],
-                  ),
-                  if (_aiLoading)
-                    Row(
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Sugerencias IA',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            if (_aiSuggestions.isNotEmpty)
+                              TextButton(
+                                onPressed: _openAiSuggestionsModal,
+                                child: const Text('Ver más'),
+                              ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Generando sugerencia…',
-                          style: theme.textTheme.bodySmall,
-                        ),
+                        if (_aiLoading)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Row(
+                              children: [
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Generando sugerencias…',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant
+                                        .withOpacity(0.9),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_aiError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              _aiError!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                                height: 1.25,
+                              ),
+                            ),
+                          ),
+                        if (_aiSuggestions.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _aiSuggestions
+                                  .map(
+                                    (s) => ActionChip(
+                                      backgroundColor: theme.colorScheme
+                                          .surfaceContainerHighest,
+                                      labelStyle: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                        color: theme.colorScheme
+                                            .onSurface,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      label: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 320,
+                                        ),
+                                        child: Text(
+                                          _oneLine(s.text),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      onPressed: () => _openAiEditor(s),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
                       ],
                     ),
-                  if (_aiError != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          _aiError!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (_aiSuggestions.isNotEmpty)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 8),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _aiSuggestions
-                              .map(
-                                (s) => ActionChip(
-                                  label: Text(
-                                    _oneLine(s.text),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  onPressed: () => _openAiEditor(s),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                    ),
-                ],
+                  ),
                 _MiniFormatBar(
                   onBold: () => _wrapSelection('*', '*'),
                   onItalic: () => _wrapSelection('_', '_'),
@@ -1123,9 +1157,29 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
       if (!mounted) return;
       setState(() {
         _aiLoading = false;
-        _aiError = e.toString();
+        _aiError = _formatAiError(e);
       });
     }
+  }
+
+  String _formatAiError(Object e) {
+    var s = e.toString();
+    // Strip internal prefixes to keep the UI readable.
+    s = s.replaceAll(RegExp(r'^\[CRM\]\[AI_SUGGEST\]\s*'), '');
+    s = s.replaceAll(RegExp(r'^Exception:\s*'), '');
+    if (s.contains('SocketException') ||
+        s.toLowerCase().contains('failed host lookup')) {
+      return 'Sin conexión con el servidor para generar sugerencias.';
+    }
+    if (s.toLowerCase().contains('timeout')) {
+      return 'La IA tardó demasiado en responder. Intenta de nuevo.';
+    }
+    // Prevent huge error strings from breaking layout.
+    s = s.trim();
+    if (s.length > 240) {
+      s = '${s.substring(0, 240)}…';
+    }
+    return s.isEmpty ? 'No se pudo generar sugerencias.' : s;
   }
 
   static String _oneLine(String input) {
@@ -1141,10 +1195,11 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     await showDialog<void>(
       context: context,
       builder: (context) {
+        final theme = Theme.of(context);
         return AlertDialog(
           title: const Text('Sugerencias IA'),
-          content: SizedBox(
-            width: 520,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: _aiSuggestions.length,
@@ -1152,7 +1207,14 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
               itemBuilder: (context, i) {
                 final s = _aiSuggestions[i];
                 return ListTile(
-                  title: Text(s.text),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  title: Text(
+                    s.text,
+                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.25),
+                  ),
                   onTap: () {
                     Navigator.pop(context);
                     _openAiEditor(s);
@@ -1177,14 +1239,16 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
+        final theme = Theme.of(context);
         return AlertDialog(
           title: const Text('Editar sugerencia'),
-          content: SizedBox(
-            width: 520,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
             child: TextField(
               controller: ctrl,
               minLines: 4,
               maxLines: 10,
+              style: theme.textTheme.bodyMedium,
               decoration: const InputDecoration(
                 hintText: 'Edita antes de enviar…',
                 isDense: true,
