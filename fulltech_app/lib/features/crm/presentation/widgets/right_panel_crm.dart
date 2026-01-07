@@ -255,31 +255,12 @@ class _ActionsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header: Gestión + Estado actual badge
-        Row(
-          children: [
-            Text(
-              'Gestión',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const Spacer(),
-            Chip(
-              label: Text(
-                _statusLabel(thread.status),
-                style: TextStyle(
-                  color: theme.colorScheme.onPrimary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              backgroundColor: theme.colorScheme.primary,
-              side: BorderSide(color: theme.colorScheme.primary),
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ],
+        // Header: Gestión
+        Text(
+          'Gestión',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
         ),
         const SizedBox(height: 10),
 
@@ -381,13 +362,6 @@ class _ActionsSection extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
         ],
-
-        // Producto interesado (si existe)
-        if (product != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _ProductChip(product: product!),
-          ),
 
         // Cambiar Estado
         DropdownButtonFormField<String>(
