@@ -19,6 +19,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email(),
+  // UI supports "Email o usuario". Keep key name for backward compatibility.
+  email: z.string().min(1),
   password: z.string().min(1),
 });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../state/auth_providers.dart';
@@ -40,7 +41,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             password: _passCtrl.text,
           );
     } catch (e) {
-      setState(() => _error = 'No se pudo iniciar sesión. Verifica tus credenciales.');
+      final baseUrl = ref.read(apiClientProvider).dio.options.baseUrl;
+
+      if (e is DioException) {
+        final status = e.response?.statusCode;
+        final data = e.response?.data;
+
+        String serverMsg = '';
+        if (data is Map) {
+          final msg = data['message'] ?? data['error'];
+          if (msg != null) serverMsg = msg.toString();
+        } else if (data != null) {
+          serverMsg = data.toString();
+        }
+
+        final parts = <String>[];
+        parts.add('No se pudo iniciar sesión.');
+        if (status != null) parts.add('HTTP $status.');
+        if (serverMsg.isNotEmpty) parts.add(serverMsg);
+        parts.add('API: $baseUrl');
+
+        setState(() => _error = parts.join(' '));
+      } else {
+        setState(() => _error = 'No se pudo iniciar sesión. API: $baseUrl');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

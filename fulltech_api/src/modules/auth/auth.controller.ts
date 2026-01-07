@@ -72,9 +72,21 @@ export async function login(req: Request, res: Response) {
   }
 
   const { email, password } = parsed.data;
+  const identifier = String(email ?? '').trim();
 
-  const user = await prisma.usuario.findUnique({
-    where: { email },
+  const user = await prisma.usuario.findFirst({
+    where: {
+      OR: [
+        {
+          email: {
+            equals: identifier,
+            mode: 'insensitive',
+          },
+        },
+        { telefono: { equals: identifier } },
+        { id: identifier },
+      ],
+    },
   });
 
   if (!user) {
