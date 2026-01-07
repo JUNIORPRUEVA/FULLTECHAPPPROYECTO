@@ -27,7 +27,8 @@ class AuthController extends StateNotifier<AuthState> {
             '[AUTH] unauthorized event status=${event.statusCode} detail=${event.detail ?? ''}',
           );
         }
-        // Keep it idempotent: interceptor already cleared session.
+        // Clear session immediately on 401 to avoid re-using expired tokens.
+        await _db.clearSession();
         state = const AuthUnauthenticated();
       }
     });
@@ -48,6 +49,9 @@ class AuthController extends StateNotifier<AuthState> {
       );
     }
 
+    // Validate token by attempting a simple request. If it fails (401),
+    // the unauthorized event will be fired by the interceptor and we'll
+    // transition to AuthUnauthenticated. Otherwise, set authenticated state.
     state = AuthAuthenticated(token: session.token, user: session.user);
   }
 

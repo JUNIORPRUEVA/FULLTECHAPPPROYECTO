@@ -62,14 +62,14 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(
-                    width: 260,
+                  Flexible(
                     child: DropdownButtonFormField<String>(
                       value: state.status,
                       decoration: const InputDecoration(
                         labelText: 'Estado',
                         prefixIcon: Icon(Icons.flag_outlined),
                       ),
+                      isExpanded: true,
                       items: const [
                         DropdownMenuItem(value: null, child: Text('Todos')),
                         DropdownMenuItem(value: 'pending_survey', child: Text('Pendiente levantamiento')),
