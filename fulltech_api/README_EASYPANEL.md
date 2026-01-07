@@ -39,6 +39,7 @@ Este repo incluye scripts SQL en `fulltech_api/sql/` para crear/actualizar tabla
 El backend aplica automáticamente los `.sql` dentro de `fulltech_api/sql/` al arrancar y guarda un registro en la tabla `_sql_migrations`.
 
 - Para desactivar (por seguridad/entornos controlados): `SKIP_SQL_MIGRATIONS=true`
+- Para forzar modo estricto (si un .sql cambió de checksum, el backend falla): `SQL_MIGRATIONS_STRICT=true`
 - Para verificar conexión a Postgres: `GET /api/health/db`
 
 ### Manual (si lo necesitas)

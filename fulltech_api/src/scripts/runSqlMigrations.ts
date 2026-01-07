@@ -19,6 +19,8 @@ export async function runSqlMigrations(options?: {
   const enabled = options?.enabled ?? !truthy(process.env.SKIP_SQL_MIGRATIONS);
   if (!enabled) return;
 
+  const strict = truthy(process.env.SQL_MIGRATIONS_STRICT);
+
   const databaseUrl = options?.databaseUrl ?? process.env.DATABASE_URL;
   if (!databaseUrl) {
     // eslint-disable-next-line no-console
@@ -72,10 +74,18 @@ export async function runSqlMigrations(options?: {
       }
 
       if (existing.rowCount && existing.rows[0].checksum !== checksum) {
-        throw new Error(
+        const msg =
           `[SQL_MIGRATIONS] Checksum changed for ${filename}. ` +
-            'Refusing to run automatically; rename the file or revert changes.',
-        );
+          'This usually means the file was edited after being applied. ' +
+          'Best practice: create a new SQL file instead of editing old ones.';
+
+        if (strict) {
+          throw new Error(msg + ' (SQL_MIGRATIONS_STRICT=true)');
+        }
+
+        // eslint-disable-next-line no-console
+        console.warn(msg + ' Skipping (SQL_MIGRATIONS_STRICT=false).');
+        continue;
       }
 
       // eslint-disable-next-line no-console
