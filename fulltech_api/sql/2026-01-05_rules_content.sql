@@ -4,6 +4,22 @@
 -- Required for gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- Enums (Prisma)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserRole') THEN
+    CREATE TYPE "UserRole" AS ENUM (
+      'admin',
+      'administrador',
+      'vendedor',
+      'tecnico',
+      'tecnico_fijo',
+      'contratista',
+      'asistente_administrativo'
+    );
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS "RulesContent" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES "Empresa"(id) ON DELETE CASCADE,

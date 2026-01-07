@@ -87,6 +87,23 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 -- =====================
 -- 3) crm_messages
 -- =====================
+DO $$
+BEGIN
+  IF to_regclass('crm_messages') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'crm_messages' AND column_name = 'thread_id'
+    ) THEN
+      -- Legacy/incompatible schema: keep a backup if possible.
+      IF to_regclass('crm_messages_legacy') IS NULL THEN
+        ALTER TABLE crm_messages RENAME TO crm_messages_legacy;
+      ELSE
+        DROP TABLE crm_messages;
+      END IF;
+    END IF;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS crm_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES "Empresa"(id),
@@ -101,6 +118,41 @@ CREATE TABLE IF NOT EXISTS crm_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Backward-compatible: if table existed before message_id was added
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS message_id TEXT;
+
+-- Backward-compatible: if table existed with a partial schema
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS empresa_id UUID;
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS thread_id UUID;
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS from_me BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text';
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS body TEXT;
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS media_url TEXT;
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS sync_version INT NOT NULL DEFAULT 1;
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE IF EXISTS crm_messages
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE UNIQUE INDEX IF NOT EXISTS crm_messages_message_id_uniq
   ON crm_messages(message_id)

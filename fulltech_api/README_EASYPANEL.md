@@ -35,9 +35,14 @@ Configure Evolution webhook URL to:
 ## 6) Database: migraciones SQL
 Este repo incluye scripts SQL en `fulltech_api/sql/` para crear/actualizar tablas en Postgres.
 
-- En EasyPanel (o tu proveedor), abre el panel de tu Postgres y ejecuta los scripts necesarios.
-- Para el módulo **Ponchado / Attendance**, ejecuta:
-	- `fulltech_api/sql/2026-01-04_attendance_punch_records.sql`
+### Automático (recomendado)
+El backend aplica automáticamente los `.sql` dentro de `fulltech_api/sql/` al arrancar y guarda un registro en la tabla `_sql_migrations`.
+
+- Para desactivar (por seguridad/entornos controlados): `SKIP_SQL_MIGRATIONS=true`
+- Para verificar conexión a Postgres: `GET /api/health/db`
+
+### Manual (si lo necesitas)
+Si prefieres hacerlo manualmente, en EasyPanel (o tu proveedor) abre el panel de tu Postgres y ejecuta los scripts necesarios.
 
 ### Scripts SQL recomendados
 

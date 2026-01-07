@@ -14,6 +14,7 @@ import '../../state/pos_providers.dart';
 import '../../state/pos_tpv_controller.dart';
 import 'pos_invoice_viewer_screen.dart';
 import '../widgets/pos_invoice_pdf.dart';
+import '../../../../core/widgets/catalog_product_grid_card.dart';
 
 class PosTpvPage extends ConsumerStatefulWidget {
   const PosTpvPage({super.key});
@@ -529,94 +530,13 @@ class _PosCatalogPane extends ConsumerWidget {
               final priceText = money0.format(p.precioVenta.round());
               final costText = money0.format(p.costPrice.round());
 
-              final imageRaw = (p.imagenUrl ?? '').trim();
-
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () => onAddProduct(p),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (imageRaw.isNotEmpty)
-                        Image.network(
-                          _publicUrlFromMaybeRelative(imageRaw),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: cs.surfaceVariant,
-                            child: Icon(
-                              Icons.image_not_supported_outlined,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          color: cs.surfaceVariant,
-                          child: Icon(
-                            Icons.photo_outlined,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: cs.surface.withValues(alpha: 0.88),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                p.nombre,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'RD\$ $priceText',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.labelMedium
-                                          ?.copyWith(
-                                            color: cs.primary,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                    ),
-                                  ),
-                                  if (canSeeCost)
-                                    Expanded(
-                                      child: Text(
-                                        'RD\$ $costText',
-                                        textAlign: TextAlign.end,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.labelMedium
-                                            ?.copyWith(
-                                              color: cs.error,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              return CatalogProductGridCard(
+                nombre: p.nombre,
+                priceText: priceText,
+                costText: costText,
+                canSeeCost: canSeeCost,
+                imageRaw: (p.imagenUrl ?? ''),
+                onTap: () => onAddProduct(p),
               );
             },
           ),

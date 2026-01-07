@@ -11,6 +11,7 @@ import { httpLogger } from './middleware/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { apiRouter } from './routes';
 import { webhooksRouter } from './modules/webhooks/webhooks.routes';
+import { runSqlMigrations } from './scripts/runSqlMigrations';
 
 const app = express();
 
@@ -82,9 +83,17 @@ app.use('/api', apiRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(env.PORT, () => {
+void (async () => {
+  await runSqlMigrations();
+
+  app.listen(env.PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`FULLTECH API listening on http://localhost:${env.PORT}`);
+    // eslint-disable-next-line no-console
+    console.log(`[ENV] PUBLIC_BASE_URL=${env.PUBLIC_BASE_URL}`);
+  });
+})().catch((error) => {
   // eslint-disable-next-line no-console
-  console.log(`FULLTECH API listening on http://localhost:${env.PORT}`);
-  // eslint-disable-next-line no-console
-  console.log(`[ENV] PUBLIC_BASE_URL=${env.PUBLIC_BASE_URL}`);
+  console.error('[BOOT] Fatal error:', error);
+  process.exit(1);
 });

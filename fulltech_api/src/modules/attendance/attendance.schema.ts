@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+const optionalNullableString = () =>
+  z.preprocess((v) => (v === null ? undefined : v), z.string().optional());
+
 // Keep compatibility with existing Flutter enums (IN/OUT/LUNCH_*)
 // and also accept CHECK_IN/CHECK_OUT aliases.
 export const attendanceTypeEnum = z.enum([
@@ -35,23 +38,23 @@ export const createAttendancePunchSchema = z
     locationAccuracy: z.number().positive().optional(),
     location_accuracy: z.number().positive().optional(),
 
-    locationProvider: z.string().optional(),
+    locationProvider: optionalNullableString(),
     location_provider: z.string().optional(),
 
-    addressText: z.string().optional(),
-    address_text: z.string().optional(),
+    addressText: optionalNullableString(),
+    address_text: optionalNullableString(),
 
     locationMissing: z.boolean().optional(),
     location_missing: z.boolean().optional(),
 
-    deviceId: z.string().optional(),
-    device_id: z.string().optional(),
+    deviceId: optionalNullableString(),
+    device_id: optionalNullableString(),
 
-    deviceName: z.string().optional(),
-    device_name: z.string().optional(),
+    deviceName: optionalNullableString(),
+    device_name: optionalNullableString(),
 
-    platform: z.string().optional(),
-    note: z.string().optional(),
+    platform: optionalNullableString(),
+    note: optionalNullableString(),
     syncStatus: syncStatusEnum.optional(),
     sync_status: syncStatusEnum.optional(),
   })
@@ -90,20 +93,20 @@ export const updateAttendancePunchSchema = z.object({
   locationAccuracy: z.number().positive().optional(),
   location_accuracy: z.number().positive().optional(),
 
-  locationProvider: z.string().optional(),
+  locationProvider: optionalNullableString(),
   location_provider: z.string().optional(),
 
-  addressText: z.string().optional(),
-  address_text: z.string().optional(),
+  addressText: optionalNullableString(),
+  address_text: optionalNullableString(),
 
-  deviceId: z.string().optional(),
-  device_id: z.string().optional(),
+  deviceId: optionalNullableString(),
+  device_id: optionalNullableString(),
 
-  deviceName: z.string().optional(),
-  device_name: z.string().optional(),
+  deviceName: optionalNullableString(),
+  device_name: optionalNullableString(),
 
-  platform: z.string().optional(),
-  note: z.string().optional(),
+  platform: optionalNullableString(),
+  note: optionalNullableString(),
   isManualEdit: z.boolean().optional(),
   is_manual_edit: z.boolean().optional(),
   syncStatus: syncStatusEnum.optional(),

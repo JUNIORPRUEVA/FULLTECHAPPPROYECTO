@@ -12,6 +12,7 @@ RUN apt-get update \
 # Install deps first (better layer caching)
 COPY package*.json ./
 COPY prisma ./prisma
+COPY sql ./sql
 RUN npm ci
 
 # Generate Prisma client (needed at runtime)
@@ -81,6 +82,7 @@ RUN npm ci --omit=dev
 COPY --from=build /app/node_modules/.prisma /app/node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma /app/node_modules/@prisma
 COPY --from=build /app/prisma /app/prisma
+COPY --from=build /app/sql /app/sql
 
 # App build output
 COPY --from=build /app/dist /app/dist

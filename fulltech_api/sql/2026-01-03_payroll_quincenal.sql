@@ -152,7 +152,7 @@ CREATE INDEX IF NOT EXISTS "payroll_periods_company_id_idx" ON "payroll_periods"
 CREATE INDEX IF NOT EXISTS "payroll_periods_year_month_idx" ON "payroll_periods"("year", "month");
 DO $$ BEGIN
   CREATE UNIQUE INDEX "payroll_periods_company_id_year_month_half_key" ON "payroll_periods"("company_id", "year", "month", "half");
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS "payroll_runs_company_id_idx" ON "payroll_runs"("company_id");
 CREATE INDEX IF NOT EXISTS "payroll_runs_period_id_idx" ON "payroll_runs"("period_id");
@@ -162,7 +162,7 @@ CREATE INDEX IF NOT EXISTS "payroll_employee_summaries_run_id_idx" ON "payroll_e
 CREATE INDEX IF NOT EXISTS "payroll_employee_summaries_employee_user_id_idx" ON "payroll_employee_summaries"("employee_user_id");
 DO $$ BEGIN
   CREATE UNIQUE INDEX "payroll_employee_summaries_run_id_employee_user_id_key" ON "payroll_employee_summaries"("run_id", "employee_user_id");
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS "payroll_line_items_employee_summary_id_idx" ON "payroll_line_items"("employee_summary_id");
 CREATE INDEX IF NOT EXISTS "payroll_line_items_concept_code_idx" ON "payroll_line_items"("concept_code");
@@ -181,7 +181,7 @@ CREATE INDEX IF NOT EXISTS "payroll_payslips_run_id_idx" ON "payroll_payslips"("
 CREATE INDEX IF NOT EXISTS "payroll_payslips_employee_user_id_idx" ON "payroll_payslips"("employee_user_id");
 DO $$ BEGIN
   CREATE UNIQUE INDEX "payroll_payslips_run_id_employee_user_id_key" ON "payroll_payslips"("run_id", "employee_user_id");
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+EXCEPTION WHEN duplicate_table OR duplicate_object THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS "audit_log_company_id_idx" ON "audit_log"("company_id");
 CREATE INDEX IF NOT EXISTS "audit_log_actor_user_id_idx" ON "audit_log"("actor_user_id");

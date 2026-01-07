@@ -3,9 +3,9 @@
 
 CREATE TABLE IF NOT EXISTS letters (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id uuid NOT NULL REFERENCES "Empresa"(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES "Usuario"(id) ON DELETE CASCADE,
-  quotation_id uuid NULL REFERENCES quotations(id) ON DELETE SET NULL,
+  company_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  quotation_id uuid NULL,
 
   customer_name text NOT NULL,
   customer_phone text NULL,
@@ -19,6 +19,36 @@ CREATE TABLE IF NOT EXISTS letters (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Foreign keys (best-effort)
+DO $$
+BEGIN
+  IF to_regclass('letters') IS NOT NULL THEN
+    IF to_regclass('"Empresa"') IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_letters_company') THEN
+        ALTER TABLE letters
+          ADD CONSTRAINT fk_letters_company
+          FOREIGN KEY (company_id) REFERENCES "Empresa"(id) ON DELETE CASCADE;
+      END IF;
+    END IF;
+
+    IF to_regclass('"Usuario"') IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_letters_user') THEN
+        ALTER TABLE letters
+          ADD CONSTRAINT fk_letters_user
+          FOREIGN KEY (user_id) REFERENCES "Usuario"(id) ON DELETE CASCADE;
+      END IF;
+    END IF;
+
+    IF to_regclass('quotations') IS NOT NULL THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_letters_quotation') THEN
+        ALTER TABLE letters
+          ADD CONSTRAINT fk_letters_quotation
+          FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE SET NULL;
+      END IF;
+    END IF;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS letters_company_id_idx ON letters(company_id);
 CREATE INDEX IF NOT EXISTS letters_user_id_idx ON letters(user_id);

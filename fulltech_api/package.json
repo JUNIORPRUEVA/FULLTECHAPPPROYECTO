@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "sql:migrate": "node -e \"require('./dist/scripts/runSqlMigrations').runSqlMigrations().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
     "create-pos-tables": "tsx scripts/create_pos_module_tables.ts",
     "reset-password": "tsx scripts/reset_user_password.ts",
     "create-crm-tables": "tsx scripts/create_crm_whatsapp_tables.ts",
@@ -33,6 +34,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
     "pdfkit": "^0.17.2",
+    "pg": "^8.13.1",
     "puppeteer": "^23.11.1",
     "zod": "^3.23.8"
   },
@@ -45,6 +47,7 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^20.14.10",
     "@types/pdfkit": "^0.17.4",
+    "@types/pg": "^8.11.11",
     "prisma": "^5.20.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3"
