@@ -6,6 +6,10 @@ import { signToken } from '../../services/jwt';
 import { loginSchema, registerSchema } from './auth.schema';
 import { env } from '../../config/env';
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
 export async function register(req: Request, res: Response) {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -74,18 +78,28 @@ export async function login(req: Request, res: Response) {
   const { email, password } = parsed.data;
   const identifier = String(email ?? '').trim();
 
+  const orWhere: any[] = [
+    {
+      email: {
+        equals: identifier,
+        mode: 'insensitive',
+      },
+    },
+  ];
+
+  // Optional: allow login by phone if user types it.
+  if (identifier) {
+    orWhere.push({ telefono: { equals: identifier } });
+  }
+
+  // Only attempt UUID match when it's actually a UUID.
+  if (isUuid(identifier)) {
+    orWhere.push({ id: identifier });
+  }
+
   const user = await prisma.usuario.findFirst({
     where: {
-      OR: [
-        {
-          email: {
-            equals: identifier,
-            mode: 'insensitive',
-          },
-        },
-        { telefono: { equals: identifier } },
-        { id: identifier },
-      ],
+      OR: orWhere,
     },
   });
 
