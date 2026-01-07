@@ -452,7 +452,6 @@ async function processWebhookEvent(body: any, eventId: string | null) {
         last_message_preview: preview,
         last_message_at: createdAt,
         unread_count: direction === 'in' ? 1 : 0,
-        // Default bucket for new inbound/outbound conversations.
         status: 'primer_contacto',
         empresa: {
           connect: { id: env.DEFAULT_EMPRESA_ID },
@@ -466,6 +465,15 @@ async function processWebhookEvent(body: any, eventId: string | null) {
         ...(direction === 'in' ? { unread_count: { increment: 1 } } : null),
       },
     });
+
+    // Ensure empresa_id is set - fetch and update if NULL
+    if (!chat.empresa_id) {
+      await tx.crmChat.update({
+        where: { id: chat.id },
+        data: { empresa_id: env.DEFAULT_EMPRESA_ID },
+      });
+      chat.empresa_id = env.DEFAULT_EMPRESA_ID;
+    }
 
     const message = await tx.crmChatMessage.create({
       data: {
