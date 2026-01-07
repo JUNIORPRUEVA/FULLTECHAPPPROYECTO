@@ -692,6 +692,8 @@ model PosSupplier {
   address    String?
   created_at DateTime @default(now())
 
+  productos  Producto[]
+
   @@index([empresa_id])
   @@map("pos_suppliers")
 }
