@@ -21,8 +21,8 @@ class ApiClient {
     final dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 20),
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 40),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -116,27 +116,31 @@ class ApiClient {
             }
           }
 
-          // Handle 401 (token invalidated) and 403 (access revoked) errors.
+          // Handle 401 (token invalidated) errors.
           // IMPORTANT: Only force logout when the request was authenticated.
-          // Some endpoints may respond 401/403 for anonymous requests; we should not
+          // Some endpoints may respond 401 for anonymous requests; we should not
           // wipe the session in that case (it causes an immediate "bounce back" after login).
           final status = error.response?.statusCode;
-          if (status == 401 || status == 403) {
+          if (status == 401) {
             final authHeader = error.requestOptions.headers['Authorization'];
             final hadAuthHeader = authHeader != null && authHeader.toString().trim().isNotEmpty;
 
+            final detail =
+              '$status ${error.requestOptions.method} ${error.requestOptions.path} hadAuthHeader=$hadAuthHeader baseUrl=${dio.options.baseUrl}';
+
             if (kDebugMode) {
               debugPrint(
-                '[AUTH][HTTP] $status ${error.requestOptions.method} ${error.requestOptions.path} hadAuthHeader=$hadAuthHeader baseUrl=${dio.options.baseUrl}',
+                '[AUTH][HTTP] $detail',
               );
             }
 
             if (hadAuthHeader) {
               // Clear local session and data
+              if (kDebugMode) debugPrint('[AUTH] clearing local session due to $detail');
               await db.clearSession();
 
               // Notify app layers (router/state) to force logout.
-              AuthEvents.unauthorized(status);
+              AuthEvents.unauthorized(status, detail);
             }
           }
 

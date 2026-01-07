@@ -172,6 +172,25 @@ class CatalogApi {
     }
   }
 
+  Future<void> deleteUploadedProductImageByUrl(String imageUrl) async {
+    final raw = imageUrl.trim();
+    if (raw.isEmpty) return;
+
+    // We only manage product uploads in this endpoint.
+    final uri = Uri.tryParse(raw);
+    final path = uri?.path ?? raw;
+    if (!path.contains('/uploads/products/')) return;
+
+    final file = path.split('/').where((s) => s.isNotEmpty).last;
+    if (file.trim().isEmpty) return;
+
+    try {
+      await _dio.delete('/uploads/products/$file');
+    } catch (e) {
+      // Best-effort cleanup: do not break existing flows if delete fails.
+    }
+  }
+
   Future<void> incrementSearch(String id) async {
     try {
       await _dio.post('/catalog/products/$id/increment-search');

@@ -9,6 +9,7 @@ import '../../../../core/widgets/adaptive_image.dart';
 import '../../../../core/utils/launch_uri.dart';
 
 import '../../data/models/crm_message.dart';
+import '../../services/crm_image_cache.dart';
 
 class MessageBubble extends StatelessWidget {
   final CrmMessage message;
@@ -577,47 +578,58 @@ class _ImageThumb extends StatelessWidget {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: () {
-            showDialog<void>(
-              context: context,
-              builder: (context) {
-                return Dialog(
-                  child: InteractiveViewer(
-                    child: adaptiveImage(
-                      url,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stack) {
-                        return fallback(error);
-                      },
-                    ),
-                  ),
+    return FutureBuilder<String?>(
+      future: CrmImageCache.instance.getOrFetchLocalPath(url),
+      builder: (context, snap) {
+        final resolved = (snap.data ?? '').trim();
+        final source = resolved.isNotEmpty ? resolved : url;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: () {
+                showDialog<void>(
+                  context: context,
+                  builder: (context) {
+                    return Dialog(
+                      child: InteractiveViewer(
+                        child: adaptiveImage(
+                          source,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stack) {
+                            return fallback(error);
+                          },
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
-            );
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 260, maxHeight: 220),
-              child: adaptiveImage(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stack) {
-                  return fallback(error);
-                },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 260,
+                    maxHeight: 220,
+                  ),
+                  child: adaptiveImage(
+                    source,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) {
+                      return fallback(error);
+                    },
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        if (showUrl) ...[
-          const SizedBox(height: 6),
-          SelectableText(url, style: labelStyle),
-        ],
-      ],
+            if (showUrl) ...[
+              const SizedBox(height: 6),
+              SelectableText(url, style: labelStyle),
+            ],
+          ],
+        );
+      },
     );
   }
 }

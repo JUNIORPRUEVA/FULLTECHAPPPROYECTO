@@ -5,6 +5,17 @@ import '../../state/crm_providers.dart';
 import '../../../catalogo/models/producto.dart';
 import '../../../catalogo/models/categoria_producto.dart';
 import '../../../catalogo/state/catalog_providers.dart';
+import '../../../../core/services/app_config.dart';
+
+String? _resolvePublicUrl(String? url) {
+  if (url == null) return null;
+  final trimmed = url.trim();
+  if (trimmed.isEmpty) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  final base = AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+  if (trimmed.startsWith('/')) return '$base$trimmed';
+  return '$base/$trimmed';
+}
 
 class RightPanelCrm extends ConsumerStatefulWidget {
   final String threadId;
@@ -14,15 +25,12 @@ class RightPanelCrm extends ConsumerStatefulWidget {
   @override
   ConsumerState<RightPanelCrm> createState() => _RightPanelCrmState();
 }
-
 class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
   final _noteCtrl = TextEditingController();
-  final _assignedCtrl = TextEditingController();
 
   @override
   void dispose() {
     _noteCtrl.dispose();
-    _assignedCtrl.dispose();
     super.dispose();
   }
 
@@ -40,8 +48,6 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
 
     final nextNote = thread.internalNote ?? '';
     if (_noteCtrl.text != nextNote) _noteCtrl.text = nextNote;
-    final nextAssigned = thread.assignedUserId ?? '';
-    if (_assignedCtrl.text != nextAssigned) _assignedCtrl.text = nextAssigned;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -61,7 +67,6 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
                 child: _ActionsSection(
                   thread: thread,
                   noteCtrl: _noteCtrl,
-                  assignedCtrl: _assignedCtrl,
                   onSave: (patch) async {
                     try {
                       await ref
@@ -98,6 +103,7 @@ class _ProductChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final resolvedImage = _resolvePublicUrl(product.imagenUrl);
 
     return Chip(
       visualDensity: VisualDensity.compact,
@@ -110,10 +116,8 @@ class _ProductChip extends StatelessWidget {
           CircleAvatar(
             radius: 12,
             backgroundColor: theme.colorScheme.onPrimary,
-            backgroundImage: product.imagenUrl.trim().isEmpty
-                ? null
-                : NetworkImage(product.imagenUrl),
-            child: product.imagenUrl.trim().isEmpty
+            backgroundImage: resolvedImage == null ? null : NetworkImage(resolvedImage),
+            child: resolvedImage == null
                 ? Icon(
                     Icons.inventory_2,
                     size: 14,
@@ -142,13 +146,11 @@ class _ProductChip extends StatelessWidget {
 class _ActionsSection extends ConsumerWidget {
   final CrmThread thread;
   final TextEditingController noteCtrl;
-  final TextEditingController assignedCtrl;
   final Future<void> Function(Map<String, dynamic> patch) onSave;
 
   const _ActionsSection({
     required this.thread,
     required this.noteCtrl,
-    required this.assignedCtrl,
     required this.onSave,
   });
 
@@ -158,6 +160,89 @@ class _ActionsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final productsAsync = ref.watch(crmProductsProvider);
+
+    Future<String?> promptImportantNote({required String initialValue}) async {
+      final ctrl = TextEditingController(text: initialValue);
+      String? error;
+
+      final res = await showDialog<String?>(
+        context: context,
+        builder: (dialogCtx) {
+          final cs = Theme.of(dialogCtx).colorScheme;
+          return StatefulBuilder(
+            builder: (dialogCtx, setDialogState) {
+              final v = ctrl.text.trim();
+              final canSave = v.isNotEmpty;
+
+              return AlertDialog(
+                title: const Text('Marcar como importante'),
+                content: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Agrega una nota obligatoria para marcar esta conversación como importante.',
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: ctrl,
+                        autofocus: true,
+                        minLines: 2,
+                        maxLines: 4,
+                        decoration: InputDecoration(
+                          labelText: 'Nota',
+                          hintText: 'Ej: Cliente VIP, llamar hoy, urgencia…',
+                          errorText: error,
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: (_) {
+                          if (error != null) {
+                            setDialogState(() => error = null);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogCtx).pop(null),
+                    child: const Text('Cancelar'),
+                  ),
+                  FilledButton(
+                    onPressed: canSave
+                        ? () {
+                            final note = ctrl.text.trim();
+                            if (note.isEmpty) {
+                              setDialogState(
+                                () => error = 'La nota es obligatoria.',
+                              );
+                              return;
+                            }
+                            Navigator.of(dialogCtx).pop(note);
+                          }
+                        : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
+                    ),
+                    child: const Text('Guardar'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      ctrl.dispose();
+      return res;
+    }
 
     Producto? product;
     productsAsync.whenData((items) {
@@ -197,6 +282,105 @@ class _ActionsSection extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 10),
+
+        // Switches (arriba): Importante + Seguimiento
+        Row(
+          children: [
+            Expanded(
+              child: SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: thread.important,
+                onChanged: (newVal) async {
+                  if (newVal) {
+                    final note = await promptImportantNote(
+                      initialValue: noteCtrl.text,
+                    );
+                    if (note == null) return;
+                    noteCtrl.text = note;
+                    await onSave({'important': true, 'internal_note': note});
+                    return;
+                  }
+
+                  await onSave({'important': false});
+                },
+                title: Text(
+                  'Importante',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  thread.important ? '⭐ Marcado' : 'No',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: thread.followUp,
+                onChanged: (newVal) async {
+                  await onSave({'follow_up': newVal});
+                },
+                title: Text(
+                  'Seguimiento',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  thread.followUp ? 'Activo' : 'No',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        if (thread.important) ...[
+          const SizedBox(height: 6),
+          TextField(
+            controller: noteCtrl,
+            minLines: 2,
+            maxLines: 4,
+            decoration: InputDecoration(
+              labelText: 'Nota (Importante)',
+              hintText: 'Nota obligatoria…',
+              isDense: true,
+              contentPadding: const EdgeInsets.all(8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onSubmitted: (_) async {
+              final v = noteCtrl.text.trim();
+              if (v.isEmpty) return;
+              await onSave({'internal_note': v});
+            },
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: () async {
+                final v = noteCtrl.text.trim();
+                if (v.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('La nota es obligatoria.'),
+                    ),
+                  );
+                  return;
+                }
+                await onSave({'internal_note': v});
+              },
+              icon: const Icon(Icons.save, size: 16),
+              label: const Text('Guardar nota'),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
 
         // Producto interesado (si existe)
         if (product != null)
@@ -330,12 +514,27 @@ class _ActionsSection extends ConsumerWidget {
                           radius: 12,
                           backgroundColor:
                               theme.colorScheme.surfaceContainerHighest,
-                          backgroundImage: p.imagenUrl.trim().isEmpty
-                              ? null
-                              : NetworkImage(p.imagenUrl),
-                          child: p.imagenUrl.trim().isEmpty
-                              ? const Icon(Icons.inventory_2, size: 14)
-                              : null,
+                          child: () {
+                            final url = _resolvePublicUrl(p.imagenUrl);
+                            if (url == null) {
+                              return const Icon(Icons.inventory_2, size: 14);
+                            }
+
+                            return ClipOval(
+                              child: Image.network(
+                                url,
+                                width: 24,
+                                height: 24,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(
+                                    Icons.inventory_2,
+                                    size: 14,
+                                  );
+                                },
+                              ),
+                            );
+                          }(),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -383,100 +582,6 @@ class _ActionsSection extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 12),
-
-        // Divider
-        Divider(color: theme.colorScheme.outlineVariant),
-        const SizedBox(height: 10),
-
-        // Collaboration + Importante (misma línea)
-        Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Asignar a', style: theme.textTheme.labelSmall),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: assignedCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'UUID usuario',
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      suffixIcon: IconButton(
-                        tooltip: 'Guardar',
-                        onPressed: () async {
-                          final v = assignedCtrl.text.trim();
-                          await onSave({
-                            'assigned_user_id': v.isEmpty ? null : v,
-                          });
-                        },
-                        icon: const Icon(Icons.check, size: 18),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Importante', style: theme.textTheme.labelSmall),
-                  const SizedBox(height: 4),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    value: thread.important,
-                    onChanged: (newVal) async {
-                      await onSave({'important': newVal});
-                    },
-                    title: Text(
-                      thread.important ? '⭐ Sí' : 'No',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-
-        // Nota interna (siempre visible, opcional)
-        TextField(
-          controller: noteCtrl,
-          minLines: 2,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'Nota interna',
-            hintText: 'Escribe una nota…',
-            isDense: true,
-            contentPadding: const EdgeInsets.all(8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            onPressed: () async {
-              await onSave({'internal_note': noteCtrl.text.trim()});
-            },
-            icon: const Icon(Icons.save, size: 16),
-            label: const Text('Guardar nota'),
-          ),
-        ),
       ],
     );
   }

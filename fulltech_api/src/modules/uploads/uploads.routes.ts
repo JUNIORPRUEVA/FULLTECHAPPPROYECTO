@@ -3,6 +3,7 @@ import expressAsyncHandler from 'express-async-handler';
 import { authMiddleware } from '../../middleware/auth';
 import { requireRole } from '../../middleware/requireRole';
 import {
+  deleteProductImage,
   postUploadSalesEvidence,
   postUploadOperationsMedia,
   postUploadProductImage,
@@ -24,6 +25,13 @@ uploadsRouter.post(
   requireRole(['admin', 'administrador']),
   uploadProductImage,
   expressAsyncHandler(postUploadProductImage),
+);
+
+// Delete a previously uploaded product image (best-effort cleanup)
+uploadsRouter.delete(
+  '/products/:file',
+  requireRole(['admin', 'administrador']),
+  expressAsyncHandler(deleteProductImage),
 );
 
 // Subida de documentos de usuarios/personal

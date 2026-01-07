@@ -4,8 +4,10 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 
+import { resolveUploadsRoot } from '../../services/uploadsRoot';
+
 // Configurar multer
-const uploadsDir = path.join(process.cwd(), 'uploads', 'users');
+const uploadsDir = path.join(resolveUploadsRoot(), 'users');
 
 // Crear directorio si no existe
 if (!fs.existsSync(uploadsDir)) {

@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,8 @@ import 'features/auth/state/auth_providers.dart';
 import 'features/auth/state/auth_state.dart';
 import 'core/services/app_config.dart';
 import 'core/state/api_endpoint_settings_provider.dart';
+
+import 'features/crm/services/crm_image_cache.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,7 +55,7 @@ Future<void> main() async {
   await db.init();
 
   // Apply API endpoint overrides only when the persisted session is admin.
-  // This keeps the login screen stable (cloud) for non-admins.
+  // In debug builds, allow selecting cloud/local consistently even before login.
   ApiEndpointSettings? savedSettings;
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -62,13 +65,15 @@ Future<void> main() async {
   }
 
   try {
-    final session = await db.readSession();
-    final role = session?.user.role;
-    final isAdmin = role == 'admin' || role == 'administrador';
-    if (kDebugMode && isAdmin && savedSettings != null) {
+    await db.readSession();
+    // If there is a saved session, we still apply endpoint settings in debug
+    // to keep behavior consistent between login and authenticated flows.
+    if (kDebugMode && savedSettings != null) {
+      // Apply saved settings in debug so login+post-login are consistent.
+      // This prevents "login succeeds then immediately logs out" when the app
+      // switches backend after authentication.
       applyApiEndpointSettings(savedSettings);
     } else {
-      // Force cloud defaults for unauthenticated/non-admin usage.
       AppConfig.setRuntimeApiBaseUrlOverride(null);
       AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
     }
@@ -76,6 +81,10 @@ Future<void> main() async {
     AppConfig.setRuntimeApiBaseUrlOverride(null);
     AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
   }
+
+  // CRM media cache cleanup (7-day TTL). Best-effort and non-blocking.
+  CrmImageCache.instance.startMaintenance();
+  unawaited(CrmImageCache.instance.cleanupExpired());
 
   runApp(
     ProviderScope(
@@ -109,21 +118,10 @@ class _BootstrapperState extends ConsumerState<_Bootstrapper> {
       return;
     }
 
-    if (auth is AuthAuthenticated) {
-      final role = auth.user.role;
-      final isAdmin = role == 'admin' || role == 'administrador';
-      if (isAdmin) {
-        applyApiEndpointSettings(settings);
-      } else {
-        AppConfig.setRuntimeApiBaseUrlOverride(null);
-        AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
-      }
-      return;
-    }
-
-    // Unauthenticated: keep stable cloud defaults.
-    AppConfig.setRuntimeApiBaseUrlOverride(null);
-    AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
+    // In debug builds, allow endpoint settings for everyone so the login screen
+    // and authenticated flows use the same backend.
+    // (In release builds, local overrides are always disabled.)
+    applyApiEndpointSettings(settings);
   }
 
   @override

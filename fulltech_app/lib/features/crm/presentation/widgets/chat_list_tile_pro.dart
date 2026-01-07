@@ -2,6 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/crm_thread.dart';
 import '../../../catalogo/models/producto.dart';
+import '../../../../core/services/app_config.dart';
+
+String? _resolvePublicUrl(String? url) {
+  if (url == null) return null;
+  final trimmed = url.trim();
+  if (trimmed.isEmpty) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  final base = AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
+  if (trimmed.startsWith('/')) return '$base$trimmed';
+  return '$base/$trimmed';
+}
 
 class ChatListTilePro extends StatelessWidget {
   final CrmThread thread;
@@ -122,12 +133,27 @@ class ChatListTilePro extends StatelessWidget {
                           visualDensity: VisualDensity.compact,
                           avatar: CircleAvatar(
                             radius: 10,
-                            backgroundImage: product!.imagenUrl.trim().isEmpty
-                                ? null
-                                : NetworkImage(product!.imagenUrl),
-                            child: product!.imagenUrl.trim().isEmpty
-                                ? const Icon(Icons.inventory_2, size: 14)
-                                : null,
+                            child: () {
+                              final url = _resolvePublicUrl(product!.imagenUrl);
+                              if (url == null) {
+                                return const Icon(Icons.inventory_2, size: 14);
+                              }
+
+                              return ClipOval(
+                                child: Image.network(
+                                  url,
+                                  width: 20,
+                                  height: 20,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Icon(
+                                      Icons.inventory_2,
+                                      size: 14,
+                                    );
+                                  },
+                                ),
+                              );
+                            }(),
                           ),
                           label: Text(
                             product!.nombre,

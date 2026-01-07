@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit';
 import type PDFKit from 'pdfkit';
 
 import { env } from '../../config/env';
+import { resolveUploadsRoot } from '../../services/uploadsRoot';
 
 function sectionTitle(doc: PDFKit.PDFDocument, title: string) {
   doc.moveDown(0.8);
@@ -126,7 +127,7 @@ export async function savePayslipPdfToUploads({
   employeeUserId: string;
   pdf: Buffer;
 }) {
-  const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+  const uploadsRoot = resolveUploadsRoot();
   const relDir = path.join('payroll', 'payslips', runId);
   const dir = path.join(uploadsRoot, relDir);
   await fs.mkdir(dir, { recursive: true });

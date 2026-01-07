@@ -3,7 +3,9 @@ import crypto from 'crypto';
 import multer from 'multer';
 import { ApiError } from '../../middleware/errorHandler';
 
-const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+import { resolveUploadsRoot } from '../../services/uploadsRoot';
+
+const uploadsRoot = resolveUploadsRoot();
 const companyDir = path.join(uploadsRoot, 'company');
 
 function ensureSafeImage(file: Express.Multer.File) {

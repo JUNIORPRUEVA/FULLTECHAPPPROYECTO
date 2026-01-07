@@ -309,6 +309,15 @@ class CatalogController extends StateNotifier<CatalogState> {
     required String categoriaId,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
+    final cachedAllBefore = await _readCachedProductos();
+    final previousImageUrl = cachedAllBefore
+        .where((p) => p.id == id)
+        .map((p) => p.imagenUrl)
+        .cast<String?>()
+        .firstWhere(
+          (v) => v != null,
+          orElse: () => null,
+        );
     try {
       final producto = await _api.updateProducto(
         id: id,
@@ -318,6 +327,18 @@ class CatalogController extends StateNotifier<CatalogState> {
         imagenUrl: imagenUrl,
         categoriaId: categoriaId,
       );
+
+      // Best-effort cleanup: if image changed, delete the previous uploaded product image.
+      if (previousImageUrl != null && previousImageUrl.trim().isNotEmpty) {
+        final prev = previousImageUrl.trim();
+        final next = imagenUrl.trim();
+        if (prev != next) {
+          try {
+            await _api.deleteUploadedProductImageByUrl(prev);
+          } catch (_) {}
+        }
+      }
+
       state = state.copyWith(isLoading: false, error: null);
       await loadProductos();
       return producto;
@@ -383,6 +404,19 @@ class CatalogController extends StateNotifier<CatalogState> {
   Future<bool> deleteProducto(String id) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      // Best-effort cleanup: delete uploaded image before removing the record.
+      try {
+        final cachedAll = await _readCachedProductos();
+        final imageUrl = cachedAll
+            .where((p) => p.id == id)
+            .map((p) => p.imagenUrl)
+            .cast<String?>()
+            .firstWhere((v) => v != null, orElse: () => null);
+        if (imageUrl != null && imageUrl.trim().isNotEmpty) {
+          await _api.deleteUploadedProductImageByUrl(imageUrl);
+        }
+      } catch (_) {}
+
       await _api.deleteProducto(id);
       state = state.copyWith(isLoading: false, error: null);
       await loadProductos();

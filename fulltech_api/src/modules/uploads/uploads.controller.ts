@@ -2,9 +2,12 @@ import type { Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import multer from 'multer';
+import fs from 'fs/promises';
 import { ApiError } from '../../middleware/errorHandler';
 
-const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+import { resolveUploadsRoot } from '../../services/uploadsRoot';
+
+const uploadsRoot = resolveUploadsRoot();
 const productsDir = path.join(uploadsRoot, 'products');
 const usersDir = path.join(uploadsRoot, 'users');
 const salesDir = path.join(uploadsRoot, 'sales');
@@ -80,6 +83,26 @@ export async function postUploadProductImage(req: Request, res: Response) {
   const urlPath = `/uploads/products/${file.filename}`;
 
   res.status(201).json({ url: urlPath });
+}
+
+export async function deleteProductImage(req: Request, res: Response) {
+  const raw = String(req.params.file ?? '').trim();
+  const file = path.basename(raw);
+  if (!file || file === '.' || file === '..') {
+    throw new ApiError(400, 'Invalid filename');
+  }
+
+  const abs = path.join(productsDir, file);
+  try {
+    await fs.unlink(abs);
+  } catch (e: any) {
+    // If already missing, treat as no-op.
+    if (e?.code !== 'ENOENT') {
+      throw e;
+    }
+  }
+
+  res.status(204).send();
 }
 
 // --- Users docs upload ---
