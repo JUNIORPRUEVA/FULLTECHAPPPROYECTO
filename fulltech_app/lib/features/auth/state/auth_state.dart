@@ -8,6 +8,11 @@ class AuthUnknown extends AuthState {
   const AuthUnknown();
 }
 
+class AuthValidating extends AuthState {
+  final AppUser user;
+  const AuthValidating({required this.user});
+}
+
 class AuthUnauthenticated extends AuthState {
   const AuthUnauthenticated();
 }

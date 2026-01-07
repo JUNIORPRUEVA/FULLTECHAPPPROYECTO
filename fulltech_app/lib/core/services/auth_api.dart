@@ -42,4 +42,16 @@ class AuthApi {
       user: AppUser.fromJson(data['user'] as Map<String, dynamic>),
     );
   }
+
+  Future<AppUser> me() async {
+    final res = await _dio.get('/auth/me', options: Options(extra: const {
+      // Avoid offline caches/queues and avoid spamming unauthorized events during bootstrap validation.
+      'offlineCache': false,
+      'offlineQueue': false,
+      'suppressUnauthorizedEvent': true,
+    }));
+
+    final data = res.data as Map<String, dynamic>;
+    return AppUser.fromJson(data['user'] as Map<String, dynamic>);
+  }
 }

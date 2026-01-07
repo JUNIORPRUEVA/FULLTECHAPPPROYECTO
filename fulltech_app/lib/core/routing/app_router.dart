@@ -76,7 +76,7 @@ GoRouter createRouter(Ref ref) {
     final auth = ref.read(authControllerProvider);
     final isLoggingIn = state.matchedLocation == AppRoutes.login;
 
-    if (auth is AuthUnknown) return null; // waiting bootstrap
+    if (auth is AuthUnknown || auth is AuthValidating) return null; // waiting bootstrap/validation
 
     final isAuthed = auth is AuthAuthenticated;
     if (!isAuthed && !isLoggingIn) return AppRoutes.login;

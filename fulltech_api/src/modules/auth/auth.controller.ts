@@ -135,3 +135,36 @@ export async function login(req: Request, res: Response) {
     },
   });
 }
+
+export async function me(req: Request, res: Response) {
+  // authMiddleware guarantees req.user exists and the token is valid.
+  const userId = (req.user as any)?.userId as string | undefined;
+  if (!userId) {
+    throw new ApiError(401, 'Unauthorized');
+  }
+
+  const user = await prisma.usuario.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      empresa_id: true,
+      email: true,
+      nombre_completo: true,
+      rol: true,
+    },
+  });
+
+  if (!user) {
+    throw new ApiError(401, 'User not found');
+  }
+
+  res.json({
+    user: {
+      id: user.id,
+      empresa_id: user.empresa_id,
+      email: user.email,
+      name: user.nombre_completo,
+      role: user.rol,
+    },
+  });
+}
