@@ -84,20 +84,11 @@ class AuthController extends StateNotifier<AuthState> {
       }
 
       if (kDebugMode) {
-        debugPrint('[AUTH] bootstrap: validation error $e');
+        debugPrint('[AUTH] bootstrap: validation error $e, preserving session');
       }
-      // Conservative fallback: keep session but do not mark authenticated.
-      state = const AuthUnauthenticated();
-    }
-    try {
-      final me = await _api.me();
-      state = AuthAuthenticated(token: session.token, user: me);
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[AUTH] bootstrap: token invalid, clearing session. err=$e');
-      }
-      await _db.clearSession();
-      state = const AuthUnauthenticated();
+      // Keep session and mark as authenticated for offline mode.
+      // The session will be re-validated on the next successful request.
+      state = AuthAuthenticated(token: session.token, user: session.user);
     }
   }
 
