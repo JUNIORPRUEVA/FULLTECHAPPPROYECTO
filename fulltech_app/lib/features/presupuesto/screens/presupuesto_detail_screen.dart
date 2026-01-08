@@ -333,16 +333,6 @@ class _CatalogPane extends ConsumerWidget {
     required this.onOpenCrearCartas,
   });
 
-  String _publicUrlFromMaybeRelative(String raw) {
-    final v = raw.trim();
-    if (v.isEmpty) return '';
-    if (v.startsWith('http://') || v.startsWith('https://')) return v;
-
-    final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api$'), '');
-    if (v.startsWith('/')) return '$base$v';
-    return '$base/$v';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(presupuestoCatalogControllerProvider);

@@ -53,7 +53,6 @@ class _AutoSyncState extends ConsumerState<AutoSync>
   // Keep sync gentle: aggressive loops can feel like a freeze on desktop
   // when local caches/queues grow large.
   static const _minInterval = Duration(seconds: 10);
-  static const _periodicInterval = Duration(minutes: 2);
   static const _retryErroredMinAge = Duration(seconds: 30);
 
   @override

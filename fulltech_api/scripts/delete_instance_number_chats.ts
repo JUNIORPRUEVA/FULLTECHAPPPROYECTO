@@ -85,11 +85,12 @@ async function main() {
       });
 
       // Then delete chat metadata if exists
-      await prisma.crmChatMeta.deleteMany({
-        where: { chat_id: chat.id },
-      }).catch(() => {
-        // Ignore if table doesn't exist
-      });
+      // Note: crmChatMeta table may not exist in schema
+      // await prisma.crmChatMeta.deleteMany({
+      //   where: { chat_id: chat.id },
+      // }).catch(() => {
+      //   // Ignore if table doesn't exist
+      // });
 
       // Finally delete the chat
       await prisma.crmChat.delete({

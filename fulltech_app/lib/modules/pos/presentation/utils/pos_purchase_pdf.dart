@@ -45,7 +45,7 @@ Future<Uint8List> buildPurchaseOrderPdf({
       margin: const pw.EdgeInsets.all(24),
       build: (context) {
         return [
-          if (company != null) _companyHeader(company: company!, logo: logo),
+          if (company != null) _companyHeader(company: company, logo: logo),
           if (company != null) pw.SizedBox(height: 12),
 
           pw.Text(
@@ -82,7 +82,10 @@ Future<Uint8List> buildPurchaseOrderPdf({
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
             cellAlignment: pw.Alignment.centerLeft,
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            cellPadding: const pw.EdgeInsets.symmetric(
+              horizontal: 6,
+              vertical: 6,
+            ),
             columnWidths: {
               0: const pw.FlexColumnWidth(6),
               1: const pw.FlexColumnWidth(2),
@@ -120,8 +123,10 @@ pw.Widget _companyHeader({
   if (company.direccion.trim().isNotEmpty) lines.add(company.direccion.trim());
 
   final contact = <String>[];
-  if (company.telefono.trim().isNotEmpty) contact.add('Tel: ${company.telefono.trim()}');
-  if (company.rnc != null && company.rnc!.trim().isNotEmpty) contact.add('RNC: ${company.rnc!.trim()}');
+  if (company.telefono.trim().isNotEmpty)
+    contact.add('Tel: ${company.telefono.trim()}');
+  if (company.rnc != null && company.rnc!.trim().isNotEmpty)
+    contact.add('RNC: ${company.rnc!.trim()}');
   if (contact.isNotEmpty) lines.add(contact.join('  |  '));
 
   if (company.email != null && company.email!.trim().isNotEmpty) {
@@ -151,14 +156,14 @@ pw.Widget _companyHeader({
             children: [
               pw.Text(
                 company.nombreEmpresa,
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
               ),
               pw.SizedBox(height: 3),
               for (final l in lines)
-                pw.Text(
-                  l,
-                  style: const pw.TextStyle(fontSize: 9),
-                ),
+                pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
             ],
           ),
         ),
@@ -168,7 +173,9 @@ pw.Widget _companyHeader({
 }
 
 pw.Widget _totalRow(String label, String value, {bool isBold = false}) {
-  final style = pw.TextStyle(fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal);
+  final style = pw.TextStyle(
+    fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+  );
   return pw.Padding(
     padding: const pw.EdgeInsets.symmetric(vertical: 4),
     child: pw.Row(

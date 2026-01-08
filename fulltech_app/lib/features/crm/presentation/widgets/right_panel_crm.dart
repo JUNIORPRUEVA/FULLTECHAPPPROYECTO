@@ -109,56 +109,7 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
   }
 }
 
-class _ProductChip extends StatelessWidget {
-  final Producto product;
-
-  const _ProductChip({required this.product});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final resolvedImage = _resolvePublicUrl(product.imagenUrl);
-
-    return Chip(
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      side: BorderSide(color: theme.colorScheme.primary),
-      backgroundColor: theme.colorScheme.primary,
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 12,
-            backgroundColor: theme.colorScheme.onPrimary,
-            backgroundImage: resolvedImage == null
-                ? null
-                : NetworkImage(resolvedImage),
-            child: resolvedImage == null
-                ? Icon(
-                    Icons.inventory_2,
-                    size: 14,
-                    color: theme.colorScheme.primary,
-                  )
-                : null,
-          ),
-          const SizedBox(width: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(
-              '${product.nombre} · ${_money(product.precioVenta)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: theme.colorScheme.onPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _money(double v) => '\$${v.toStringAsFixed(2)}';
-}
-
+// Product actions section
 class _ActionsSection extends ConsumerWidget {
   final CrmThread thread;
   final TextEditingController noteCtrl;
@@ -259,14 +210,6 @@ class _ActionsSection extends ConsumerWidget {
       ctrl.dispose();
       return res;
     }
-
-    Producto? product;
-    productsAsync.whenData((items) {
-      product = items
-          .where((p) => p.id == thread.productId)
-          .cast<Producto?>()
-          .firstOrNull;
-    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -572,28 +515,6 @@ class _ActionsSection extends ConsumerWidget {
         const SizedBox(height: 12),
       ],
     );
-  }
-
-  static String _statusLabel(String raw) {
-    final v = raw.trim().toLowerCase();
-    switch (v) {
-      case 'pendiente':
-        return 'Pendiente';
-      case 'interesado':
-        return 'Interesado';
-      case 'reserva':
-        return 'Reserva';
-      case 'compro':
-        return 'Compró';
-      case 'no_interesado':
-        return 'No interesado';
-      case 'activo':
-        return 'Activo';
-      default:
-        final s = v.replaceAll('_', ' ');
-        if (s.isEmpty) return '—';
-        return '${s[0].toUpperCase()}${s.substring(1)}';
-    }
   }
 }
 

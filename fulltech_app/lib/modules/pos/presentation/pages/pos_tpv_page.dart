@@ -81,7 +81,9 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
                     onOpenDevoluciones: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Devoluciones: pendiente de implementación'),
+                          content: Text(
+                            'Devoluciones: pendiente de implementación',
+                          ),
                         ),
                       );
                     },
@@ -148,7 +150,9 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
                   onOpenDevoluciones: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Devoluciones: pendiente de implementación'),
+                        content: Text(
+                          'Devoluciones: pendiente de implementación',
+                        ),
                       ),
                     );
                   },
@@ -310,7 +314,9 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
       if (sale == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Venta guardada offline. Se sincronizará al volver internet.'),
+            content: Text(
+              'Venta guardada offline. Se sincronizará al volver internet.',
+            ),
           ),
         );
         return;
@@ -333,7 +339,9 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
     final sale = state.lastPaidSale;
     if (sale == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay un ticket reciente para imprimir')),
+        const SnackBar(
+          content: Text('No hay un ticket reciente para imprimir'),
+        ),
       );
       return;
     }
@@ -346,9 +354,9 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo imprimir: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo imprimir: $e')));
     }
   }
 
@@ -390,15 +398,6 @@ class _PosCatalogPane extends ConsumerWidget {
     required this.onOpenDevoluciones,
     required this.onPrintLastTicket,
   });
-
-  String _publicUrlFromMaybeRelative(String raw) {
-    final v = raw.trim();
-    if (v.isEmpty) return '';
-    if (v.startsWith('http://') || v.startsWith('https://')) return v;
-    final base = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api$'), '');
-    if (v.startsWith('/')) return '$base$v';
-    return '$base/$v';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

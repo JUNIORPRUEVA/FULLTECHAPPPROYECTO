@@ -35,7 +35,6 @@ class _AutoAttendanceSyncState extends ConsumerState<AutoAttendanceSync>
   DateTime _lastAttempt = DateTime.fromMillisecondsSinceEpoch(0);
 
   static const _minInterval = Duration(seconds: 10);
-  static const _periodicInterval = Duration(seconds: 45);
 
   @override
   void initState() {

@@ -92,14 +92,17 @@ class _CrmOutboundMessageDialogState
         phone: phoneNormalized,
         text: message,
         status: _status,
-        displayName: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
+        displayName: _nameCtrl.text.trim().isEmpty
+            ? null
+            : _nameCtrl.text.trim(),
       );
 
-      final chatId = (result['chatId'] ??
-              (result['chat'] is Map<String, dynamic>
-                  ? (result['chat'] as Map<String, dynamic>)['id']
-                  : null))
-          ?.toString();
+      final chatId =
+          (result['chatId'] ??
+                  (result['chat'] is Map<String, dynamic>
+                      ? (result['chat'] as Map<String, dynamic>)['id']
+                      : null))
+              ?.toString();
 
       if (chatId == null || chatId.trim().isEmpty) {
         throw Exception('Respuesta inválida: falta chatId');
@@ -109,19 +112,23 @@ class _CrmOutboundMessageDialogState
       final chat = result['chat'];
       if (chat is Map) {
         try {
-          thread = CrmThread.fromJson((chat as Map).cast<String, dynamic>());
+          thread = CrmThread.fromJson(chat.cast<String, dynamic>());
         } catch (_) {
           // Ignore parse issues; we can still refresh by chatId.
         }
       }
 
       if (_productId != null && _productId!.trim().isNotEmpty) {
-        final patched = await repo.patchChat(chatId, {'product_id': _productId});
+        final patched = await repo.patchChat(chatId, {
+          'product_id': _productId,
+        });
         thread = patched;
       }
 
       if (!mounted) return;
-      Navigator.of(context).pop(CrmOutboundResult(chatId: chatId, thread: thread));
+      Navigator.of(
+        context,
+      ).pop(CrmOutboundResult(chatId: chatId, thread: thread));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -135,12 +142,15 @@ class _CrmOutboundMessageDialogState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final phoneNormalized = _normalizePhoneForWhatsapp(_phoneCtrl.text);
-    final waId = phoneNormalized.isEmpty ? '' : '$phoneNormalized@s.whatsapp.net';
+    final waId = phoneNormalized.isEmpty
+        ? ''
+        : '$phoneNormalized@s.whatsapp.net';
 
     final productsAsync = ref.watch(crmProductsProvider);
     final products = productsAsync.asData?.value ?? const <Producto>[];
 
-    final canSend = !_sending &&
+    final canSend =
+        !_sending &&
         phoneNormalized.isNotEmpty &&
         _messageCtrl.text.trim().isNotEmpty;
 
@@ -225,7 +235,9 @@ class _CrmOutboundMessageDialogState
                   ),
                 ),
               ],
-              onChanged: _sending ? null : (v) => setState(() => _productId = v),
+              onChanged: _sending
+                  ? null
+                  : (v) => setState(() => _productId = v),
               decoration: const InputDecoration(
                 labelText: 'Producto a asignar',
                 isDense: true,

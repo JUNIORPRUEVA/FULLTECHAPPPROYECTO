@@ -256,29 +256,30 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (thread != null)
-                                pill(
-                                  text: thread.status.replaceAll('_', ' '),
-                                  bg: theme.colorScheme.primaryContainer,
-                                  fg: theme.colorScheme.onPrimaryContainer,
-                                ),
-                              if (thread != null && hasProductId)
-                                const SizedBox(width: 8),
-                              if (hasProductId)
-                                pill(
-                                  text:
-                                      (product?.nombre.trim().isNotEmpty ??
-                                          false)
-                                      ? product!.nombre.trim()
-                                      : (productsAsync.isLoading
-                                            ? 'Producto: Cargando...'
-                                            : 'Producto: No encontrado'),
-                                  bg: theme.colorScheme.secondaryContainer,
-                                  fg: theme.colorScheme.onSecondaryContainer,
-                                ),
-                            ],
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (thread != null)
+                                  pill(
+                                    text: thread.status.replaceAll('_', ' '),
+                                    bg: theme.colorScheme.primaryContainer,
+                                    fg: theme.colorScheme.onPrimaryContainer,
+                                  ),
+                                if (thread != null && hasProductId)
+                                  const SizedBox(width: 8),
+                                if (hasProductId)
+                                  pill(
+                                    text:
+                                        (product?.nombre.trim().isNotEmpty ??
+                                            false)
+                                        ? product!.nombre.trim()
+                                        : (productsAsync.isLoading
+                                              ? 'Producto: Cargando...'
+                                              : 'Producto: No encontrado'),
+                                    bg: theme.colorScheme.secondaryContainer,
+                                    fg: theme.colorScheme.onSecondaryContainer,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
