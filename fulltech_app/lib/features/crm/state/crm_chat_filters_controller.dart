@@ -14,6 +14,7 @@ class CrmChatFiltersController extends StateNotifier<CrmChatFiltersState> {
   }
 
   void setProductId(String? productId) {
+    // Explicitly pass productId (even if null) to reset the filter
     state = state.copyWith(productId: productId);
   }
 

@@ -67,7 +67,9 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
     final isMobile = width < 900;
     final isDesktop3Pane = width >= 1200;
 
-    final filtered = _filterThreads(threadsState.items, filters);
+    // No need to filter locally since the backend already filters by estado and productId
+    // Only apply local search filter if needed for instant feedback
+    final filtered = _filterThreadsLocally(threadsState.items, filters);
 
     final left = _ThreadsList(
       threadsState: threadsState,
@@ -158,16 +160,21 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
     );
   }
 
-  static List<CrmThread> _filterThreads(
+  /// Only apply local search filter for instant feedback
+  /// Backend already handles estado and productId filtering
+  static List<CrmThread> _filterThreadsLocally(
     List<CrmThread> items,
     dynamic filters,
   ) {
     final q = (filters.searchText as String).trim().toLowerCase();
-    final status = (filters.status as String).trim();
-    final productId = filters.productId as String?;
 
-    bool matchesSearch(CrmThread t) {
-      if (q.isEmpty) return true;
+    if (q.isEmpty) {
+      // No local search filter needed, backend already filtered by estado and productId
+      return items;
+    }
+
+    // Apply only search filter locally for instant feedback
+    return items.where((t) {
       final hay = <String?>[
         t.displayName,
         t.phone,
@@ -175,21 +182,7 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
         t.lastMessagePreview,
       ].whereType<String>().join(' ').toLowerCase();
       return hay.contains(q);
-    }
-
-    bool matchesStatus(CrmThread t) {
-      if (status.isEmpty || status == 'todos') return true;
-      return t.status.trim() == status;
-    }
-
-    bool matchesProduct(CrmThread t) {
-      if (productId == null || productId.trim().isEmpty) return true;
-      return (t.productId ?? '').trim() == productId.trim();
-    }
-
-    return items
-        .where((t) => matchesSearch(t) && matchesStatus(t) && matchesProduct(t))
-        .toList();
+    }).toList();
   }
 }
 

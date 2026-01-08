@@ -20,13 +20,16 @@ class CrmChatFiltersState {
   CrmChatFiltersState copyWith({
     String? searchText,
     String? status,
-    String? productId,
-    bool clearProductId = false,
+    Object? productId = _notProvided,
   }) {
     return CrmChatFiltersState(
       searchText: searchText ?? this.searchText,
       status: status ?? this.status,
-      productId: clearProductId ? null : (productId ?? this.productId),
+      productId: productId == _notProvided
+          ? this.productId
+          : productId as String?,
     );
   }
 }
+
+const _notProvided = Object();
