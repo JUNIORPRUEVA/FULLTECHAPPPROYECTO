@@ -34,6 +34,8 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
   void initState() {
     super.initState();
     Future.microtask(() {
+      // Start stats controller (with auth guard inside)
+      ref.read(crmChatStatsControllerProvider.notifier).start();
       ref.read(crmThreadsControllerProvider.notifier).refresh();
     });
   }

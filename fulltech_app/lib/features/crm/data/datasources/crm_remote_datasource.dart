@@ -981,6 +981,19 @@ class CrmRemoteDataSource {
     );
 
     final status = res.statusCode ?? 0;
+    
+    // 401: Throw to trigger auth handler and stop timer
+    if (status == 401) {
+      if (kDebugMode) {
+        debugPrint('[CRM][HTTP] /crm/chats/stats -> 401 (unauthorized)');
+      }
+      throw DioException(
+        requestOptions: res.requestOptions,
+        response: res,
+        type: DioExceptionType.badResponse,
+      );
+    }
+    
     if (status == 404) {
       if (kDebugMode) {
         debugPrint('[CRM][HTTP] /crm/chats/stats -> 404 (not available)');

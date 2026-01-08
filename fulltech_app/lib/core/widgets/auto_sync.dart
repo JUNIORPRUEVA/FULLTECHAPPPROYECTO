@@ -9,6 +9,7 @@ import '../../features/auth/state/auth_providers.dart';
 import '../../features/auth/state/auth_state.dart';
 import '../../features/cotizaciones/state/cotizaciones_providers.dart';
 import '../../features/cotizaciones/state/letters_providers.dart';
+import '../../features/crm/state/crm_providers.dart';
 import '../../features/maintenance/providers/maintenance_provider.dart';
 import '../../features/operaciones/state/operations_providers.dart';
 import '../../features/ponchado/providers/punch_provider.dart';
@@ -65,6 +66,13 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
         unawaited(ref.read(permissionsProvider.notifier).load());
         unawaited(_loadRemoteUiSettings());
 
+        // Start CRM stats controller timer
+        try {
+          ref.read(crmChatStatsControllerProvider.notifier).start();
+        } catch (_) {
+          // Provider may not be initialized yet, ignore
+        }
+
         // Slight delay to let the UI settle after navigation.
         Future.delayed(const Duration(seconds: 1), () {
           if (!mounted) return;
@@ -72,6 +80,13 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
         });
       } else {
         ref.read(permissionsProvider.notifier).clear();
+        
+        // Stop CRM stats controller on logout
+        try {
+          ref.read(crmChatStatsControllerProvider.notifier).stop();
+        } catch (_) {
+          // Provider may not be initialized yet, ignore
+        }
       }
     });
 
@@ -85,9 +100,11 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
       _scheduleSync();
     });
 
-    _periodic = Timer.periodic(_periodicInterval, (_) {
-      _scheduleSync();
-    });
+    // DISABLED: Periodic sync causes 401 spam when not authenticated
+    // Only sync on explicit events: login, connectivity, app resume, queue changes
+    // _periodic = Timer.periodic(_periodicInterval, (_) {
+    //   _scheduleSync();
+    // });
 
     // Best effort: try early during startup.
     Future.microtask(_scheduleSync);
