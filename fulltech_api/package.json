@@ -18,7 +18,8 @@
     "create-ai-tables": "tsx scripts/create_ai_settings_and_suggestions_tables.ts",
     "consolidate-empresa": "tsx scripts/consolidate_to_single_empresa.ts",
     "audit-empresas": "tsx scripts/audit_empresas.ts",
-    "delete-other-empresas": "tsx scripts/delete_other_empresas.ts"
+    "delete-other-empresas": "tsx scripts/delete_other_empresas.ts",
+    "delete-instance-chats": "tsx scripts/delete_instance_number_chats.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
