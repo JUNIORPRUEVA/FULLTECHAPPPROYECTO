@@ -42,7 +42,10 @@ class _AutoAttendanceSyncState extends ConsumerState<AutoAttendanceSync>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    _authSub = ref.listenManual<AuthState>(authControllerProvider, (prev, next) {
+    _authSub = ref.listenManual<AuthState>(authControllerProvider, (
+      prev,
+      next,
+    ) {
       if (next is AuthAuthenticated) {
         _scheduleSync();
       }
@@ -58,8 +61,8 @@ class _AutoAttendanceSyncState extends ConsumerState<AutoAttendanceSync>
     //   _scheduleSync();
     // });
 
-    // Best effort: try early during startup.
-    Future.microtask(_scheduleSync);
+    // DO NOT sync on startup - wait until user is authenticated
+    // The auth listener above will trigger sync when login completes
   }
 
   @override

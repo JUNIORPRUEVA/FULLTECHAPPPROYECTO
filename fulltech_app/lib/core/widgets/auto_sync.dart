@@ -40,7 +40,8 @@ class AutoSync extends ConsumerStatefulWidget {
   ConsumerState<AutoSync> createState() => _AutoSyncState();
 }
 
-class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver {
+class _AutoSyncState extends ConsumerState<AutoSync>
+    with WidgetsBindingObserver {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   StreamSubscription<void>? _queueChangedSub;
   Timer? _periodic;
@@ -60,7 +61,10 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    _authSub = ref.listenManual<AuthState>(authControllerProvider, (prev, next) {
+    _authSub = ref.listenManual<AuthState>(authControllerProvider, (
+      prev,
+      next,
+    ) {
       if (next is AuthAuthenticated) {
         // Load permissions/UI settings ASAP after login.
         unawaited(ref.read(permissionsProvider.notifier).load());
@@ -80,7 +84,7 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
         });
       } else {
         ref.read(permissionsProvider.notifier).clear();
-        
+
         // Stop CRM stats controller on logout
         try {
           ref.read(crmChatStatsControllerProvider.notifier).stop();
@@ -106,8 +110,8 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
     //   _scheduleSync();
     // });
 
-    // Best effort: try early during startup.
-    Future.microtask(_scheduleSync);
+    // DO NOT sync on startup - wait until user is authenticated
+    // The auth listener above will trigger sync when login completes
   }
 
   Future<void> _loadRemoteUiSettings() async {
@@ -126,7 +130,9 @@ class _AutoSyncState extends ConsumerState<AutoSync> with WidgetsBindingObserver
       final scaleRaw = item['scale'];
       final scale = (scaleRaw is num) ? scaleRaw.toDouble() : 1.0;
 
-      await ref.read(displaySettingsProvider.notifier).applyRemoteUiSettings(
+      await ref
+          .read(displaySettingsProvider.notifier)
+          .applyRemoteUiSettings(
             largeScreenMode: large,
             hideSidebar: hide,
             scale: scale,

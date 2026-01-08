@@ -9,6 +9,7 @@ import '../../features/auth/state/auth_providers.dart';
 import '../../features/auth/state/auth_state.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/access_revoked_screen.dart';
+import '../../features/auth/screens/splash_screen.dart';
 import '../../features/crm/presentation/pages/crm_home_page.dart';
 import '../../features/crm/presentation/pages/thread_chat_page.dart';
 import '../../features/crm/presentation/pages/customer_detail_page.dart';
@@ -75,22 +76,31 @@ GoRouter createRouter(Ref ref) {
   String? redirect(BuildContext context, GoRouterState state) {
     final auth = ref.read(authControllerProvider);
     final isLoggingIn = state.matchedLocation == AppRoutes.login;
+    final isSplash = state.matchedLocation == '/splash';
 
-    if (auth is AuthUnknown || auth is AuthValidating) return null; // waiting bootstrap/validation
+    // Show splash screen while bootstrap is in progress
+    if (auth is AuthUnknown || auth is AuthValidating) {
+      return isSplash ? null : '/splash';
+    }
 
     final isAuthed = auth is AuthAuthenticated;
     if (!isAuthed && !isLoggingIn) return AppRoutes.login;
     if (isAuthed && isLoggingIn) return AppRoutes.crm;
+    if (isAuthed && isSplash) return AppRoutes.crm;
     return null;
   }
 
   return GoRouter(
-    initialLocation: AppRoutes.login,
+    initialLocation: '/splash',
     refreshListenable: GoRouterRefreshStream(
       ref.watch(authControllerProvider.notifier).stream,
     ),
     redirect: redirect,
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => const LoginScreen(),
@@ -202,14 +212,8 @@ GoRouter createRouter(Ref ref) {
             path: 'inventory',
             builder: (c, s) => const PosInventoryPage(),
           ),
-          GoRoute(
-            path: 'credit',
-            builder: (c, s) => const PosCreditPage(),
-          ),
-          GoRoute(
-            path: 'reports',
-            builder: (c, s) => const PosReportsPage(),
-          ),
+          GoRoute(path: 'credit', builder: (c, s) => const PosCreditPage()),
+          GoRoute(path: 'reports', builder: (c, s) => const PosReportsPage()),
         ],
       ),
       GoRoute(

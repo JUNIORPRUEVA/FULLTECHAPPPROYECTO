@@ -15,12 +15,10 @@ class AuthController extends StateNotifier<AuthState> {
 
   late final StreamSubscription<AuthEvent> _eventsSub;
 
-  AuthController({
-    required LocalDb db,
-    required AuthApi api,
-  })  : _db = db,
-        _api = api,
-        super(const AuthUnknown()) {
+  AuthController({required LocalDb db, required AuthApi api})
+    : _db = db,
+      _api = api,
+      super(const AuthUnknown()) {
     _eventsSub = AuthEvents.stream.listen((event) async {
       if (event.type == AuthEventType.unauthorized) {
         if (kDebugMode) {
@@ -28,7 +26,18 @@ class AuthController extends StateNotifier<AuthState> {
             '[AUTH] unauthorized event status=${event.statusCode} detail=${event.detail ?? ''}',
           );
         }
-        // Clear session immediately on 401 to avoid re-using expired tokens.
+
+        // Only clear session if we're currently authenticated
+        // This prevents clearing session during startup race conditions
+        final currentState = state;
+        if (currentState is! AuthAuthenticated) {
+          if (kDebugMode) {
+            debugPrint('[AUTH] ignoring 401 - not authenticated yet');
+          }
+          return;
+        }
+
+        // Clear session and mark as unauthenticated
         await _db.clearSession();
         state = const AuthUnauthenticated();
       }
@@ -64,7 +73,8 @@ class AuthController extends StateNotifier<AuthState> {
       // work in offline-first mode; we'll validate again on next successful request.
       if (e is DioException) {
         final status = e.response?.statusCode;
-        final offline = e.type == DioExceptionType.connectionError ||
+        final offline =
+            e.type == DioExceptionType.connectionError ||
             e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.receiveTimeout;
 
@@ -75,7 +85,9 @@ class AuthController extends StateNotifier<AuthState> {
 
         if (status == 401) {
           if (kDebugMode) {
-            debugPrint('[AUTH] bootstrap: token invalid (401), clearing session');
+            debugPrint(
+              '[AUTH] bootstrap: token invalid (401), clearing session',
+            );
           }
           await _db.clearSession();
           state = const AuthUnauthenticated();
@@ -92,10 +104,7 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> login({required String email, required String password}) async {
     if (kDebugMode) debugPrint('[AUTH] login() email=$email');
     final result = await _api.login(email: email, password: password);
     final session = AuthSession(token: result.token, user: result.user);
