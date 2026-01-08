@@ -1,0 +1,11 @@
+# SQL Migrations - Best Practices Reminders
+
+# All .sql migration files should be treated as immutable once applied
+# This doesn't enforce read-only in git, but serves as a reminder
+# Never edit migrations that have been applied - create new ones instead
+
+# Mark SQL files with specific attributes for better diffs
+*.sql text eol=lf
+
+# Log any attempts to modify old migrations (use git hooks if needed)
+# See SQL_MIGRATIONS_BEST_PRACTICES.md for workflow details

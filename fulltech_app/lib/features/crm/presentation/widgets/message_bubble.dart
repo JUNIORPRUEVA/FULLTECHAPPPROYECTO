@@ -32,8 +32,8 @@ class MessageBubble extends StatelessWidget {
     final isFailed = isMe && (status == 'failed' || status == 'error');
 
     final bg = isMe
-      ? theme.colorScheme.primaryContainer
-      : theme.colorScheme.surfaceVariant;
+        ? theme.colorScheme.primaryContainer
+        : theme.colorScheme.surfaceVariant;
     final fg = isMe
         ? theme.colorScheme.onPrimaryContainer
         : theme.colorScheme.onSurface;
@@ -454,8 +454,10 @@ class _AttachmentCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               TextButton.icon(
                 onPressed: () => _openUrl(context, url),
@@ -466,7 +468,6 @@ class _AttachmentCard extends StatelessWidget {
                   foregroundColor: fg,
                 ),
               ),
-              const SizedBox(width: 8),
               TextButton.icon(
                 onPressed: () => _copyUrl(context, url),
                 icon: const Icon(Icons.copy, size: 18),

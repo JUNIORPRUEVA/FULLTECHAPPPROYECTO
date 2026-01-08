@@ -249,12 +249,13 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                       ),
                     ),
                     if (thread != null || hasProductId) ...[
-                      const SizedBox(width: 10),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 340),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 340),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               if (thread != null)
@@ -533,6 +534,8 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                   children: [
                     IconButton(
                       tooltip: 'Audio',
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                       onPressed: state.sending
                           ? null
                           : () => _recordAndSendAudio(notifier),
@@ -540,6 +543,8 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                     ),
                     IconButton(
                       tooltip: 'Imagen',
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                       onPressed: state.sending
                           ? null
                           : () => _pickAndSendImage(notifier),
@@ -547,11 +552,15 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                     ),
                     IconButton(
                       tooltip: 'Más',
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                       onPressed: _openMoreMenu,
                       icon: const Icon(Icons.add),
                     ),
                     IconButton(
                       tooltip: 'Plantillas',
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                       onPressed: _openQuickReplies,
                       icon: const Icon(Icons.bolt),
                     ),
@@ -1443,12 +1452,13 @@ class _MiniFormatBar extends StatelessWidget {
 
     Widget btn(String label, VoidCallback onTap, {String? tooltip}) {
       return Padding(
-        padding: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.only(right: 4),
         child: OutlinedButton(
           onPressed: onTap,
           style: OutlinedButton.styleFrom(
             visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            minimumSize: const Size(32, 28),
           ),
           child: Tooltip(
             message: tooltip ?? label,
