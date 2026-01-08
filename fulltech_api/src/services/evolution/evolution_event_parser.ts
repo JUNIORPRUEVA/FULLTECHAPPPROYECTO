@@ -164,31 +164,7 @@ export function parseEvolutionWebhook(body: AnyObj): ParsedEvolutionWebhook {
 
   const fromMe = Boolean(key?.fromMe ?? data.fromMe ?? data.from_me ?? false);
 
-  // Evolution payloads often include both a JID (sometimes "@lid") and a clearer phone field.
-  // Prefer sender/destination to derive a stable phone number so inbound/outbound messages
-  // land in the same chat.
-  const remoteJidRaw = asString(
-    key?.remoteJid ??
-      data.remoteJid ??
-      data.from ??
-      data.sender ??
-      (body as any)?.from ??
-      (body as any)?.sender ??
-      data.phone_number ??
-      (body as any)?.phone_number,
-  );
-
-  // DEBUG: Log what Evolution is sending
-  console.log('[WEBHOOK][PARSER] ====== MESSAGE PARSE ======');
-  console.log('[WEBHOOK][PARSER] fromMe:', fromMe);
-  console.log('[WEBHOOK][PARSER] remoteJidRaw:', remoteJidRaw);
-  console.log('[WEBHOOK][PARSER] key.remoteJid:', key?.remoteJid);
-  console.log('[WEBHOOK][PARSER] data.remoteJid:', data.remoteJid);
-  console.log('[WEBHOOK][PARSER] data.from:', data.from);
-  console.log('[WEBHOOK][PARSER] data.sender:', data.sender);
-  console.log('[WEBHOOK][PARSER] data.destination:', (data as any).destination);
-  console.log('[WEBHOOK][PARSER] data.to:', (data as any).to);
-
+  // Helper to pick the first valid phone number from candidates
   const pickPhoneFrom = (candidates: Array<any>): string | null => {
     for (const c of candidates) {
       const s = asString(c);
@@ -201,29 +177,70 @@ export function parseEvolutionWebhook(body: AnyObj): ParsedEvolutionWebhook {
     return null;
   };
 
+  // CRITICAL FIX: Extract the OTHER PARTY's number based on message direction
+  // For INCOMING messages (fromMe=false): the OTHER PARTY is the SENDER
+  // For OUTGOING messages (fromMe=true): the OTHER PARTY is the DESTINATION
   const phoneNumber = fromMe
     ? (pickPhoneFrom([
         data.destination,
         (body as any)?.destination,
         data.to,
         (body as any)?.to,
-      ]) ?? normalizePhone(remoteJidRaw))
+      ]))
     : (pickPhoneFrom([
         data.sender,
         (body as any)?.sender,
         data.from,
         (body as any)?.from,
-      ]) ?? normalizePhone(remoteJidRaw));
+      ]));
+
+  // Extract remoteJid based on direction - this should be the OTHER PARTY's JID
+  const remoteJidRaw = fromMe
+    ? asString(
+        // For outgoing: look for destination JID
+        data.destination ??
+        (body as any)?.destination ??
+        data.to ??
+        (body as any)?.to ??
+        key?.remoteJid ??
+        data.remoteJid,
+      )
+    : asString(
+        // For incoming: look for sender JID
+        data.sender ??
+        (body as any)?.sender ??
+        data.from ??
+        (body as any)?.from ??
+        key?.remoteJid ??
+        data.remoteJid,
+      );
 
   // Canonicalize waId: if Evolution sends "@lid" ids, but we do have a phone number,
   // use the stable WhatsApp JID format so the chat is consistent.
   const remoteJid = (() => {
     if (phoneNumber) {
-      if (remoteJidRaw && /@lid$/i.test(remoteJidRaw)) return `${phoneNumber}@s.whatsapp.net`;
-      if (!remoteJidRaw) return `${phoneNumber}@s.whatsapp.net`;
+      // If we have a phone number, always use the standard format
+      return `${phoneNumber}@s.whatsapp.net`;
+    }
+    // Fallback to raw JID if available
+    if (remoteJidRaw) {
+      // If it's already in JID format, use it
+      if (remoteJidRaw.includes('@')) return remoteJidRaw;
+      // Otherwise, normalize it
+      const normalized = normalizePhone(remoteJidRaw);
+      if (normalized) return `${normalized}@s.whatsapp.net`;
     }
     return remoteJidRaw;
   })();
+
+  console.log('[WEBHOOK][PARSER] ====== FIXED PARSER ======');
+  console.log('[WEBHOOK][PARSER] fromMe:', fromMe);
+  console.log('[WEBHOOK][PARSER] phoneNumber (OTHER PARTY):', phoneNumber);
+  console.log('[WEBHOOK][PARSER] remoteJid (OTHER PARTY):', remoteJid);
+  console.log('[WEBHOOK][PARSER] key.remoteJid:', key?.remoteJid);
+  console.log('[WEBHOOK][PARSER] data.sender:', data.sender);
+  console.log('[WEBHOOK][PARSER] data.destination:', (data as any).destination);
+  console.log('[WEBHOOK][PARSER] ==============================');
 
   const displayName =
     asString(data.pushName ?? data.display_name ?? data.senderName ?? data.notifyName) ?? null;
