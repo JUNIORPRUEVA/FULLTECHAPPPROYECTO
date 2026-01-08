@@ -178,6 +178,17 @@ export function parseEvolutionWebhook(body: AnyObj): ParsedEvolutionWebhook {
       (body as any)?.phone_number,
   );
 
+  // DEBUG: Log what Evolution is sending
+  console.log('[WEBHOOK][PARSER] ====== MESSAGE PARSE ======');
+  console.log('[WEBHOOK][PARSER] fromMe:', fromMe);
+  console.log('[WEBHOOK][PARSER] remoteJidRaw:', remoteJidRaw);
+  console.log('[WEBHOOK][PARSER] key.remoteJid:', key?.remoteJid);
+  console.log('[WEBHOOK][PARSER] data.remoteJid:', data.remoteJid);
+  console.log('[WEBHOOK][PARSER] data.from:', data.from);
+  console.log('[WEBHOOK][PARSER] data.sender:', data.sender);
+  console.log('[WEBHOOK][PARSER] data.destination:', (data as any).destination);
+  console.log('[WEBHOOK][PARSER] data.to:', (data as any).to);
+
   const pickPhoneFrom = (candidates: Array<any>): string | null => {
     for (const c of candidates) {
       const s = asString(c);

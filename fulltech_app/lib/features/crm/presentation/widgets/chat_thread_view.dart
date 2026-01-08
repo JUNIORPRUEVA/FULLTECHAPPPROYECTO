@@ -122,18 +122,6 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     if (thread != null) {
       _cachedWaId = thread.waId;
       _cachedPhone = thread.phone;
-
-      if (kDebugMode) {
-        print('[CRM_UI][THREAD_CACHE] ═══════════════════════════════════════');
-        print('[CRM_UI][THREAD_CACHE] Thread ID: ${thread.id}');
-        print('[CRM_UI][THREAD_CACHE] Display Name: ${thread.displayName}');
-        print('[CRM_UI][THREAD_CACHE] WaId: ${thread.waId}');
-        print('[CRM_UI][THREAD_CACHE] Phone: ${thread.phone}');
-        print('[CRM_UI][THREAD_CACHE] Status: ${thread.status}');
-        print('[CRM_UI][THREAD_CACHE] Cached WaId: $_cachedWaId');
-        print('[CRM_UI][THREAD_CACHE] Cached Phone: $_cachedPhone');
-        print('[CRM_UI][THREAD_CACHE] ═══════════════════════════════════════');
-      }
     }
 
     final state = ref.watch(crmMessagesControllerProvider(widget.threadId));
