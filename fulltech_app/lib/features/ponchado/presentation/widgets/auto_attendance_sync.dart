@@ -53,9 +53,10 @@ class _AutoAttendanceSyncState extends ConsumerState<AutoAttendanceSync>
       if (online) _scheduleSync();
     });
 
-    _periodic = Timer.periodic(_periodicInterval, (_) {
-      _scheduleSync();
-    });
+    // DISABLED: Periodic sync causes 401 spam when not authenticated
+    // _periodic = Timer.periodic(_periodicInterval, (_) {
+    //   _scheduleSync();
+    // });
 
     // Best effort: try early during startup.
     Future.microtask(_scheduleSync);
@@ -100,6 +101,13 @@ class _AutoAttendanceSyncState extends ConsumerState<AutoAttendanceSync>
       final repo = ref.read(punchRepositoryProvider);
       await repo.retryFailed();
       await repo.syncPending();
+    } catch (e) {
+      // Silently catch errors to prevent spam
+      // Only log in debug mode
+      assert(() {
+        print('[AutoAttendanceSync] Sync failed: $e');
+        return true;
+      }());
     } finally {
       _syncInProgress = false;
     }

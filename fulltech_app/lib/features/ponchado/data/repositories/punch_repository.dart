@@ -170,7 +170,7 @@ class PunchRepository {
         );
 
         await db.markSyncItemSent(item.id);
-      } catch (_) {
+      } catch (e) {
         await db.markSyncItemError(item.id);
 
         // Mark local record as FAILED (best-effort)
