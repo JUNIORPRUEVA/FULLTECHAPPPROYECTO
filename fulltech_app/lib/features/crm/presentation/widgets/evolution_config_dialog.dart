@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/crm_providers.dart';
 import '../../data/datasources/evolution_direct_settings.dart';
+import '../../data/datasources/evolution_direct_client.dart';
 import 'crm_keyboard_shortcuts.dart';
 
 class EvolutionConfigDialog extends ConsumerStatefulWidget {
@@ -24,6 +25,8 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
   late TextEditingController _directCountryCtrl;
   bool _directEnabled = false;
 
+  late TextEditingController _testPhoneCtrl;
+
   bool _isLoading = false;
   String? _error;
   Map<String, dynamic>? _status;
@@ -39,6 +42,7 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
     _directBaseUrlCtrl = TextEditingController();
     _directInstanceCtrl = TextEditingController();
     _directCountryCtrl = TextEditingController();
+    _testPhoneCtrl = TextEditingController();
     _loadConfig();
   }
 
@@ -52,6 +56,7 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
     _directBaseUrlCtrl.dispose();
     _directInstanceCtrl.dispose();
     _directCountryCtrl.dispose();
+    _testPhoneCtrl.dispose();
     super.dispose();
   }
 
@@ -216,6 +221,75 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _sendTestMessage() async {
+    final phone = _testPhoneCtrl.text.trim();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor ingresa un número de teléfono'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      // Get current settings
+      final baseUrl = _directBaseUrlCtrl.text.trim();
+      final apiKey = _apiKeyCtrl.text.trim();
+      final instance = _directInstanceCtrl.text.trim();
+      final countryCode = _directCountryCtrl.text.trim().isEmpty
+          ? '1'
+          : _directCountryCtrl.text.trim();
+
+      if (baseUrl.isEmpty || apiKey.isEmpty || instance.isEmpty) {
+        throw Exception(
+          'Por favor completa la configuración de Evolution (URL, API Key e Instancia)',
+        );
+      }
+
+      // Create Evolution client with current settings
+      final evo = EvolutionDirectClient.create(
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+        instance: instance,
+        defaultCountryCode: countryCode,
+      );
+
+      // Send test message
+      final result = await evo.sendText(
+        text:
+            '🧪 Mensaje de prueba desde Fulltech CRM\n\nSi recibes este mensaje, la configuración de Evolution está funcionando correctamente.',
+        toPhone: phone,
+      );
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Mensaje de prueba enviado exitosamente\nID: ${result.messageId}',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error al enviar mensaje de prueba: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       }
     }
   }
@@ -656,6 +730,44 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
           onPressed: _isLoading ? null : _saveDirectSettings,
           icon: const Icon(Icons.save, size: 18),
           label: const Text('Guardar modo directo'),
+        ),
+
+        const SizedBox(height: 20),
+        Divider(color: theme.colorScheme.outlineVariant),
+        const SizedBox(height: 12),
+        Text(
+          '🧪 Enviar Mensaje de Prueba',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Envía un mensaje de prueba para verificar que la configuración funciona correctamente.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _testPhoneCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Número de teléfono para prueba',
+            hintText: '+18095319442 o 8095319442',
+            prefixIcon: Icon(Icons.phone),
+            isDense: true,
+          ),
+          keyboardType: TextInputType.phone,
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _isLoading ? null : _sendTestMessage,
+          icon: const Icon(Icons.send, size: 18),
+          label: const Text('Enviar mensaje de prueba'),
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.colorScheme.secondary,
+          ),
         ),
       ],
     );

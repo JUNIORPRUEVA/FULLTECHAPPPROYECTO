@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/app_config.dart';
 
@@ -108,36 +109,72 @@ class EvolutionDirectClient {
     final wa = (toWaId ?? '').trim();
     final phone = (toPhone ?? '').trim();
 
+    if (kDebugMode) {
+      debugPrint('[EVO_CLIENT][NORMALIZE] wa=$wa phone=$phone');
+    }
+
     // Groups: keep JID as-is (Evolution commonly accepts @g.us)
-    if (wa.endsWith('@g.us')) return wa;
+    if (wa.endsWith('@g.us')) {
+      if (kDebugMode) {
+        debugPrint('[EVO_CLIENT][NORMALIZE] Group chat detected: $wa');
+      }
+      return wa;
+    }
 
     // If waId already has @s.whatsapp.net or @c.us, extract number and re-add
     if (wa.contains('@s.whatsapp.net') || wa.contains('@c.us')) {
       final at = wa.indexOf('@');
       final base = at >= 0 ? wa.substring(0, at) : wa;
       final normalized = _applyDefaultCountryCode(_digitsOnly(base));
-      return '$normalized@s.whatsapp.net';
+      final result = '$normalized@s.whatsapp.net';
+      if (kDebugMode) {
+        debugPrint(
+          '[EVO_CLIENT][NORMALIZE] waId has domain, extracted base=$base normalized=$normalized result=$result',
+        );
+      }
+      return result;
     }
 
     // LID is not routable for sending; prefer phone if available
     if (wa.endsWith('@lid') && phone.isNotEmpty) {
       final normalized = _applyDefaultCountryCode(_digitsOnly(phone));
-      return '$normalized@s.whatsapp.net';
+      final result = '$normalized@s.whatsapp.net';
+      if (kDebugMode) {
+        debugPrint(
+          '[EVO_CLIENT][NORMALIZE] LID detected, using phone instead: $result',
+        );
+      }
+      return result;
     }
 
     if (wa.isNotEmpty) {
       final at = wa.indexOf('@');
       final base = at >= 0 ? wa.substring(0, at) : wa;
       final normalized = _applyDefaultCountryCode(_digitsOnly(base));
-      return '$normalized@s.whatsapp.net';
+      final result = '$normalized@s.whatsapp.net';
+      if (kDebugMode) {
+        debugPrint(
+          '[EVO_CLIENT][NORMALIZE] Using waId, base=$base normalized=$normalized result=$result',
+        );
+      }
+      return result;
     }
 
     if (phone.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('[EVO_CLIENT][NORMALIZE] ERROR: No destination provided');
+      }
       throw Exception('Missing destination (toPhone or toWaId)');
     }
-    
+
     final normalized = _applyDefaultCountryCode(_digitsOnly(phone));
-    return '$normalized@s.whatsapp.net';
+    final result = '$normalized@s.whatsapp.net';
+    if (kDebugMode) {
+      debugPrint(
+        '[EVO_CLIENT][NORMALIZE] Using phone, normalized=$normalized result=$result',
+      );
+    }
+    return result;
   }
 
   static String _normalizeMediaType(String? mediaType) {
@@ -187,17 +224,39 @@ class EvolutionDirectClient {
     final trimmed = text.trim();
     if (trimmed.isEmpty) throw Exception('Text message is empty');
 
+    // Add detailed logging
+    if (kDebugMode) {
+      debugPrint('[EVO_CLIENT] ===== SEND TEXT START =====');
+      debugPrint('[EVO_CLIENT] Input toWaId: $toWaId');
+      debugPrint('[EVO_CLIENT] Input toPhone: $toPhone');
+      debugPrint('[EVO_CLIENT] Instance: $_instance');
+      debugPrint('[EVO_CLIENT] Default Country Code: $_defaultCountryCode');
+    }
+
     final number = _normalizeNumber(toWaId: toWaId, toPhone: toPhone);
 
+    if (kDebugMode) {
+      debugPrint('[EVO_CLIENT] Normalized number for Evolution: $number');
+      debugPrint('[EVO_CLIENT] Text length: ${trimmed.length}');
+    }
+
     final payload = {'number': number, 'text': trimmed};
+
+    if (kDebugMode) {
+      debugPrint('[EVO_CLIENT] Payload: $payload');
+      debugPrint('[EVO_CLIENT] Sending to Evolution API...');
+    }
 
     final res = await _postWithInstanceFallback('/message/sendText', payload);
     final raw = res.data;
 
-    return EvolutionDirectSendResult(
-      messageId: _extractMessageId(raw),
-      raw: raw,
-    );
+    final msgId = _extractMessageId(raw);
+    if (kDebugMode) {
+      debugPrint('[EVO_CLIENT] Response received - MessageId: $msgId');
+      debugPrint('[EVO_CLIENT] ===== SEND TEXT END =====');
+    }
+
+    return EvolutionDirectSendResult(messageId: msgId, raw: raw);
   }
 
   Future<EvolutionDirectSendResult> sendMedia({

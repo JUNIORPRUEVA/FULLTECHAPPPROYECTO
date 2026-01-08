@@ -48,6 +48,10 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
   String? _aiForCustomerMessageId;
   Timer? _aiDebounce;
 
+  // Cache thread info for sending messages
+  String? _cachedWaId;
+  String? _cachedPhone;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +80,7 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
       _aiSuggestions = const [];
       _aiUsedKnowledge = const [];
       _aiError = null;
+
       _listenToMessages(widget.threadId);
       await ref
           .read(crmMessagesControllerProvider(widget.threadId).notifier)
@@ -112,6 +117,24 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
         .where((t) => t.id == widget.threadId)
         .cast<CrmThread?>()
         .firstOrNull;
+
+    // Update cache whenever build runs with fresh thread data
+    if (thread != null) {
+      _cachedWaId = thread.waId;
+      _cachedPhone = thread.phone;
+
+      if (kDebugMode) {
+        print('[CRM_UI][THREAD_CACHE] ═══════════════════════════════════════');
+        print('[CRM_UI][THREAD_CACHE] Thread ID: ${thread.id}');
+        print('[CRM_UI][THREAD_CACHE] Display Name: ${thread.displayName}');
+        print('[CRM_UI][THREAD_CACHE] WaId: ${thread.waId}');
+        print('[CRM_UI][THREAD_CACHE] Phone: ${thread.phone}');
+        print('[CRM_UI][THREAD_CACHE] Status: ${thread.status}');
+        print('[CRM_UI][THREAD_CACHE] Cached WaId: $_cachedWaId');
+        print('[CRM_UI][THREAD_CACHE] Cached Phone: $_cachedPhone');
+        print('[CRM_UI][THREAD_CACHE] ═══════════════════════════════════════');
+      }
+    }
 
     final state = ref.watch(crmMessagesControllerProvider(widget.threadId));
     final notifier = ref.read(
@@ -484,14 +507,14 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                               children: _aiSuggestions
                                   .map(
                                     (s) => ActionChip(
-                                      backgroundColor: theme.colorScheme
+                                      backgroundColor: theme
+                                          .colorScheme
                                           .surfaceContainerHighest,
                                       labelStyle: theme.textTheme.labelMedium
                                           ?.copyWith(
-                                        color: theme.colorScheme
-                                            .onSurface,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                            color: theme.colorScheme.onSurface,
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                       label: ConstrainedBox(
                                         constraints: const BoxConstraints(
                                           maxWidth: 320,
@@ -614,20 +637,21 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
   Future<void> _sendText(dynamic notifier) async {
     final text = _textCtrl.text;
     _textCtrl.clear();
-    
-    // Get thread info for proper phone/waId
-    final threadsState = ref.read(crmThreadsControllerProvider);
-    final thread = threadsState.items
-        .where((t) => t.id == widget.threadId)
-        .cast<CrmThread?>()
-        .firstOrNull;
-    
+
+    if (kDebugMode) {
+      debugPrint(
+        '[CRM_UI] Sending text: threadId=${widget.threadId} waId=$_cachedWaId phone=$_cachedPhone text=${text.length} chars',
+      );
+    }
+
     unawaited(
-      notifier.sendText(
-        text,
-        toWaId: thread?.waId,
-        toPhone: thread?.phone,
-      ).catchError((_) {}),
+      notifier
+          .sendText(text, toWaId: _cachedWaId, toPhone: _cachedPhone)
+          .catchError((e) {
+            if (kDebugMode) {
+              debugPrint('[CRM_UI] Send text error: $e');
+            }
+          }),
     );
     unawaited(
       ref
@@ -668,12 +692,14 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
         .firstOrNull;
 
     unawaited(
-      notifier.sendMedia(
-        file,
-        type: 'audio',
-        toWaId: thread?.waId,
-        toPhone: thread?.phone,
-      ).catchError((_) {}),
+      notifier
+          .sendMedia(
+            file,
+            type: 'audio',
+            toWaId: thread?.waId,
+            toPhone: thread?.phone,
+          )
+          .catchError((_) {}),
     );
     unawaited(
       ref
@@ -854,21 +880,23 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
         path: recordedPath,
         size: size,
       );
-      
+
       // Get thread info for proper phone/waId
       final threadsState = ref.read(crmThreadsControllerProvider);
       final thread = threadsState.items
           .where((t) => t.id == widget.threadId)
           .cast<CrmThread?>()
           .firstOrNull;
-      
+
       unawaited(
-        notifier.sendMedia(
-          platformFile,
-          type: 'audio',
-          toWaId: thread?.waId,
-          toPhone: thread?.phone,
-        ).catchError((_) {}),
+        notifier
+            .sendMedia(
+              platformFile,
+              type: 'audio',
+              toWaId: thread?.waId,
+              toPhone: thread?.phone,
+            )
+            .catchError((_) {}),
       );
       unawaited(
         ref
@@ -929,12 +957,14 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
         .firstOrNull;
 
     unawaited(
-      notifier.sendMedia(
-        file,
-        type: 'image',
-        toWaId: thread?.waId,
-        toPhone: thread?.phone,
-      ).catchError((_) {}),
+      notifier
+          .sendMedia(
+            file,
+            type: 'image',
+            toWaId: thread?.waId,
+            toPhone: thread?.phone,
+          )
+          .catchError((_) {}),
     );
     unawaited(
       ref
@@ -982,12 +1012,14 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
         .firstOrNull;
 
     unawaited(
-      notifier.sendMedia(
-        file,
-        type: 'video',
-        toWaId: thread?.waId,
-        toPhone: thread?.phone,
-      ).catchError((_) {}),
+      notifier
+          .sendMedia(
+            file,
+            type: 'video',
+            toWaId: thread?.waId,
+            toPhone: thread?.phone,
+          )
+          .catchError((_) {}),
     );
     unawaited(
       ref
@@ -1347,6 +1379,12 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     ctrl.dispose();
     if (text.isEmpty) return;
 
+    if (kDebugMode) {
+      debugPrint(
+        '[CRM_UI] Sending AI suggestion: threadId=${widget.threadId} waId=$_cachedWaId phone=$_cachedPhone text=${text.length} chars',
+      );
+    }
+
     final notifier = ref.read(
       crmMessagesControllerProvider(widget.threadId).notifier,
     );
@@ -1354,11 +1392,17 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
       notifier
           .sendText(
             text,
+            toWaId: _cachedWaId,
+            toPhone: _cachedPhone,
             aiSuggestionId: suggestion.id,
             aiSuggestedText: suggestion.text,
             aiUsedKnowledge: _aiUsedKnowledge,
           )
-          .catchError((_) {}),
+          .catchError((e) {
+            if (kDebugMode) {
+              debugPrint('[CRM_UI] Send AI suggestion error: $e');
+            }
+          }),
     );
 
     if (!mounted) return;

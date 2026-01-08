@@ -398,16 +398,32 @@ class CrmRemoteDataSource {
         : directSettings.defaultCountryCode;
 
     final directConfigured =
-        baseUrl.trim().isNotEmpty && apiKey.trim().isNotEmpty;
+        baseUrl.trim().isNotEmpty &&
+        apiKey.trim().isNotEmpty &&
+        instance.trim().isNotEmpty;
     final useDirect = useDirectRequested && directConfigured;
 
     if (kDebugMode) {
+      debugPrint('[CRM][SEND] ===== START SEND MESSAGE =====');
+      debugPrint('[CRM][SEND] threadId=$threadId');
+      debugPrint('[CRM][SEND] message length=${message?.length ?? 0}');
+      debugPrint('[CRM][SEND] toWaId=$toWaId toPhone=$toPhone');
       debugPrint(
-        '[CRM][SEND] threadId=$threadId directRequested=$useDirectRequested directConfigured=$directConfigured useDirect=$useDirect',
+        '[CRM][SEND] directRequested=$useDirectRequested directConfigured=$directConfigured',
       );
+      debugPrint('[CRM][SEND] baseUrl=$baseUrl');
+      debugPrint('[CRM][SEND] instance=$instance');
+      debugPrint(
+        '[CRM][SEND] apiKey=${apiKey.isNotEmpty ? "SET (${apiKey.length} chars)" : "EMPTY"}',
+      );
+      debugPrint('[CRM][SEND] useDirect=$useDirect');
     }
 
     if (useDirect) {
+      if (kDebugMode) {
+        debugPrint('[CRM][SEND] 🚀 Using Evolution DIRECT send');
+      }
+
       final evo = EvolutionDirectClient.create(
         baseUrl: baseUrl,
         apiKey: apiKey,
@@ -416,9 +432,7 @@ class CrmRemoteDataSource {
       );
 
       if (kDebugMode) {
-        debugPrint(
-          '[CRM][SEND] using Evolution direct baseUrl=$baseUrl instance=$instance toWaId=$toWaId toPhone=$toPhone',
-        );
+        debugPrint('[CRM][SEND] Evolution client created, sending text...');
       }
       final send = await evo.sendText(
         text: (message ?? '').toString(),
@@ -427,11 +441,16 @@ class CrmRemoteDataSource {
       );
       if (kDebugMode) {
         debugPrint(
-          '[CRM][SEND] Evolution direct send result messageId=${send.messageId}',
+          '[CRM][SEND] ✅ Evolution direct send SUCCESS - messageId=${send.messageId}',
         );
       }
       if (send.messageId == null || send.messageId!.trim().isEmpty) {
         throw Exception('Evolution did not return messageId');
+      }
+
+      // Now record in backend
+      if (kDebugMode) {
+        debugPrint('[CRM][SEND] Recording message in backend...');
       }
 
       try {
@@ -449,10 +468,18 @@ class CrmRemoteDataSource {
         );
 
         final data = res.data as Map<String, dynamic>;
+        if (kDebugMode) {
+          debugPrint('[CRM][SEND] ✅ Backend record SUCCESS');
+        }
         return CrmMessage.fromJson(data['item'] as Map<String, dynamic>);
-      } catch (_) {
+      } catch (e) {
         // Evolution send succeeded, but backend record failed (old backend or server error).
         // Don't mark message as failed.
+        if (kDebugMode) {
+          debugPrint(
+            '[CRM][SEND] ⚠️ Backend record FAILED but Evolution sent OK: $e',
+          );
+        }
         return CrmMessage(
           id: 'evo-${send.messageId}',
           fromMe: true,
@@ -466,6 +493,9 @@ class CrmRemoteDataSource {
     }
 
     // Default path: send via backend.
+    if (kDebugMode) {
+      debugPrint('[CRM][SEND] 📡 Using BACKEND send (not direct)');
+    }
     try {
       final res = await _dio.post(
         '/crm/chats/$threadId/messages/text',
@@ -479,15 +509,24 @@ class CrmRemoteDataSource {
       );
 
       final data = res.data as Map<String, dynamic>;
+      if (kDebugMode) {
+        debugPrint('[CRM][SEND] ✅ Backend send SUCCESS');
+      }
       return CrmMessage.fromJson(data['item'] as Map<String, dynamic>);
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[CRM][SEND] ❌ Backend send FAILED: $e');
+      }
       // If backend is failing (e.g., HTTP 500), fall back to direct Evolution send when configured.
-      if (!directConfigured) rethrow;
+      if (!directConfigured) {
+        if (kDebugMode) {
+          debugPrint('[CRM][SEND] ❌ Cannot fallback - direct not configured');
+        }
+        rethrow;
+      }
 
       if (kDebugMode) {
-        debugPrint(
-          '[CRM][SEND] backend send failed, falling back to Evolution direct: $e',
-        );
+        debugPrint('[CRM][SEND] 🔄 Falling back to Evolution direct...');
       }
 
       final evo = EvolutionDirectClient.create(
@@ -503,7 +542,7 @@ class CrmRemoteDataSource {
       );
       if (kDebugMode) {
         debugPrint(
-          '[CRM][SEND] Evolution direct send result messageId=${send.messageId}',
+          '[CRM][SEND] ✅ Fallback Evolution send SUCCESS - messageId=${send.messageId}',
         );
       }
       if (send.messageId == null || send.messageId!.trim().isEmpty) {
