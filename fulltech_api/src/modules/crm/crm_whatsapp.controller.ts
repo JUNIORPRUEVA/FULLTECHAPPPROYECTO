@@ -111,11 +111,13 @@ async function createAndSendTextForChat(opts: {
   aiSuggestionId: string | null;
   aiSuggestedText: string | null;
   aiUsedKnowledge: string[] | null;
+  empresaId: string;
 }): Promise<any> {
   const createdAt = new Date();
 
   const pending = await prisma.crmChatMessage.create({
     data: {
+      empresa_id: opts.empresaId,
       chat_id: opts.chatId,
       direction: 'out',
       message_type: 'text',
@@ -966,6 +968,7 @@ export async function sendTextMessage(req: Request, res: Response) {
     aiSuggestionId,
     aiSuggestedText,
     aiUsedKnowledge,
+    empresaId: chat.empresa_id,
   });
 
   res.status(201).json({
@@ -1018,6 +1021,7 @@ export async function sendOutboundTextMessage(req: Request, res: Response) {
     aiSuggestionId: parsed.data.aiSuggestionId ?? null,
     aiSuggestedText: parsed.data.aiSuggestedText ?? null,
     aiUsedKnowledge: (parsed.data.aiUsedKnowledge ?? null) as any,
+    empresaId: chat.empresa_id,
   });
 
   res.status(201).json({
@@ -1047,6 +1051,7 @@ export async function sendMediaMessage(req: Request, res: Response) {
 
   const msg = await prisma.crmChatMessage.create({
     data: {
+      empresa_id: chat.empresa_id,
       chat_id: chatId,
       direction: 'out',
       message_type: mediaType,
@@ -1136,6 +1141,7 @@ export async function recordMediaMessage(req: Request, res: Response) {
 
   const msg = await prisma.crmChatMessage.create({
     data: {
+      empresa_id: chat.empresa_id,
       chat_id: chatId,
       direction: 'out',
       message_type: mediaType,

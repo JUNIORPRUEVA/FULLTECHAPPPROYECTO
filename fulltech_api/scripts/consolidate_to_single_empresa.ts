@@ -279,12 +279,11 @@ async function main() {
 
     // 3) Customers: unique(empresa_id, telefono). Merge duplicates by telefono.
     const dupTelefonos = await safe<Array<{ telefono: string; _count: { _all: number } }>>(
-      () =>
-        prisma.customer.groupBy({
+      async () =>
+        (await prisma.customer.groupBy({
           by: ['telefono'],
           _count: { _all: true },
-          having: { telefono: { _count: { gt: 1 } } },
-        }),
+        })).filter((g) => g._count._all > 1),
       [],
     );
 
@@ -347,12 +346,11 @@ async function main() {
     const dupPhones = await safe<
       Array<{ phone_number: string; _count: { _all: number } }>
     >(
-      () =>
-        prisma.crmThread.groupBy({
+      async () =>
+        (await prisma.crmThread.groupBy({
           by: ['phone_number'],
           _count: { _all: true },
-          having: { phone_number: { _count: { gt: 1 } } },
-        }),
+        })).filter((g) => g._count._all > 1),
       [],
     );
 

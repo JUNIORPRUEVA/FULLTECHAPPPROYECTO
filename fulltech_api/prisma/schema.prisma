@@ -139,14 +139,15 @@ model Empresa {
   categorias_producto CategoriaProducto[]
   productos           Producto[]
 
-  customers     Customer[]
-  sales         Sale[]
-  sales_records SalesRecord[]
-  crm_threads   CrmThread[]
-  crm_messages  CrmMessage[]
-  crm_tasks     CrmTask[]
-  crm_chats     CrmChat[]
-  punch_records PunchRecord[]
+  customers         Customer[]
+  sales             Sale[]
+  sales_records     SalesRecord[]
+  crm_threads       CrmThread[]
+  crm_messages      CrmMessage[]
+  crm_tasks         CrmTask[]
+  crm_chats         CrmChat[]
+  crm_chat_messages CrmChatMessage[] @relation("CrmChatMessageToEmpresa")
+  punch_records     PunchRecord[]
 
   // Maintenance & Warranty
   product_maintenances ProductMaintenance[]
@@ -1276,6 +1277,7 @@ model CrmChat {
 
 model CrmChatMessage {
   id                String   @id @default(uuid()) @db.Uuid
+  empresa_id        String   @db.Uuid
   chat_id           String   @db.Uuid
   direction         String
   message_type      String
@@ -1291,9 +1293,11 @@ model CrmChatMessage {
   timestamp         DateTime
   created_at        DateTime @default(now())
 
-  chat CrmChat @relation(fields: [chat_id], references: [id], onDelete: Cascade)
+  empresa Empresa  @relation("CrmChatMessageToEmpresa", fields: [empresa_id], references: [id])
+  chat    CrmChat  @relation(fields: [chat_id], references: [id], onDelete: Cascade)
 
   @@index([chat_id, timestamp(sort: Desc)])
+  @@index([empresa_id])
   @@map("crm_messages")
 }
 

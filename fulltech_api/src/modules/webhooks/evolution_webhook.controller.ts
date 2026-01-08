@@ -477,6 +477,7 @@ async function processWebhookEvent(body: any, eventId: string | null) {
 
     const message = await tx.crmChatMessage.create({
       data: {
+        empresa_id: chat.empresa_id,
         chat_id: chat.id,
         direction,
         message_type: messageType,
