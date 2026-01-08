@@ -614,7 +614,21 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
   Future<void> _sendText(dynamic notifier) async {
     final text = _textCtrl.text;
     _textCtrl.clear();
-    unawaited(notifier.sendText(text).catchError((_) {}));
+    
+    // Get thread info for proper phone/waId
+    final threadsState = ref.read(crmThreadsControllerProvider);
+    final thread = threadsState.items
+        .where((t) => t.id == widget.threadId)
+        .cast<CrmThread?>()
+        .firstOrNull;
+    
+    unawaited(
+      notifier.sendText(
+        text,
+        toWaId: thread?.waId,
+        toPhone: thread?.phone,
+      ).catchError((_) {}),
+    );
     unawaited(
       ref
           .read(crmThreadsControllerProvider.notifier)
@@ -646,7 +660,21 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     final file = res?.files.firstOrNull;
     if (file == null) return;
 
-    unawaited(notifier.sendMedia(file, type: 'audio').catchError((_) {}));
+    // Get thread info for proper phone/waId
+    final threadsState = ref.read(crmThreadsControllerProvider);
+    final thread = threadsState.items
+        .where((t) => t.id == widget.threadId)
+        .cast<CrmThread?>()
+        .firstOrNull;
+
+    unawaited(
+      notifier.sendMedia(
+        file,
+        type: 'audio',
+        toWaId: thread?.waId,
+        toPhone: thread?.phone,
+      ).catchError((_) {}),
+    );
     unawaited(
       ref
           .read(crmThreadsControllerProvider.notifier)
@@ -826,8 +854,21 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
         path: recordedPath,
         size: size,
       );
+      
+      // Get thread info for proper phone/waId
+      final threadsState = ref.read(crmThreadsControllerProvider);
+      final thread = threadsState.items
+          .where((t) => t.id == widget.threadId)
+          .cast<CrmThread?>()
+          .firstOrNull;
+      
       unawaited(
-        notifier.sendMedia(platformFile, type: 'audio').catchError((_) {}),
+        notifier.sendMedia(
+          platformFile,
+          type: 'audio',
+          toWaId: thread?.waId,
+          toPhone: thread?.phone,
+        ).catchError((_) {}),
       );
       unawaited(
         ref
@@ -880,7 +921,21 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     );
     if (ok != true) return;
 
-    unawaited(notifier.sendMedia(file, type: 'image').catchError((_) {}));
+    // Get thread info for proper phone/waId
+    final threadsState = ref.read(crmThreadsControllerProvider);
+    final thread = threadsState.items
+        .where((t) => t.id == widget.threadId)
+        .cast<CrmThread?>()
+        .firstOrNull;
+
+    unawaited(
+      notifier.sendMedia(
+        file,
+        type: 'image',
+        toWaId: thread?.waId,
+        toPhone: thread?.phone,
+      ).catchError((_) {}),
+    );
     unawaited(
       ref
           .read(crmThreadsControllerProvider.notifier)
@@ -919,7 +974,21 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     );
     if (ok != true) return;
 
-    unawaited(notifier.sendMedia(file, type: 'video').catchError((_) {}));
+    // Get thread info for proper phone/waId
+    final threadsState = ref.read(crmThreadsControllerProvider);
+    final thread = threadsState.items
+        .where((t) => t.id == widget.threadId)
+        .cast<CrmThread?>()
+        .firstOrNull;
+
+    unawaited(
+      notifier.sendMedia(
+        file,
+        type: 'video',
+        toWaId: thread?.waId,
+        toPhone: thread?.phone,
+      ).catchError((_) {}),
+    );
     unawaited(
       ref
           .read(crmThreadsControllerProvider.notifier)

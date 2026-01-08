@@ -111,20 +111,33 @@ class EvolutionDirectClient {
     // Groups: keep JID as-is (Evolution commonly accepts @g.us)
     if (wa.endsWith('@g.us')) return wa;
 
+    // If waId already has @s.whatsapp.net or @c.us, extract number and re-add
+    if (wa.contains('@s.whatsapp.net') || wa.contains('@c.us')) {
+      final at = wa.indexOf('@');
+      final base = at >= 0 ? wa.substring(0, at) : wa;
+      final normalized = _applyDefaultCountryCode(_digitsOnly(base));
+      return '$normalized@s.whatsapp.net';
+    }
+
     // LID is not routable for sending; prefer phone if available
     if (wa.endsWith('@lid') && phone.isNotEmpty) {
-      return _applyDefaultCountryCode(_digitsOnly(phone));
+      final normalized = _applyDefaultCountryCode(_digitsOnly(phone));
+      return '$normalized@s.whatsapp.net';
     }
 
     if (wa.isNotEmpty) {
       final at = wa.indexOf('@');
       final base = at >= 0 ? wa.substring(0, at) : wa;
-      return _applyDefaultCountryCode(_digitsOnly(base));
+      final normalized = _applyDefaultCountryCode(_digitsOnly(base));
+      return '$normalized@s.whatsapp.net';
     }
 
-    if (phone.isEmpty)
+    if (phone.isEmpty) {
       throw Exception('Missing destination (toPhone or toWaId)');
-    return _applyDefaultCountryCode(_digitsOnly(phone));
+    }
+    
+    final normalized = _applyDefaultCountryCode(_digitsOnly(phone));
+    return '$normalized@s.whatsapp.net';
   }
 
   static String _normalizeMediaType(String? mediaType) {
