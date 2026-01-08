@@ -77,6 +77,8 @@ export async function runSqlMigrations(options?: {
     for (const filename of files) {
       const fullPath = path.join(migrationsDirAbs, filename);
       const rawSql = fs.readFileSync(fullPath, 'utf8');
+      const checksum = sha256(rawSql);
+
       // Check if this migration was already applied
       const existing = await client.query(
         'SELECT filename, checksum FROM _sql_migrations WHERE filename = $1',
@@ -88,9 +90,7 @@ export async function runSqlMigrations(options?: {
         continue;
       }
 
-      // Migration was applied but file content changed - DANGER ZONE        continue;
-      }
-
+      // Migration was applied but file content changed - DANGER ZONE
       if (existing.rowCount && existing.rows[0].checksum !== checksum) {
         const oldChecksum = existing.rows[0].checksum.substring(0, 12);
         const newChecksum = checksum.substring(0, 12);
@@ -133,14 +133,14 @@ export async function runSqlMigrations(options?: {
         continue;
       }
 
+      // eslint-disable-next-line no-console
+      console.log(`[SQL_MIGRATIONS] Applying ${filename}...`);
+
       // Execute the SQL (no explicit transaction - let the file control it)
       // Many migration files already include BEGIN/COMMIT
       await client.query(rawSql);
 
       // Record successful application
-      // Important: do NOT wrap in a transaction here. Some scripts already include BEGIN/COMMIT.
-      await client.query(rawSql);
-
       await client.query(
         'INSERT INTO _sql_migrations(filename, checksum) VALUES ($1, $2)',
         [filename, checksum],
