@@ -264,6 +264,10 @@ class CrmRemoteDataSource {
     return patchThread(chatId, patch);
   }
 
+  Future<void> deleteChat(String chatId) async {
+    await _dio.delete('/crm/chats/$chatId');
+  }
+
   Future<MessagesPage> listMessages({
     required String threadId,
     int limit = 50,
@@ -981,7 +985,7 @@ class CrmRemoteDataSource {
     );
 
     final status = res.statusCode ?? 0;
-    
+
     // 401: Throw to trigger auth handler and stop timer
     if (status == 401) {
       if (kDebugMode) {
@@ -993,7 +997,7 @@ class CrmRemoteDataSource {
         type: DioExceptionType.badResponse,
       );
     }
-    
+
     if (status == 404) {
       if (kDebugMode) {
         debugPrint('[CRM][HTTP] /crm/chats/stats -> 404 (not available)');

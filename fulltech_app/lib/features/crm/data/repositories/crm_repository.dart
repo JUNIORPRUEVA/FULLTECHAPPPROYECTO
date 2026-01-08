@@ -53,7 +53,9 @@ class CrmRepository {
     }
   }
 
-  Future<List<CrmMessage>> readCachedMessages({required String threadId}) async {
+  Future<List<CrmMessage>> readCachedMessages({
+    required String threadId,
+  }) async {
     final store = messagesStoreForThread(threadId);
     final rows = await _db.listEntitiesJson(store: store);
     final items = rows
@@ -110,6 +112,8 @@ class CrmRepository {
 
   Future<CrmThread> patchChat(String chatId, Map<String, dynamic> patch) =>
       _remote.patchChat(chatId, patch);
+
+  Future<void> deleteChat(String chatId) => _remote.deleteChat(chatId);
 
   Future<MessagesPage> listMessages({
     required String threadId,

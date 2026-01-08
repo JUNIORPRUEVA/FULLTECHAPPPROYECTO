@@ -123,8 +123,9 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
                 width: 32,
                 height: 32,
                 child: IconButton(
-                  tooltip:
-                      _isRightPanelOpen ? 'Ocultar panel' : 'Mostrar panel',
+                  tooltip: _isRightPanelOpen
+                      ? 'Ocultar panel'
+                      : 'Mostrar panel',
                   onPressed: () {
                     setState(() {
                       _isRightPanelOpen = !_isRightPanelOpen;
@@ -222,102 +223,121 @@ class _ThreadsList extends ConsumerWidget {
         Card(
           child: Column(
             children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceVariant,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceVariant,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      'Chats: $count',
+                      style: textTheme.labelLarge?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('•'),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Sin responder: $unansweredCount',
+                      style: textTheme.labelLarge?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  'Chats: $count',
-                  style: textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text('•'),
-                const SizedBox(width: 12),
-                Text(
-                  'Sin responder: $unansweredCount',
-                  style: textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Builder(
-              builder: (context) {
-                if (threadsState.loading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+              Expanded(
+                child: Builder(
+                  builder: (context) {
+                    if (threadsState.loading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                final error = threadsState.error;
-                if (error != null) {
-                  return CompactErrorWidget(
-                    error: error,
-                    onRetry: () => notifier.refresh(),
-                  );
-                }
-
-                final items = visibleItems;
-                if (items.isEmpty) {
-                  return const Center(child: Text('Sin chats'));
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 72),
-                  itemCount: items.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == items.length) {
-                      final total = threadsState.total;
-                      final canLoadMore = threadsState.items.length < total;
-                      return Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Align(
-                          alignment: Alignment.center,
-                          child: TextButton(
-                            onPressed: canLoadMore
-                                ? () => notifier.loadMore()
-                                : null,
-                            child: Text(canLoadMore ? 'Cargar más' : 'Fin'),
-                          ),
-                        ),
+                    final error = threadsState.error;
+                    if (error != null) {
+                      return CompactErrorWidget(
+                        error: error,
+                        onRetry: () => notifier.refresh(),
                       );
                     }
 
-                    final CrmThread t = items[index];
-                    return ChatListItemPro(
-                      thread: t,
-                      isSelected: selectedId == t.id,
-                      onTap: () async {
-                        onSelect(t.id);
-                        // Mark as read
-                        try {
-                          await ref
-                              .read(crmRepositoryProvider)
-                              .markChatRead(t.id);
-                          // Refresh to update unread count
-                          await notifier.refresh();
-                        } catch (e) {
-                          if (kDebugMode) {
-                            debugPrint('[CRM] Error marking read: $e');
-                          }
+                    final items = visibleItems;
+                    if (items.isEmpty) {
+                      return const Center(child: Text('Sin chats'));
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 72),
+                      itemCount: items.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == items.length) {
+                          final total = threadsState.total;
+                          final canLoadMore = threadsState.items.length < total;
+                          return Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Align(
+                              alignment: Alignment.center,
+                              child: TextButton(
+                                onPressed: canLoadMore
+                                    ? () => notifier.loadMore()
+                                    : null,
+                                child: Text(canLoadMore ? 'Cargar más' : 'Fin'),
+                              ),
+                            ),
+                          );
                         }
+
+                        final CrmThread t = items[index];
+                        return ChatListItemPro(
+                          thread: t,
+                          isSelected: selectedId == t.id,
+                          onTap: () async {
+                            onSelect(t.id);
+                            // Mark as read
+                            try {
+                              await ref
+                                  .read(crmRepositoryProvider)
+                                  .markChatRead(t.id);
+                              // Refresh to update unread count
+                              await notifier.refresh();
+                            } catch (e) {
+                              if (kDebugMode) {
+                                debugPrint('[CRM] Error marking read: $e');
+                              }
+                            }
+                          },
+                          onEdit: () => _showEditChatDialog(context, ref, t),
+                          onDelete: () => _showDeleteChatDialog(
+                            context,
+                            ref,
+                            t,
+                            () {
+                              // After delete, clear selection if this was selected
+                              if (selectedId == t.id) {
+                                ref
+                                        .read(selectedThreadIdProvider.notifier)
+                                        .state =
+                                    null;
+                              }
+                              notifier.refresh();
+                            },
+                          ),
+                          now: now,
+                        );
                       },
-                      now: now,
                     );
                   },
-                );
-              },
-            ),
-          ),
+                ),
+              ),
             ],
           ),
         ),
@@ -327,8 +347,7 @@ class _ThreadsList extends ConsumerWidget {
           child: FloatingActionButton(
             heroTag: 'crm_new_outbound_chat_fab',
             mini: true,
-            tooltip: 'Nuevo chat (número fuera de lista)'
-            ,
+            tooltip: 'Nuevo chat (número fuera de lista)',
             onPressed: () async {
               final result = await showDialog<CrmOutboundResult>(
                 context: context,
@@ -361,4 +380,121 @@ class _EmptyPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(child: Center(child: Text(text)));
   }
+}
+
+// Dialog para editar chat
+void _showEditChatDialog(
+  BuildContext context,
+  WidgetRef ref,
+  CrmThread thread,
+) {
+  final nameController = TextEditingController(text: thread.displayName ?? '');
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Editar Chat'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              labelText: 'Nombre del contacto',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Teléfono: ${thread.phone ?? "No disponible"}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            try {
+              await ref.read(crmRepositoryProvider).patchChat(thread.id, {
+                'display_name': nameController.text.trim(),
+              });
+              await ref.read(crmThreadsControllerProvider.notifier).refresh();
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Chat actualizado')),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error: $e'),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                );
+              }
+            }
+          },
+          child: const Text('Guardar'),
+        ),
+      ],
+    ),
+  );
+}
+
+// Dialog para eliminar chat
+void _showDeleteChatDialog(
+  BuildContext context,
+  WidgetRef ref,
+  CrmThread thread,
+  VoidCallback onDeleted,
+) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Eliminar Chat'),
+      content: Text(
+        '¿Estás seguro de que deseas eliminar el chat con ${thread.displayName ?? thread.phone ?? "este contacto"}?\n\nEsta acción no se puede deshacer.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+          onPressed: () async {
+            try {
+              await ref.read(crmRepositoryProvider).deleteChat(thread.id);
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Chat eliminado')));
+                onDeleted();
+              }
+            } catch (e) {
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error al eliminar: $e'),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                );
+              }
+            }
+          },
+          child: const Text('Eliminar'),
+        ),
+      ],
+    ),
+  );
 }

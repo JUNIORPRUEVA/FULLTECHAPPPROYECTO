@@ -6,6 +6,8 @@ class ChatListItemPro extends StatelessWidget {
   final CrmThread thread;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final DateTime now;
 
   const ChatListItemPro({
@@ -13,6 +15,8 @@ class ChatListItemPro extends StatelessWidget {
     required this.thread,
     required this.isSelected,
     required this.onTap,
+    this.onEdit,
+    this.onDelete,
     required this.now,
   });
 
@@ -186,11 +190,61 @@ class ChatListItemPro extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
 
-                // Right column: time + indicators
+                // Right column: time + indicators + menu
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    // Menu button
+                    PopupMenuButton<String>(
+                      icon: Icon(
+                        Icons.more_vert,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      padding: EdgeInsets.zero,
+                      iconSize: 18,
+                      tooltip: 'Opciones',
+                      onSelected: (value) {
+                        if (value == 'edit' && onEdit != null) {
+                          onEdit!();
+                        } else if (value == 'delete' && onDelete != null) {
+                          onDelete!();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, size: 18),
+                              const SizedBox(width: 12),
+                              Text('Editar'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: theme.colorScheme.error,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Eliminar',
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     // Time
                     Text(
                       timeStr,

@@ -11,7 +11,8 @@ String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
   final trimmed = url.trim();
   if (trimmed.isEmpty) return null;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+    return trimmed;
   final base = AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
   if (trimmed.startsWith('/')) return '$base$trimmed';
   return '$base/$trimmed';
@@ -25,6 +26,7 @@ class RightPanelCrm extends ConsumerStatefulWidget {
   @override
   ConsumerState<RightPanelCrm> createState() => _RightPanelCrmState();
 }
+
 class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
   final _noteCtrl = TextEditingController();
 
@@ -52,6 +54,18 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Encabezado
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          child: Center(
+            child: Text(
+              'Gestión y Estadísticas',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
         // 1) Estadísticas (arriba, más visible)
         const Card(
           margin: EdgeInsets.only(bottom: 8),
@@ -116,7 +130,9 @@ class _ProductChip extends StatelessWidget {
           CircleAvatar(
             radius: 12,
             backgroundColor: theme.colorScheme.onPrimary,
-            backgroundImage: resolvedImage == null ? null : NetworkImage(resolvedImage),
+            backgroundImage: resolvedImage == null
+                ? null
+                : NetworkImage(resolvedImage),
             child: resolvedImage == null
                 ? Icon(
                     Icons.inventory_2,
@@ -348,9 +364,7 @@ class _ActionsSection extends ConsumerWidget {
                 final v = noteCtrl.text.trim();
                 if (v.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('La nota es obligatoria.'),
-                    ),
+                    const SnackBar(content: Text('La nota es obligatoria.')),
                   );
                   return;
                 }
