@@ -6,7 +6,6 @@ import '../../../core/routing/app_routes.dart';
 import '../../../core/widgets/module_page.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
-import '../data/operations_repository.dart';
 import '../models/operations_models.dart';
 import '../state/operations_providers.dart';
 
