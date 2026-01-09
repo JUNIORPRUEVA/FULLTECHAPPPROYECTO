@@ -5,57 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/offline_http_queue.dart';
 import '../data/pos_repository.dart';
 import '../models/pos_models.dart';
+import '../models/pos_ticket.dart';
+import '../services/pos_pricing.dart';
 
-class PosTicket {
-  final String id;
-  final String name;
-  final String? customerId;
-  final String? customerName;
-  final String? customerRnc;
-  final String invoiceType; // NORMAL|FISCAL
-  final double globalDiscount;
-  final List<PosSaleItemDraft> items;
 
-  const PosTicket({
-    required this.id,
-    required this.name,
-    required this.customerId,
-    required this.customerName,
-    required this.customerRnc,
-    required this.invoiceType,
-    required this.globalDiscount,
-    required this.items,
-  });
+class PosSavedTpvState {
+  final List<PosTicket> tickets;
+  final String activeTicketId;
 
-  PosTicket copyWith({
-    String? name,
-    String? customerId,
-    String? customerName,
-    String? customerRnc,
-    String? invoiceType,
-    double? globalDiscount,
-    List<PosSaleItemDraft>? items,
-  }) {
-    return PosTicket(
-      id: id,
-      name: name ?? this.name,
-      customerId: customerId ?? this.customerId,
-      customerName: customerName ?? this.customerName,
-      customerRnc: customerRnc ?? this.customerRnc,
-      invoiceType: invoiceType ?? this.invoiceType,
-      globalDiscount: globalDiscount ?? this.globalDiscount,
-      items: items ?? this.items,
-    );
-  }
-
-  double get subtotal =>
-      items.fold<double>(0, (acc, it) => acc + (it.qty * it.unitPrice));
-  double get lineDiscounts =>
-      items.fold<double>(0, (acc, it) => acc + it.discountAmount);
-  double get baseAfterLineDiscounts => items.fold<double>(
-    0,
-    (acc, it) => acc + (it.lineSubtotal < 0 ? 0 : it.lineSubtotal),
-  );
+  const PosSavedTpvState({required this.tickets, required this.activeTicketId});
 }
 
 class PosTpvState {
@@ -128,11 +86,17 @@ class PosTpvController extends StateNotifier<PosTpvState> {
             PosTicket(
               id: 'ticket-1',
               name: 'Ticket 1',
+              isCustomName: false,
               customerId: null,
               customerName: null,
+              customerPhone: null,
               customerRnc: null,
-              invoiceType: 'NORMAL',
-              globalDiscount: 0,
+              discountType: PosDiscountType.fixed,
+              discountValue: 0,
+              itbisEnabled: false,
+              itbisRate: 0.18,
+              ncfEnabled: false,
+              selectedNcfDocType: null,
               items: [],
             ),
           ],
@@ -141,15 +105,41 @@ class PosTpvController extends StateNotifier<PosTpvState> {
         ),
       ) {
     unawaited(refreshProducts());
+    unawaited(_restoreLocalTickets());
   }
 
   final PosRepository _repo;
   Timer? _debounce;
+  Timer? _persistDebounce;
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _persistDebounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _restoreLocalTickets() async {
+    try {
+      final saved = await _repo.loadTpvTickets();
+      if (saved == null) return;
+      if (saved.tickets.isEmpty) return;
+      final activeExists = saved.tickets.any((t) => t.id == saved.activeTicketId);
+
+      state = state.copyWith(
+        tickets: saved.tickets,
+        activeTicketId: activeExists ? saved.activeTicketId : saved.tickets.first.id,
+      );
+    } catch (_) {
+      // Best-effort restore.
+    }
+  }
+
+  void _schedulePersist() {
+    _persistDebounce?.cancel();
+    _persistDebounce = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_repo.saveTpvTickets(state.tickets, state.activeTicketId));
+    });
   }
 
   Future<void> refreshProducts() async {
@@ -190,11 +180,17 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     final ticket = PosTicket(
       id: id,
       name: 'Ticket $n',
+      isCustomName: false,
       customerId: null,
       customerName: null,
+      customerPhone: null,
       customerRnc: null,
-      invoiceType: 'NORMAL',
-      globalDiscount: 0,
+      discountType: PosDiscountType.fixed,
+      discountValue: 0,
+      itbisEnabled: false,
+      itbisRate: 0.18,
+      ncfEnabled: false,
+      selectedNcfDocType: null,
       items: const [],
     );
 
@@ -202,15 +198,23 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       tickets: [...state.tickets, ticket],
       activeTicketId: id,
     );
+
+    _schedulePersist();
   }
 
   void renameTicket(String id, String name) {
     final nextName = name.trim();
     if (nextName.isEmpty) return;
     final tickets = state.tickets
-        .map((t) => t.id == id ? t.copyWith(name: nextName) : t)
+        .map(
+          (t) =>
+              t.id == id
+                  ? t.copyWith(name: nextName, isCustomName: true)
+                  : t,
+        )
         .toList();
     state = state.copyWith(tickets: tickets);
+    _schedulePersist();
   }
 
   void closeTicket(String id) {
@@ -221,33 +225,65 @@ class PosTpvController extends StateNotifier<PosTpvState> {
         ? tickets.first.id
         : state.activeTicketId;
     state = state.copyWith(tickets: tickets, activeTicketId: active);
+    _schedulePersist();
   }
 
   void selectTicket(String id) {
     state = state.copyWith(activeTicketId: id);
+    _schedulePersist();
   }
 
-  void setInvoiceType(String invoiceType) {
+  void setCustomer({
+    String? customerId,
+    String? name,
+    String? phone,
+    String? rnc,
+  }) {
     final t = state.activeTicket;
-    _updateTicket(t.copyWith(invoiceType: invoiceType));
-  }
+    final nextName = (name ?? '').trim();
 
-  void setCustomer({String? customerId, String? name, String? rnc}) {
-    final t = state.activeTicket;
-    final label = (name ?? '').trim().isEmpty ? t.name : name!.trim();
+    final shouldAutoName = !t.isCustomName && nextName.isNotEmpty;
     _updateTicket(
       t.copyWith(
         customerId: customerId,
-        customerName: name,
-        customerRnc: rnc,
-        name: label,
+        customerName: nextName.isEmpty ? null : nextName,
+        customerPhone: (phone ?? '').trim().isEmpty ? null : (phone ?? '').trim(),
+        customerRnc: (rnc ?? '').trim().isEmpty ? null : (rnc ?? '').trim(),
+        name: shouldAutoName ? nextName : t.name,
       ),
     );
   }
 
-  void setGlobalDiscount(double amount) {
+  void setGlobalDiscount({
+    required PosDiscountType type,
+    required double value,
+  }) {
     final t = state.activeTicket;
-    _updateTicket(t.copyWith(globalDiscount: amount < 0 ? 0 : amount));
+    final safeValue = value.isNaN || value.isInfinite ? 0 : value;
+    _updateTicket(t.copyWith(discountType: type, discountValue: safeValue));
+  }
+
+  void setItbisEnabled(bool enabled) {
+    final t = state.activeTicket;
+    _updateTicket(t.copyWith(itbisEnabled: enabled));
+  }
+
+  void setItbisRatePercent(double percent) {
+    final t = state.activeTicket;
+    final p = percent.isNaN || percent.isInfinite ? 0 : percent;
+    final rate = (p.clamp(0, 100) / 100.0).toDouble();
+    _updateTicket(t.copyWith(itbisRate: rate));
+  }
+
+  void setNcfEnabled(bool enabled) {
+    final t = state.activeTicket;
+    _updateTicket(t.copyWith(ncfEnabled: enabled));
+  }
+
+  void setSelectedNcfDocType(String? docType) {
+    final t = state.activeTicket;
+    final next = (docType ?? '').trim();
+    _updateTicket(t.copyWith(selectedNcfDocType: next.isEmpty ? null : next));
   }
 
   void addProduct(PosProduct product) {
@@ -302,15 +338,25 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       throw StateError('El carrito está vacío');
     }
 
+    // Pricing computed locally for validation / payload.
+    final pricing = computeTicketPricing(
+      grossSubtotal: t.subtotal,
+      lineDiscounts: t.lineDiscounts,
+      discountType: t.discountType,
+      discountValue: t.discountValue,
+      itbisEnabled: t.itbisEnabled,
+      itbisRate: t.itbisRate,
+    );
+
     state = state.copyWith(loading: true, error: null);
     try {
       final sale = await _repo.createSale(
-        invoiceType: t.invoiceType,
+        invoiceType: t.ncfEnabled ? 'FISCAL' : 'NORMAL',
         customerId: t.customerId,
         customerName: t.customerName,
         customerRnc: t.customerRnc,
         items: t.items,
-        discountTotal: t.globalDiscount,
+        discountTotal: pricing.globalDiscount,
       );
 
       final paid = await _repo.paySale(
@@ -325,21 +371,28 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       );
 
       // Clear current ticket after payment.
-      final cleared = t.copyWith(items: const [], globalDiscount: 0);
+      final cleared = t.copyWith(
+        items: const [],
+        discountType: PosDiscountType.fixed,
+        discountValue: 0,
+        ncfEnabled: false,
+        selectedNcfDocType: null,
+      );
       _updateTicket(cleared);
 
       state = state.copyWith(loading: false, lastPaidSale: paid);
+      _schedulePersist();
       return paid;
     } catch (e) {
       // Offline-first: queue the checkout and clear the ticket so the user can continue.
       if (OfflineHttpQueue.isNetworkError(e)) {
         await _repo.queueOfflineCheckout(
-          invoiceType: t.invoiceType,
+          invoiceType: t.ncfEnabled ? 'FISCAL' : 'NORMAL',
           customerId: t.customerId,
           customerName: t.customerName,
           customerRnc: t.customerRnc,
           items: t.items,
-          discountTotal: t.globalDiscount,
+          discountTotal: pricing.globalDiscount,
           paymentMethod: paymentMethod,
           paidAmount: paidAmount,
           receivedAmount: receivedAmount,
@@ -349,9 +402,16 @@ class PosTpvController extends StateNotifier<PosTpvState> {
           note: null,
         );
 
-        final cleared = t.copyWith(items: const [], globalDiscount: 0);
+        final cleared = t.copyWith(
+          items: const [],
+          discountType: PosDiscountType.fixed,
+          discountValue: 0,
+          ncfEnabled: false,
+          selectedNcfDocType: null,
+        );
         _updateTicket(cleared);
         state = state.copyWith(loading: false, error: null);
+        _schedulePersist();
         return null;
       }
 
@@ -365,5 +425,14 @@ class PosTpvController extends StateNotifier<PosTpvState> {
         .map((t) => t.id == next.id ? next : t)
         .toList();
     state = state.copyWith(tickets: tickets);
+    _schedulePersist();
   }
+}
+
+extension _PosTicketComputed on PosTicket {
+  double get subtotal =>
+      items.fold<double>(0, (acc, it) => acc + (it.qty * it.unitPrice));
+
+  double get lineDiscounts =>
+      items.fold<double>(0, (acc, it) => acc + it.discountAmount);
 }

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../../core/services/offline_http_queue.dart';
 import '../../../core/storage/local_db_interface.dart';
 import '../models/pos_models.dart';
+import '../models/pos_ticket.dart';
 import 'pos_api.dart';
 
 class PosRepository {
@@ -18,12 +19,53 @@ class PosRepository {
   static const _syncModule = 'pos';
   static const _opCheckout = 'checkout';
 
+  static const _tpvStore = 'pos_tpv';
+  static const _tpvStateId = 'tpv_state';
+
   Future<String> _productStore() async {
     final session = await _db.readSession();
     final empresaId = session?.user.empresaId;
     return empresaId == null || empresaId.trim().isEmpty
         ? 'pos_products'
         : 'pos_products_${empresaId.trim()}';
+  }
+
+  Future<String> _tpvTicketsStore() async {
+    final session = await _db.readSession();
+    final empresaId = session?.user.empresaId;
+    return empresaId == null || empresaId.trim().isEmpty
+        ? _tpvStore
+        : '${_tpvStore}_${empresaId.trim()}';
+  }
+
+  Future<void> saveTpvTickets(List<PosTicket> tickets, String activeTicketId) async {
+    final store = await _tpvTicketsStore();
+    final payload = {
+      'active_ticket_id': activeTicketId,
+      'tickets': tickets.map((t) => t.toJson()).toList(),
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    await _db.upsertEntity(store: store, id: _tpvStateId, json: jsonEncode(payload));
+  }
+
+  Future<({List<PosTicket> tickets, String activeTicketId})?> loadTpvTickets() async {
+    final store = await _tpvTicketsStore();
+    final raw = await _db.getEntityJson(store: store, id: _tpvStateId);
+    if (raw == null || raw.trim().isEmpty) return null;
+
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) return null;
+    final m = decoded.cast<String, dynamic>();
+
+    final ticketsJson = (m['tickets'] as List?)?.cast<Map>() ?? const [];
+    final tickets = ticketsJson
+        .map((e) => PosTicket.fromJson(e.cast<String, dynamic>()))
+        .where((t) => t.id.trim().isNotEmpty)
+        .toList();
+
+    final active = (m['active_ticket_id'] ?? '').toString();
+    if (tickets.isEmpty) return null;
+    return (tickets: tickets, activeTicketId: active);
   }
 
   Future<List<PosProduct>> _readCachedProducts() async {
@@ -277,6 +319,85 @@ class PosRepository {
     final res = await _api.paySale(saleId, payload);
     final data = (res['data'] as Map).cast<String, dynamic>();
     return PosSale.fromJson(data);
+  }
+
+  // === Clientes (customers) ===
+
+  Future<Map<String, dynamic>?> findCustomerByPhone(String phone) async {
+    final q = phone.trim();
+    if (q.isEmpty) return null;
+
+    final res = await _api.listCustomers(q: q, limit: 50);
+    final items = (res['items'] as List?)?.cast<Map>() ?? const [];
+    Map<String, dynamic>? exact;
+    for (final it in items) {
+      final m = it.cast<String, dynamic>();
+      final t = (m['telefono'] ?? '').toString().trim();
+      if (t == q) {
+        exact = m;
+        break;
+      }
+    }
+    return exact;
+  }
+
+  Future<Map<String, dynamic>> createCustomer({
+    required String nombre,
+    required String telefono,
+    String? direccion,
+    String? nota,
+    List<String>? tags,
+  }) async {
+    final payload = {
+      'nombre': nombre.trim(),
+      'telefono': telefono.trim(),
+      if (direccion != null && direccion.trim().isNotEmpty) 'direccion': direccion.trim(),
+      if (nota != null && nota.trim().isNotEmpty) 'notas': nota.trim(),
+      if (tags != null) 'tags': tags,
+      'origen': 'tpv',
+    };
+    return _api.createCustomer(payload);
+  }
+
+  Future<Map<String, dynamic>> patchCustomer(String id, Map<String, dynamic> patch) async {
+    return _api.patchCustomer(id, patch);
+  }
+
+  Future<Map<String, dynamic>> getCustomer(String id) async {
+    return _api.getCustomer(id);
+  }
+
+  Future<void> markCustomerAsBought(String customerId) async {
+    final current = await getCustomer(customerId);
+    final tags = ((current['tags'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .where((s) => s.trim().isNotEmpty)
+        .toSet();
+
+    tags.add('compro');
+    tags.remove('en_espera');
+
+    await patchCustomer(customerId, {'tags': tags.toList()});
+  }
+
+  // === NCF / Comprobantes fiscales ===
+
+  Future<List<Map<String, dynamic>>> listNcfSequences() async {
+    final res = await _api.listNcfSequences();
+    final items = (res['items'] as List?)?.cast<Map>() ?? const [];
+    return items.map((e) => e.cast<String, dynamic>()).toList();
+  }
+
+  Future<Map<String, dynamic>> createNcfSequence(Map<String, dynamic> payload) async {
+    return _api.createNcfSequence(payload);
+  }
+
+  Future<Map<String, dynamic>> updateNcfSequence(String id, Map<String, dynamic> payload) async {
+    return _api.updateNcfSequence(id, payload);
+  }
+
+  Future<void> deleteNcfSequence(String id) async {
+    await _api.deleteNcfSequence(id);
   }
 
   Future<List<PosPurchaseOrder>> listPurchases({
