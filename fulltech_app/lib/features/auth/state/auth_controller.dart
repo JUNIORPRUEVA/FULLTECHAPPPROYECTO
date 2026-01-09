@@ -11,14 +11,19 @@ import 'dart:async';
 
 class AuthController extends StateNotifier<AuthState> {
   final LocalDb _db;
-  final AuthApi _api;
+  final AuthApi Function() _getAuthApi;
+  final VoidCallback? _onDispose;
 
   late final StreamSubscription<AuthEvent> _eventsSub;
 
-  AuthController({required LocalDb db, required AuthApi api})
-    : _db = db,
-      _api = api,
-      super(const AuthUnknown()) {
+  AuthController({
+    required LocalDb db,
+    required AuthApi Function() getAuthApi,
+    VoidCallback? onDispose,
+  })  : _db = db,
+        _getAuthApi = getAuthApi,
+        _onDispose = onDispose,
+        super(const AuthUnknown()) {
     _eventsSub = AuthEvents.stream.listen((event) async {
       if (event.type == AuthEventType.unauthorized) {
         if (kDebugMode) {
@@ -64,7 +69,7 @@ class AuthController extends StateNotifier<AuthState> {
     state = AuthValidating(user: session.user);
 
     try {
-      final me = await _api.me();
+      final me = await _getAuthApi().me();
       // Keep stored user info fresh (token stays the same).
       await _db.saveSession(AuthSession(token: session.token, user: me));
       state = AuthAuthenticated(token: session.token, user: me);
@@ -106,7 +111,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> login({required String email, required String password}) async {
     if (kDebugMode) debugPrint('[AUTH] login() email=$email');
-    final result = await _api.login(email: email, password: password);
+    final result = await _getAuthApi().login(email: email, password: password);
     final session = AuthSession(token: result.token, user: result.user);
     await _db.saveSession(session);
     if (kDebugMode) {
@@ -123,7 +128,9 @@ class AuthController extends StateNotifier<AuthState> {
 
   @override
   void dispose() {
+    if (kDebugMode) debugPrint('[AUTH] AuthController.dispose() called');
     _eventsSub.cancel();
+    _onDispose?.call();
     super.dispose();
   }
 }
