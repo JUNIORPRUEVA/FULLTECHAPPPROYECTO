@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
@@ -1066,27 +1067,54 @@ class LocalDbIo implements LocalDb {
 
   @override
   Future<void> saveSession(AuthSession session) async {
-    await _database.insert('auth_session', {
-      'id': 1,
-      'token': session.token,
-      'user_json': jsonEncode(session.user.toJson()),
-    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+    try {
+      await _database.insert('auth_session', {
+        'id': 1,
+        'token': session.token,
+        'user_json': jsonEncode(session.user.toJson()),
+      }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+    } catch (e) {
+      // Log the error but don't throw - this prevents login from failing
+      // due to database issues
+      if (kDebugMode) {
+        debugPrint('[DB] Failed to save session: $e');
+      }
+      rethrow;
+    }
   }
 
   @override
   Future<AuthSession?> readSession() async {
-    final rows = await _database.query('auth_session', where: 'id = 1');
-    if (rows.isEmpty) return null;
-    final row = rows.first;
-    return AuthSession.fromJson({
-      'token': row['token'] as String,
-      'user': jsonDecode(row['user_json'] as String) as Map<String, dynamic>,
-    });
+    try {
+      final rows = await _database.query('auth_session', where: 'id = 1');
+      if (rows.isEmpty) return null;
+      final row = rows.first;
+      return AuthSession.fromJson({
+        'token': row['token'] as String,
+        'user': jsonDecode(row['user_json'] as String) as Map<String, dynamic>,
+      });
+    } catch (e) {
+      // If session reading fails (e.g., corrupted data), clear it and return null
+      // This prevents the app from crashing on corrupt session data
+      if (kDebugMode) {
+        debugPrint('[DB] Failed to read session: $e - clearing session');
+      }
+      await clearSession().catchError((_) => null);
+      return null;
+    }
   }
 
   @override
   Future<void> clearSession() async {
-    await _database.delete('auth_session');
+    try {
+      await _database.delete('auth_session');
+    } catch (e) {
+      // Log the error but don't throw - clearing session should always succeed
+      if (kDebugMode) {
+        debugPrint('[DB] Failed to clear session: $e');
+      }
+      // Don't rethrow - we want to ensure the app can continue even if clear fails
+    }
   }
 
   @override
