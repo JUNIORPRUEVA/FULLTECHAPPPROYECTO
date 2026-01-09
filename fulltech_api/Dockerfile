@@ -76,11 +76,12 @@ RUN apt-get update \
 
 # Only production deps
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 # Prisma client artifacts + schema
 COPY --from=build /app/node_modules/.prisma /app/node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma /app/node_modules/@prisma
+COPY --from=build /app/node_modules/@prisma/client /app/node_modules/@prisma/client
 COPY --from=build /app/prisma /app/prisma
 COPY --from=build /app/sql /app/sql
 
