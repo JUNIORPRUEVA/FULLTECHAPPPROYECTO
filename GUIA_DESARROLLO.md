@@ -41,7 +41,7 @@ Esta guía te explica **cómo hacer cambios en el proyecto, cómo aplicarlos, y 
 Abre una terminal y ejecuta:
 
 ```bash
-# Clonar el repositorio
+# Clonar el repositorio (reemplaza con la URL de tu proyecto)
 git clone https://github.com/JUNIORPRUEVA/FULLTECHAPPPROYECTO.git
 
 # Entrar al directorio del proyecto
