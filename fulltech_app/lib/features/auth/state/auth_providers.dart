@@ -25,11 +25,32 @@ final authApiProvider = Provider<AuthApi>((ref) {
   return AuthApi(ref.watch(apiClientProvider).dio);
 });
 
+/// CRITICAL: Auth controller must NOT rebuild when API endpoint changes.
+/// Using KeepAliveLink to prevent disposal during configuration changes.
+/// This ensures the user session persists even when switching servers in debug mode.
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
   (ref) {
+    // Keep this provider alive to prevent disposal during rebuilds
+    final keepAlive = ref.keepAlive();
+    
+    // Read (not watch) localDb - it's stable and won't cause rebuilds
+    final db = ref.read(localDbProvider);
+    
+    // Create a getter function that can fetch the current API dynamically
+    // This allows the controller to use the current API endpoint without
+    // causing the controller itself to rebuild when endpoints change
+    AuthApi getAuthApi() {
+      final apiClient = ref.read(apiClientProvider);
+      return AuthApi(apiClient.dio);
+    }
+    
     return AuthController(
-      db: ref.watch(localDbProvider),
-      api: ref.watch(authApiProvider),
+      db: db,
+      getAuthApi: getAuthApi,
+      onDispose: () {
+        // Cancel keep-alive when explicitly disposing
+        keepAlive.close();
+      },
     );
   },
 );
