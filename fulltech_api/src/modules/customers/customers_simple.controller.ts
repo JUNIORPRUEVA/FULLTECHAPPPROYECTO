@@ -13,6 +13,39 @@ function empresaId(req: Request): string {
   return actor.empresaId;
 }
 
+const CRM_STATUS_TAGS = [
+  'primer_contacto',
+  'interesado',
+  'reserva',
+  'compro',
+  'compra_finalizada',
+  'pendiente_pago',
+  'por_levantamiento',
+  'servicio_reservado',
+  'con_problema',
+  'garantia',
+  'solucion_garantia',
+  'no_interesado',
+  'servicio_finalizado',
+  'cancelado',
+] as const;
+
+function normalizeStatusTag(raw: string): string {
+  const v = String(raw || '').trim();
+  if (!v) return 'primer_contacto';
+  if (v === 'activo' || v === 'inactivo' || v === 'pendiente') return 'primer_contacto';
+  if (v === 'noInteresado') return 'no_interesado';
+  if (v === 'en_garantia') return 'garantia';
+  return v;
+}
+
+function statusAliases(normalized: string): string[] {
+  if (normalized === 'no_interesado') return ['noInteresado'];
+  if (normalized === 'garantia') return ['en_garantia'];
+  if (normalized === 'compra_finalizada') return ['finalizado'];
+  return [];
+}
+
 /**
  * GET /api/customers
  * Lista simplificada con stats globales
@@ -46,7 +79,8 @@ export async function listCustomers(req: Request, res: Response) {
 
   // Filter by status tag
   if (status) {
-    where.tags = { has: status };
+    const normalized = normalizeStatusTag(status);
+    where.tags = { hasSome: [normalized, ...statusAliases(normalized)] };
   }
 
   // Fetch customers
@@ -63,12 +97,10 @@ export async function listCustomers(req: Request, res: Response) {
   // Transform to frontend format
   const enriched = items.map((c) => {
     const whatsappId = c.telefono ? `${c.telefono}@s.whatsapp.net` : null;
+
+    const normalizedTags = (c.tags ?? []).map((t: string) => normalizeStatusTag(t));
     const statusTag =
-      c.tags.find((t: string) =>
-        ['activo', 'interesado', 'reserva', 'compro', 'noInteresado'].includes(
-          t.toLowerCase()
-        )
-      ) || 'activo';
+      CRM_STATUS_TAGS.find((t) => normalizedTags.includes(t)) ?? 'primer_contacto';
 
     return {
       id: c.id,
@@ -77,7 +109,8 @@ export async function listCustomers(req: Request, res: Response) {
       whatsappId,
       avatarUrl: null,
       status: statusTag,
-      isActiveCustomer: c.tags.includes('compro') || c.tags.includes('activo'),
+      isActiveCustomer:
+        c.tags.includes('compro') || c.tags.includes('compra_finalizada') || c.tags.includes('activo'),
       totalPurchasesCount: 0, // TODO: calculate when sales exist
       totalSpent: 0,
       lastPurchaseAt: null,
@@ -98,13 +131,11 @@ export async function listCustomers(req: Request, res: Response) {
   const activeCustomersCount = enriched.filter((c) => c.isActiveCustomer).length;
 
   // Count by status
-  const byStatus = {
-    activo: enriched.filter((c) => c.status === 'activo').length,
-    interesado: enriched.filter((c) => c.status === 'interesado').length,
-    reserva: enriched.filter((c) => c.status === 'reserva').length,
-    compro: enriched.filter((c) => c.status === 'compro').length,
-    noInteresado: enriched.filter((c) => c.status === 'noInteresado').length,
-  };
+  const byStatus: Record<string, number> = {};
+  for (const key of CRM_STATUS_TAGS) byStatus[key] = 0;
+  for (const row of enriched) {
+    byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
+  }
 
   res.json({
     items: enriched,
@@ -169,12 +200,8 @@ export async function getCustomer(req: Request, res: Response) {
     unreadCount: chat.unread_count,
   }));
 
-  const statusTag =
-    customer.tags.find((t: string) =>
-      ['activo', 'interesado', 'reserva', 'compro', 'noInteresado'].includes(
-        t.toLowerCase()
-      )
-    ) || 'activo';
+  const normalizedTags = (customer.tags ?? []).map((t: string) => normalizeStatusTag(t));
+  const statusTag = CRM_STATUS_TAGS.find((t) => normalizedTags.includes(t)) ?? 'primer_contacto';
 
   res.json({
     customer: {

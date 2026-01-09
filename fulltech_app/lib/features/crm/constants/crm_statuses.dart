@@ -37,6 +37,25 @@ class CrmStatuses {
     cancelado: 'Cancelado',
   };
 
+  /// Canonical statuses list for UI (same for chat status + filters).
+  /// NOTE: Excludes legacy "activo/pendiente/inactivo" intentionally.
+  static const List<String> ordered = [
+    primerContacto,
+    interesado,
+    reserva,
+    compro,
+    compraFinalizada,
+    pendientePago,
+    porLevantamiento,
+    servicioReservado,
+    conProblema,
+    garantia,
+    solucionGarantia,
+    noInteresado,
+    servicioFinalizado,
+    cancelado,
+  ];
+
   /// Statuses that require a form dialog
   static const Set<String> requiresDialog = {
     reserva,
@@ -56,6 +75,32 @@ class CrmStatuses {
   /// Get label for a status value
   static String getLabel(String status) {
     return labels[status] ?? status.replaceAll('_', ' ');
+  }
+
+  /// Normalize legacy/mixed values into the canonical set used by the app.
+  static String normalizeValue(String raw) {
+    final v = raw.trim();
+    if (v.isEmpty) return primerContacto;
+
+    // Legacy customer tags or older UI values.
+    if (v == 'noInteresado') return noInteresado;
+    if (v == 'solucionGarantia') return solucionGarantia;
+    if (v == 'servicioFinalizado') return servicioFinalizado;
+    if (v == 'pendientePago') return pendientePago;
+    if (v == 'porLevantamiento') return porLevantamiento;
+    if (v == 'servicioReservado') return servicioReservado;
+    if (v == 'conProblema') return conProblema;
+    if (v == 'enGarantia') return garantia;
+
+    // Legacy CRM status.
+    if (v == enGarantia) return garantia;
+
+    // Explicitly deprecated states (avoid crashes in dropdown initialValue).
+    if (v == 'activo' || v == 'pendiente' || v == 'inactivo') {
+      return primerContacto;
+    }
+
+    return labels.containsKey(v) ? v : primerContacto;
   }
 
   /// Check if a status requires a dialog

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../constants/crm_statuses.dart';
 import '../../state/crm_providers.dart';
 import '../../state/customers_state.dart';
 import '../../state/customers_controller.dart';
@@ -119,16 +120,13 @@ class _CrmCustomersPageEnhancedState
                     isDense: true,
                     border: OutlineInputBorder(),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Todos')),
-                    DropdownMenuItem(value: 'activo', child: Text('Activo')),
-                    DropdownMenuItem(
-                      value: 'interesado',
-                      child: Text('Interesado'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'inactivo',
-                      child: Text('Inactivo'),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Todos')),
+                    ...CrmStatuses.ordered.map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(CrmStatuses.getLabel(s)),
+                      ),
                     ),
                   ],
                   onChanged: notifier.setStatus,

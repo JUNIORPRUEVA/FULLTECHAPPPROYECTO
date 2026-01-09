@@ -693,6 +693,9 @@ export async function listChats(req: Request, res: Response) {
     // This prevents users from seeing an empty list when most chats are still in first-contact.
     if (s === 'pendiente') {
       where.status = { in: ['pendiente', 'primer_contacto'] };
+    } else if (s === 'garantia' || s === 'en_garantia') {
+      // Backward compatibility: some records use en_garantia.
+      where.status = { in: ['garantia', 'en_garantia'] };
     } else {
       where.status = s;
     }
@@ -966,6 +969,60 @@ export async function deletePurchasedClient(req: Request, res: Response) {
       message: 'Client marked as deleted (soft delete). It will no longer appear in purchased clients list.'
     });
   }
+}
+
+/**
+ * Delete CRM chat (admin-only via route middleware).
+ * Default behavior is HARD DELETE (removes chat + messages; unlinks operations jobs).
+ *
+ * Query:
+ *  - hardDelete=false => soft delete by setting status=eliminado
+ */
+export async function deleteChat(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const chatId = req.params.chatId;
+  const hardDelete = req.query.hardDelete !== 'false';
+
+  const existing = await prisma.crmChat.findFirst({
+    where: { id: chatId, empresa_id },
+  });
+  if (!existing) {
+    throw new ApiError(404, 'Chat not found');
+  }
+
+  if (!hardDelete) {
+    const updated = await prisma.crmChat.update({
+      where: { id: chatId },
+      data: { status: 'eliminado' },
+    });
+    emitCrmEvent({ type: 'chat.updated', chatId });
+    res.json({ item: toChatApiItem(updated), message: 'Chat marked as deleted (soft delete).' });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.crmChatMessage.deleteMany({ where: { chat_id: chatId } });
+
+    // Unlink operational jobs (DB relation is SetNull, but make it explicit).
+    await tx.operationsJob.updateMany({
+      where: { crm_chat_id: chatId },
+      data: { crm_chat_id: null },
+    });
+
+    // Best-effort delete of meta row (if table exists).
+    try {
+      if (await crmChatMetaExists()) {
+        await tx.$executeRawUnsafe(`DELETE FROM crm_chat_meta WHERE chat_id = $1::uuid`, chatId);
+      }
+    } catch {
+      // ignore meta errors
+    }
+
+    await tx.crmChat.delete({ where: { id: chatId } });
+  });
+
+  emitCrmEvent({ type: 'chat.deleted', chatId });
+  res.json({ ok: true });
 }
 
 export async function patchChat(req: Request, res: Response) {
@@ -1423,7 +1480,18 @@ export async function convertChatToCustomer(req: Request, res: Response) {
   const chatId = req.params.chatId;
 
   // Extract status from query to set appropriate tags
-  const crmStatus = (req.query.status as string) || 'activo';
+  const crmStatusRaw = (req.query.status as string) || 'primer_contacto';
+
+  function normalizeCustomerTag(raw: string): string {
+    const v = String(raw || '').trim();
+    if (!v) return 'primer_contacto';
+    if (v === 'activo' || v === 'inactivo' || v === 'pendiente') return 'primer_contacto';
+    if (v === 'noInteresado') return 'no_interesado';
+    if (v === 'en_garantia') return 'garantia';
+    return v;
+  }
+
+  const crmStatus = normalizeCustomerTag(crmStatusRaw);
 
   const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
   if (!chat) throw new ApiError(404, 'Chat not found');
@@ -1439,19 +1507,19 @@ export async function convertChatToCustomer(req: Request, res: Response) {
       ? chat.display_name.trim()
       : `Cliente WhatsApp ${telefono}`;
 
-  // Map CRM status to customer tags for proper filtering
-  let tags: string[] = [];
-  if (crmStatus === 'compro' || crmStatus === 'compra_finalizada') {
-    tags = ['compro'];
-    if (crmStatus === 'compra_finalizada') tags.push('finalizado');
-  } else if (crmStatus === 'activo') {
-    tags = ['activo'];
+  // Map CRM status to customer tags for proper filtering (keep legacy aliases).
+  const tags: string[] = [];
+  if (crmStatus === 'compra_finalizada') {
+    tags.push('compra_finalizada', 'compro', 'finalizado');
+  } else if (crmStatus === 'garantia' || crmStatus === 'solucion_garantia') {
+    tags.push(crmStatus, 'garantia');
   } else {
-    // Default fallback
-    tags = ['activo'];
+    tags.push(crmStatus);
   }
 
-  console.log(`[CRM] Converting chat ${chatId} to customer with status=${crmStatus}, tags=${tags.join(',')}`);
+  console.log(
+    `[CRM] Converting chat ${chatId} to customer with status=${crmStatus}, tags=${tags.join(',')}`,
+  );
 
   const existing = await prisma.customer.findFirst({
     where: { empresa_id, telefono, deleted_at: null },

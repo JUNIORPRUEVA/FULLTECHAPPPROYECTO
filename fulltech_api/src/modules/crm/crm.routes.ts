@@ -12,6 +12,7 @@ import {
   convertChatToCustomer,
   deleteChatMessage,
   deletePurchasedClient,
+  deleteChat,
   editChatMessage,
   getChat,
   getPurchasedClient,
@@ -67,6 +68,11 @@ crmRouter.patch('/chats/:chatId/messages/:messageId', expressAsyncHandler(editCh
 crmRouter.delete('/chats/:chatId/messages/:messageId', expressAsyncHandler(deleteChatMessage));
 crmRouter.post('/chats/:chatId/status', expressAsyncHandler(postChatStatus));
 crmRouter.patch('/chats/:chatId', expressAsyncHandler(patchChat));
+crmRouter.delete(
+  '/chats/:chatId',
+  requireRole(['admin', 'administrador']),
+  expressAsyncHandler(deleteChat),
+);
 crmRouter.post('/chats/:chatId/convert-to-customer', expressAsyncHandler(convertChatToCustomer));
 crmRouter.patch('/chats/:chatId/read', expressAsyncHandler(markChatRead));
 crmRouter.post('/chats/:chatId/messages/text', expressAsyncHandler(sendTextMessage));

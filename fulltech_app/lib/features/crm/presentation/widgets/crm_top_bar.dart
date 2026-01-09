@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../constants/crm_statuses.dart';
 import '../../state/crm_providers.dart';
 import '../../../catalogo/models/producto.dart';
 
@@ -93,107 +94,35 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
             ),
           );
 
+          final initialStatus = filters.status == 'todos'
+              ? 'todos'
+              : CrmStatuses.normalizeValue(filters.status);
+
+          final statusItems = <DropdownMenuItem<String>>[
+            const DropdownMenuItem(
+              value: 'todos',
+              child: Text(
+                'Todos',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ...CrmStatuses.ordered.map(
+              (s) => DropdownMenuItem(
+                value: s,
+                child: Text(
+                  CrmStatuses.getLabel(s),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ];
+
           final statusField = DropdownButtonFormField<String>(
-            initialValue: filters.status,
+            initialValue: initialStatus,
             isExpanded: true,
-            items: const [
-              DropdownMenuItem(
-                value: 'todos',
-                child: Text(
-                  'Todos',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'primer_contacto',
-                child: Text(
-                  'Primer contacto',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'pendiente',
-                child: Text(
-                  'Pendiente',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'interesado',
-                child: Text(
-                  'Interesado',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'reserva',
-                child: Text(
-                  'Reserva',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'compro',
-                child: Text(
-                  'Compró',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'compra_finalizada',
-                child: Text(
-                  'Compra finalizada',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'servicio_reservado',
-                child: Text(
-                  'Servicio reservado',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'no_interesado',
-                child: Text(
-                  'No interesado',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'activo',
-                child: Text(
-                  'Activo',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'en_garantia',
-                child: Text(
-                  'En garantía',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'solucion_garantia',
-                child: Text(
-                  'Solución de garantía',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+            items: statusItems,
             onChanged: (v) => filtersNotifier.setStatus(v ?? 'todos'),
             decoration: const InputDecoration(
               isDense: true,

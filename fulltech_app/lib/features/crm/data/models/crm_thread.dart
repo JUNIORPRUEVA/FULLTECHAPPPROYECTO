@@ -1,3 +1,5 @@
+import '../../constants/crm_statuses.dart';
+
 class CrmThread {
   final String id;
   final String waId;
@@ -61,6 +63,9 @@ class CrmThread {
       json['follow_up'] ?? json['followUp'] ?? json['seguimiento'];
     final followUp = rawFollowUp == true;
 
+    final rawStatus = (json['status'] ?? 'primer_contacto') as String;
+    final normalizedStatus = CrmStatuses.normalizeValue(rawStatus);
+
     return CrmThread(
       id: (json['id'] ?? '') as String,
       waId: waId,
@@ -84,7 +89,7 @@ class CrmThread {
       updatedAt: _dt(json['updated_at'] ?? json['updatedAt']),
       unreadCount: ((json['unread_count'] ?? json['unreadCount']) as num? ?? 0)
           .toInt(),
-      status: (json['status'] ?? 'primer_contacto') as String,
+      status: normalizedStatus,
       important: (json['important'] as bool?) ?? false,
         followUp: followUp,
       productId: (json['product_id'] ?? json['productId']) as String?,
