@@ -78,7 +78,7 @@ export const scheduleJobSchema = z.object({
   job_id: z.string().uuid(),
   scheduled_date: z.string().min(1), // ISO date (YYYY-MM-DD)
   preferred_time: z.string().optional().nullable(),
-  assigned_tech_id: z.string().uuid(),
+  assigned_tech_id: z.string().uuid().optional().nullable(),
   additional_tech_ids: z.array(z.string().uuid()).optional(),
   customer_availability_notes: z.string().optional().nullable(),
 });
@@ -86,6 +86,21 @@ export const scheduleJobSchema = z.object({
 export const startInstallationSchema = z.object({
   job_id: z.string().uuid(),
   started_at: z.string().optional(),
+});
+
+export const operationsTaskStatusEnum = z.enum([
+  'PENDIENTE',
+  'EN_PROCESO',
+  'TERMINADO',
+  'CANCELADO',
+]);
+
+export const patchTaskStatusSchema = z.object({
+  status: operationsTaskStatusEnum,
+  technicianNotes: z.string().min(1).max(5000).optional().nullable(),
+  technician_notes: z.string().min(1).max(5000).optional().nullable(),
+  cancelReason: z.string().min(1).max(5000).optional().nullable(),
+  cancel_reason: z.string().min(1).max(5000).optional().nullable(),
 });
 
 export const completeInstallationSchema = z.object({
@@ -124,3 +139,4 @@ export type StartInstallationDto = z.infer<typeof startInstallationSchema>;
 export type CompleteInstallationDto = z.infer<typeof completeInstallationSchema>;
 export type CreateWarrantyTicketDto = z.infer<typeof createWarrantyTicketSchema>;
 export type PatchWarrantyTicketDto = z.infer<typeof patchWarrantyTicketSchema>;
+export type PatchTaskStatusDto = z.infer<typeof patchTaskStatusSchema>;

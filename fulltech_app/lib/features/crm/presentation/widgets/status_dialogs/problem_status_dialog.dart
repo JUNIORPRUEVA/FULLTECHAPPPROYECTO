@@ -1,54 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../../services/providers/services_provider.dart';
 import '../../../state/crm_providers.dart';
 
-class ServicioReservadoDialogResult {
-  final DateTime scheduledAt;
+class ProblemStatusDialogResult {
   final String priority; // BAJA/MEDIA/ALTA
   final String? productId;
   final String? serviceId;
   final String? assignedTechnicianId;
-  final String note;
+  final String problemDescription;
+  final String? note;
 
-  const ServicioReservadoDialogResult({
-    required this.scheduledAt,
+  const ProblemStatusDialogResult({
     required this.priority,
     required this.productId,
     required this.serviceId,
     required this.assignedTechnicianId,
+    required this.problemDescription,
     required this.note,
   });
 
   Map<String, dynamic> toJson() {
     return {
-      'scheduledAt': scheduledAt.toIso8601String(),
       'priority': priority,
       'productId': productId,
       'serviceId': serviceId,
       'assignedTechnicianId': assignedTechnicianId,
+      'problemDescription': problemDescription,
       'note': note,
     };
   }
 }
 
-class ServicioReservadoDialog extends ConsumerStatefulWidget {
-  const ServicioReservadoDialog({super.key});
+class ProblemStatusDialog extends ConsumerStatefulWidget {
+  final String title;
+
+  const ProblemStatusDialog({
+    super.key,
+    required this.title,
+  });
 
   @override
-  ConsumerState<ServicioReservadoDialog> createState() =>
-      _ServicioReservadoDialogState();
+  ConsumerState<ProblemStatusDialog> createState() => _ProblemStatusDialogState();
 }
 
-class _ServicioReservadoDialogState
-    extends ConsumerState<ServicioReservadoDialog> {
+class _ProblemStatusDialogState extends ConsumerState<ProblemStatusDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _problemCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
-  DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedTime = TimeOfDay.now();
   String _priority = 'MEDIA';
   String? _productId;
   String? _serviceId;
@@ -56,67 +57,33 @@ class _ServicioReservadoDialogState
 
   @override
   void dispose() {
+    _problemCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked == null) return;
-    setState(() => _selectedDate = picked);
-  }
-
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _selectedTime);
-    if (picked == null) return;
-    setState(() => _selectedTime = picked);
-  }
-
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    if (_productId == null && _serviceId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccione un producto o un servicio')),
-      );
-      return;
-    }
-
-    final scheduledAt = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour,
-      _selectedTime.minute,
-    );
-
     Navigator.of(context).pop(
-      ServicioReservadoDialogResult(
-        scheduledAt: scheduledAt,
+      ProblemStatusDialogResult(
         priority: _priority,
         productId: _productId,
         serviceId: _serviceId,
         assignedTechnicianId: _technicianId,
-        note: _noteCtrl.text.trim(),
+        problemDescription: _problemCtrl.text.trim(),
+        note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dateFormatter = DateFormat('dd/MM/yyyy');
-
     final productsAsync = ref.watch(crmProductsProvider);
     final servicesAsync = ref.watch(activeServicesProvider);
     final techniciansAsync = ref.watch(crmTechniciansProvider);
 
     return AlertDialog(
-      title: const Text('Servicio reservado'),
+      title: Text(widget.title),
       content: SizedBox(
         width: 520,
         child: Form(
@@ -126,43 +93,6 @@ class _ServicioReservadoDialogState
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Fecha y hora *',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: _pickDate,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.calendar_today),
-                          ),
-                          child: Text(dateFormatter.format(_selectedDate)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: _pickTime,
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.access_time),
-                          ),
-                          child: Text(_selectedTime.format(context)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: _priority,
                   decoration: const InputDecoration(
@@ -237,7 +167,7 @@ class _ServicioReservadoDialogState
                     return DropdownButtonFormField<String?>(
                       value: _technicianId,
                       decoration: const InputDecoration(
-                        labelText: 'Técnico (opcional)',
+                        labelText: 'Asignar técnico (opcional)',
                         border: OutlineInputBorder(),
                       ),
                       items: [
@@ -260,18 +190,30 @@ class _ServicioReservadoDialogState
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: _noteCtrl,
-                  maxLines: 3,
+                  controller: _problemCtrl,
+                  maxLines: 4,
                   decoration: const InputDecoration(
-                    labelText: 'Nota / indicaciones *',
+                    labelText: 'Descripción del problema *',
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Este campo es requerido';
                     }
+                    if (value.trim().length < 10) {
+                      return 'Mínimo 10 caracteres';
+                    }
                     return null;
                   },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _noteCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Notas (opcional)',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ],
             ),

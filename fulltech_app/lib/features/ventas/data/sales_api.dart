@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import 'evidence_upload_form.dart';
+
 class SalesApi {
   final Dio _dio;
 
@@ -76,18 +78,23 @@ class SalesApi {
   }
 
   Future<Map<String, dynamic>> uploadEvidenceFile({
-    required Uint8List bytes,
+    Uint8List? bytes,
+    String? filePath,
     required String filename,
     String? mimeType,
   }) async {
-    final form = FormData.fromMap({
-      'file': MultipartFile.fromBytes(
-        bytes,
-        filename: filename,
-      ),
-    });
+    final form = await buildSalesEvidenceUploadForm(
+      filename: filename,
+      bytes: bytes,
+      filePath: filePath,
+      mimeType: mimeType,
+    );
 
-    final res = await _dio.post('/uploads/sales', data: form);
+    final res = await _dio.post(
+      '/uploads/sales',
+      data: form,
+      options: _noOfflineQueue,
+    );
 
     final data = res.data;
     if (data is Map<String, dynamic>) return data;

@@ -2,10 +2,12 @@ import type { Request, Response } from 'express';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { ApiError } from '../../middleware/errorHandler';
+import { emitCrmEvent } from '../crm/crm_stream';
 import {
   createJobSchema,
   listJobsQuerySchema,
   patchJobSchema,
+  patchTaskStatusSchema,
   submitSurveySchema,
   scheduleJobSchema,
   startInstallationSchema,
@@ -26,6 +28,20 @@ function actorUserId(req: Request): string {
   return actor.userId;
 }
 
+function actorRole(req: Request): string {
+  const role = req.user?.role;
+  if (!role) throw new ApiError(401, 'Unauthorized');
+  return role;
+}
+
+function isAdminRole(role: string): boolean {
+  return role === 'admin' || role === 'administrador' || (role as any) === 'administrador';
+}
+
+function isTechnicianRole(role: string): boolean {
+  return role === 'tecnico' || role === 'tecnico_fijo' || role === 'contratista';
+}
+
 function parseDateOnly(value: string): Date {
   // value: YYYY-MM-DD
   const [y, m, d] = value.split('-').map((v) => Number(v));
@@ -38,6 +54,74 @@ function parseDate(value: unknown): Date | null {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d;
+}
+
+let crmChatMetaExistsCache: boolean | null = null;
+let crmChatMetaExistsAtMs = 0;
+async function crmChatMetaExists(): Promise<boolean> {
+  const now = Date.now();
+  if (crmChatMetaExistsCache != null && now - crmChatMetaExistsAtMs < 60_000) {
+    return crmChatMetaExistsCache;
+  }
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
+      'SELECT to_regclass($1) as regclass',
+      'public.crm_chat_meta',
+    );
+    const exists = Boolean(rows?.[0]?.regclass);
+    crmChatMetaExistsCache = exists;
+    crmChatMetaExistsAtMs = now;
+    return exists;
+  } catch {
+    crmChatMetaExistsCache = false;
+    crmChatMetaExistsAtMs = now;
+    return false;
+  }
+}
+
+async function appendCrmInternalNote(params: {
+  chatId: string;
+  note: string;
+}): Promise<void> {
+  if (!params.note.trim()) return;
+  if (!(await crmChatMetaExists())) return;
+
+  // Upsert + append to internal_note
+  await prisma.$executeRawUnsafe(
+    `
+    INSERT INTO crm_chat_meta (chat_id, internal_note, updated_at)
+    VALUES ($1::uuid, $2::text, now())
+    ON CONFLICT (chat_id) DO UPDATE SET
+      internal_note = CASE
+        WHEN crm_chat_meta.internal_note IS NULL OR crm_chat_meta.internal_note = '' THEN EXCLUDED.internal_note
+        ELSE crm_chat_meta.internal_note || E'\\n' || EXCLUDED.internal_note
+      END,
+      updated_at = now()
+    `,
+    params.chatId,
+    params.note.trim(),
+  );
+}
+
+async function recordJobHistory(params: {
+  tx: Prisma.TransactionClient;
+  jobId: string;
+  actionType: string;
+  oldStatus: string | null;
+  newStatus: string | null;
+  note?: string | null;
+  createdByUserId?: string | null;
+}): Promise<void> {
+  await params.tx.operationsJobHistory.create({
+    data: {
+      job_id: params.jobId,
+      action_type: params.actionType,
+      old_status: params.oldStatus ?? null,
+      new_status: params.newStatus ?? null,
+      note: params.note ?? null,
+      created_by_user_id: params.createdByUserId ?? null,
+    },
+  });
 }
 
 export async function createJob(req: Request, res: Response): Promise<void> {
@@ -178,6 +262,8 @@ export async function getJob(req: Request, res: Response): Promise<void> {
 
 export async function patchJob(req: Request, res: Response): Promise<void> {
   const empresa_id = actorEmpresaId(req);
+  const role = actorRole(req);
+  const user_id = actorUserId(req);
   const id = req.params.id;
 
   const parsed = patchJobSchema.safeParse(req.body);
@@ -192,6 +278,16 @@ export async function patchJob(req: Request, res: Response): Promise<void> {
   });
   if (!existing) throw new ApiError(404, 'Job not found');
 
+  // Role rules:
+  // - Technicians can update status via /status endpoint (not via generic patch).
+  // - Sellers/admin can update assignment/priority/notes.
+  if (body.status && !isAdminRole(role)) {
+    throw new ApiError(403, 'Forbidden: status updates require technician/admin via /status');
+  }
+  if (body.assigned_tech_id !== undefined && isTechnicianRole(role) && !isAdminRole(role)) {
+    throw new ApiError(403, 'Forbidden: technicians cannot reassign jobs');
+  }
+
   const updated = await prisma.operationsJob.update({
     where: { id },
     data: {
@@ -203,8 +299,173 @@ export async function patchJob(req: Request, res: Response): Promise<void> {
         body.assigned_tech_id === undefined
           ? undefined
           : body.assigned_tech_id,
+      last_update_by_user_id: user_id,
     },
   });
+
+  res.json(updated);
+}
+
+export async function listJobHistory(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+  const id = req.params.id;
+
+  const job = await prisma.operationsJob.findFirst({
+    where: { id, empresa_id, deleted_at: null },
+    select: { id: true },
+  });
+  if (!job) throw new ApiError(404, 'Job not found');
+
+  const items = await prisma.operationsJobHistory.findMany({
+    where: { job_id: id },
+    orderBy: { created_at: 'desc' },
+    include: {
+      created_by: { select: { id: true, nombre_completo: true } },
+    },
+    take: 200,
+  });
+
+  res.json({ items });
+}
+
+function mapSimpleStatusToJobStatus(params: {
+  simple: 'PENDIENTE' | 'EN_PROCESO' | 'TERMINADO' | 'CANCELADO';
+  crmTaskType: string | null;
+  currentJobStatus: string;
+}): string {
+  const t = (params.crmTaskType ?? '').toUpperCase();
+
+  if (params.simple === 'CANCELADO') return 'cancelled';
+
+  if (params.simple === 'TERMINADO') {
+    if (t === 'GARANTIA') return 'closed';
+    return 'completed';
+  }
+
+  if (params.simple === 'EN_PROCESO') {
+    if (t === 'LEVANTAMIENTO') return 'survey_in_progress';
+    if (t === 'GARANTIA') return 'warranty_in_progress';
+    return 'installation_in_progress';
+  }
+
+  // PENDIENTE
+  if (t === 'LEVANTAMIENTO') return 'pending_survey';
+  if (t === 'GARANTIA') return 'warranty_pending';
+  if (t === 'SERVICIO_RESERVADO' || t === 'INSTALACION') return 'scheduled';
+  // Fallback: keep current
+  return params.currentJobStatus;
+}
+
+export async function patchJobStatus(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+  const role = actorRole(req);
+  const user_id = actorUserId(req);
+  const id = req.params.id;
+
+  if (!isAdminRole(role) && !isTechnicianRole(role)) {
+    throw new ApiError(403, 'Forbidden: only technicians/admin can update operational status');
+  }
+
+  const parsed = patchTaskStatusSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+  }
+
+  const body = parsed.data;
+  const technicianNotes =
+    typeof body.technicianNotes !== 'undefined'
+      ? body.technicianNotes
+      : typeof body.technician_notes !== 'undefined'
+        ? body.technician_notes
+        : null;
+  const cancelReason =
+    typeof body.cancelReason !== 'undefined'
+      ? body.cancelReason
+      : typeof body.cancel_reason !== 'undefined'
+        ? body.cancel_reason
+        : null;
+
+  if (body.status === 'TERMINADO' && (!technicianNotes || !technicianNotes.trim())) {
+    throw new ApiError(400, 'technicianNotes is required for TERMINADO');
+  }
+  if (body.status === 'CANCELADO' && (!cancelReason || !cancelReason.trim())) {
+    throw new ApiError(400, 'cancelReason is required for CANCELADO');
+  }
+
+  const existing = await prisma.operationsJob.findFirst({
+    where: { id, empresa_id, deleted_at: null },
+  });
+  if (!existing) throw new ApiError(404, 'Job not found');
+
+  const oldStatus = String(existing.status);
+  const newStatus = mapSimpleStatusToJobStatus({
+    simple: body.status,
+    crmTaskType: (existing as any).crm_task_type ?? null,
+    currentJobStatus: oldStatus,
+  });
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const job = await tx.operationsJob.update({
+      where: { id },
+      data: {
+        status: newStatus as any,
+        technician_notes:
+          body.status === 'EN_PROCESO' || body.status === 'TERMINADO'
+            ? (technicianNotes ?? undefined)
+            : undefined,
+        cancel_reason: body.status === 'CANCELADO' ? (cancelReason ?? undefined) : undefined,
+        last_update_by_user_id: user_id,
+      } as any,
+    });
+
+    await recordJobHistory({
+      tx,
+      jobId: job.id,
+      actionType: 'status_update',
+      oldStatus,
+      newStatus: String(job.status),
+      note:
+        body.status === 'CANCELADO'
+          ? `Cancelado: ${(cancelReason ?? '').trim()}`
+          : (technicianNotes ?? null),
+      createdByUserId: user_id,
+    });
+
+    // If warranty finished, resolve open ticket (best effort)
+    if (newStatus === 'closed') {
+      const ticket = await tx.operationsWarrantyTicket.findFirst({
+        where: { job_id: job.id, status: { in: ['pending', 'in_progress'] as any } },
+        orderBy: { reported_at: 'desc' },
+      });
+      if (ticket) {
+        await tx.operationsWarrantyTicket.update({
+          where: { id: ticket.id },
+          data: {
+            status: 'resolved',
+            resolution_notes: (technicianNotes ?? '').trim() || undefined,
+            resolved_at: new Date(),
+          } as any,
+        });
+      }
+    }
+
+    return job;
+  });
+
+  // Sync back to CRM on terminal transitions (no loops: direct update + SSE)
+  const chatId = (updated as any).crm_chat_id as string | null | undefined;
+  if (chatId && (newStatus === 'completed' || newStatus === 'closed' || newStatus === 'cancelled')) {
+    const crmStatus = newStatus === 'cancelled' ? 'cancelado' : 'servicio_finalizado';
+    await prisma.crmChat.update({ where: { id: chatId }, data: { status: crmStatus } });
+
+    const stamp = new Date().toISOString();
+    const syncNote =
+      newStatus === 'cancelled'
+        ? `[OPS ${stamp}] Cancelado: ${(cancelReason ?? '').trim()}`
+        : `[OPS ${stamp}] Terminado: ${(technicianNotes ?? '').trim()}`;
+    await appendCrmInternalNote({ chatId, note: syncNote });
+    emitCrmEvent({ type: 'chat.updated', chatId });
+  }
 
   res.json(updated);
 }
@@ -321,14 +582,21 @@ export async function scheduleJob(req: Request, res: Response): Promise<void> {
         job: { connect: { id: body.job_id } },
         scheduled_date,
         preferred_time: body.preferred_time ?? null,
-        assigned_tech: { connect: { id: body.assigned_tech_id } },
+        assigned_tech: body.assigned_tech_id
+          ? { connect: { id: body.assigned_tech_id } }
+          : undefined,
         additional_tech_ids: body.additional_tech_ids ?? [],
         customer_availability_notes: body.customer_availability_notes ?? null,
       },
       update: {
         scheduled_date,
         preferred_time: body.preferred_time ?? null,
-        assigned_tech: { connect: { id: body.assigned_tech_id } },
+        assigned_tech:
+          body.assigned_tech_id === undefined
+            ? undefined
+            : body.assigned_tech_id
+              ? { connect: { id: body.assigned_tech_id } }
+              : { disconnect: true },
         additional_tech_ids: body.additional_tech_ids ?? [],
         customer_availability_notes: body.customer_availability_notes ?? null,
       },
@@ -338,7 +606,7 @@ export async function scheduleJob(req: Request, res: Response): Promise<void> {
       where: { id: body.job_id },
       data: {
         status: 'scheduled',
-        assigned_tech_id: body.assigned_tech_id,
+        assigned_tech_id: body.assigned_tech_id ?? null,
       },
     });
 

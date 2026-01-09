@@ -173,7 +173,16 @@ class _VentasListScreenState extends ConsumerState<VentasListScreen> {
 
   Future<void> _openCreateDialog() async {
     final session = await ref.read(localDbProvider).readSession();
-    if (session == null) return;
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sesión no encontrada. Inicia sesión de nuevo.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final repo = ref.read(salesRepositoryProvider);
 
     final created = await showDialog<SalesRegisterDialogResult>(
@@ -183,22 +192,32 @@ class _VentasListScreenState extends ConsumerState<VentasListScreen> {
 
     if (created == null || !mounted) return;
 
-    await repo.createSaleLocalFirst(
-      empresaId: session.user.empresaId,
-      userId: session.user.id,
-      items: created.items,
-      productOrService: _summaryForItems(created.items),
-      amount: _totalForItems(created.items),
-      soldAt: created.soldAt,
-      customerName: created.customer.fullName,
-      customerPhone: created.customer.phone,
-      customerDocument: null,
-      notes: created.notes,
-      evidenceRequired: true,
-      evidences: created.evidences,
-    );
+    try {
+      await repo.createSaleLocalFirst(
+        empresaId: session.user.empresaId,
+        userId: session.user.id,
+        items: created.items,
+        productOrService: _summaryForItems(created.items),
+        amount: _totalForItems(created.items),
+        soldAt: created.soldAt,
+        customerName: created.customer.fullName,
+        customerPhone: created.customer.phone,
+        customerDocument: null,
+        notes: created.notes,
+        evidenceRequired: true,
+        evidences: created.evidences,
+      );
 
-    await _load(page: 1);
+      if (mounted) await _load(page: 1);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo registrar la venta: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _openEditDialog(SalesRecord record) async {
@@ -211,23 +230,34 @@ class _VentasListScreenState extends ConsumerState<VentasListScreen> {
 
     if (updated == null || !mounted) return;
 
-    await repo.updateSaleLocalFirst(
-      existing: record,
-      patch: {
-        'customer_name': updated.customer.fullName,
-        'customer_phone': updated.customer.phone,
-        'customer_document': null,
-        'product_or_service': _summaryForItems(updated.items),
-        'details': {
-          'items': updated.items.map((e) => e.toJson()).toList(growable: false),
+    try {
+      await repo.updateSaleLocalFirst(
+        existing: record,
+        patch: {
+          'customer_name': updated.customer.fullName,
+          'customer_phone': updated.customer.phone,
+          'customer_document': null,
+          'product_or_service': _summaryForItems(updated.items),
+          'details': {
+            'items':
+                updated.items.map((e) => e.toJson()).toList(growable: false),
+          },
+          'amount': _totalForItems(updated.items),
+          'sold_at': updated.soldAt.toIso8601String(),
+          'notes': updated.notes,
         },
-        'amount': _totalForItems(updated.items),
-        'sold_at': updated.soldAt.toIso8601String(),
-        'notes': updated.notes,
-      },
-    );
+      );
 
-    await _load(page: _page);
+      if (mounted) await _load(page: _page);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo actualizar la venta: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _confirmDelete(SalesRecord record) async {
@@ -246,8 +276,18 @@ class _VentasListScreenState extends ConsumerState<VentasListScreen> {
     if (ok != true) return;
 
     final repo = ref.read(salesRepositoryProvider);
-    await repo.deleteSaleLocalFirst(id: record.id);
-    if (mounted) await _load(page: _page);
+    try {
+      await repo.deleteSaleLocalFirst(id: record.id);
+      if (mounted) await _load(page: _page);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo eliminar la venta: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _openEvidenceDialog(SalesRecord record) async {

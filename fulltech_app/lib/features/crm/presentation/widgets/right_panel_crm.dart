@@ -3,16 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/crm_thread.dart';
 import '../../state/crm_providers.dart';
 import '../../constants/crm_statuses.dart';
-import '../../../auth/state/auth_providers.dart';
-import '../../../auth/state/auth_state.dart';
 import '../../../catalogo/models/producto.dart';
 import '../../../catalogo/models/categoria_producto.dart';
 import '../../../catalogo/state/catalog_providers.dart';
 import '../../../../core/services/app_config.dart';
 import 'status_dialogs/reserva_dialog.dart';
 import 'status_dialogs/servicio_reservado_dialog.dart';
-import 'status_dialogs/garantia_dialog.dart';
-import 'status_dialogs/solucion_garantia_dialog.dart';
+import 'status_dialogs/por_levantamiento_dialog.dart';
+import 'status_dialogs/problem_status_dialog.dart';
 
 String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
@@ -331,10 +329,6 @@ class _ActionsSection extends ConsumerWidget {
         // Cambiar Estado
         Builder(
           builder: (context) {
-            // Capture providers before async callbacks
-            final statusDataRepo = ref.read(crmStatusDataRepositoryProvider);
-            final auth = ref.read(authControllerProvider);
-
             return DropdownButtonFormField<String>(
               initialValue: thread.status,
               items: const [
@@ -342,7 +336,6 @@ class _ActionsSection extends ConsumerWidget {
                   value: 'primer_contacto',
                   child: Text('Primer contacto'),
                 ),
-                DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
                 DropdownMenuItem(
                   value: 'interesado',
                   child: Text('Interesado'),
@@ -354,21 +347,40 @@ class _ActionsSection extends ConsumerWidget {
                   child: Text('Compra finalizada'),
                 ),
                 DropdownMenuItem(
+                  value: 'pendiente_pago',
+                  child: Text('Pendiente de pago'),
+                ),
+                DropdownMenuItem(
+                  value: 'por_levantamiento',
+                  child: Text('Por levantamiento'),
+                ),
+                DropdownMenuItem(
                   value: 'servicio_reservado',
                   child: Text('Servicio reservado'),
+                ),
+                DropdownMenuItem(
+                  value: 'con_problema',
+                  child: Text('Con problema'),
+                ),
+                DropdownMenuItem(
+                  value: 'garantia',
+                  child: Text('Garantía'),
                 ),
                 DropdownMenuItem(
                   value: 'no_interesado',
                   child: Text('No interesado'),
                 ),
-                DropdownMenuItem(value: 'activo', child: Text('Activo')),
-                DropdownMenuItem(
-                  value: 'en_garantia',
-                  child: Text('En garantía'),
-                ),
                 DropdownMenuItem(
                   value: 'solucion_garantia',
                   child: Text('Solución de garantía'),
+                ),
+                DropdownMenuItem(
+                  value: 'servicio_finalizado',
+                  child: Text('Servicio finalizado'),
+                ),
+                DropdownMenuItem(
+                  value: 'cancelado',
+                  child: Text('Cancelado'),
                 ),
               ],
               onChanged: (v) async {
@@ -378,92 +390,65 @@ class _ActionsSection extends ConsumerWidget {
 
                 // Handle dialog-required statuses first
                 if (CrmStatuses.needsDialog(nextStatus)) {
-                  Map<String, dynamic>? dialogData;
+                  try {
+                    Map<String, dynamic> payload = {'status': nextStatus};
 
-                  switch (nextStatus) {
-                    case CrmStatuses.reserva:
+                    if (nextStatus == CrmStatuses.reserva) {
                       final result = await showDialog<ReservaDialogResult>(
                         context: context,
                         builder: (_) => const ReservaDialog(),
                       );
-                      if (result == null) return; // User cancelled
-                      dialogData = result.toJson();
-                      break;
-
-                    case CrmStatuses.servicioReservado:
+                      if (result == null) return;
+                      final scheduledAt = DateTime(
+                        result.fechaReserva.year,
+                        result.fechaReserva.month,
+                        result.fechaReserva.day,
+                        result.horaReserva.hour,
+                        result.horaReserva.minute,
+                      );
+                      payload = {
+                        'status': nextStatus,
+                        'scheduledAt': scheduledAt.toIso8601String(),
+                        'note': result.nota,
+                      };
+                    } else if (nextStatus == CrmStatuses.servicioReservado) {
                       final result =
                           await showDialog<ServicioReservadoDialogResult>(
                             context: context,
                             builder: (_) => const ServicioReservadoDialog(),
                           );
                       if (result == null) return;
-                      dialogData = result.toJson();
-                      break;
-
-                    case CrmStatuses.enGarantia:
-                      final result = await showDialog<GarantiaDialogResult>(
+                      payload = {'status': nextStatus, ...result.toJson()};
+                    } else if (nextStatus == CrmStatuses.porLevantamiento) {
+                      final result = await showDialog<PorLevantamientoDialogResult>(
                         context: context,
-                        builder: (_) => const GarantiaDialog(),
+                        builder: (_) => const PorLevantamientoDialog(),
                       );
                       if (result == null) return;
-                      dialogData = result.toJson();
-                      break;
+                      payload = {'status': nextStatus, ...result.toJson()};
+                    } else if (nextStatus == CrmStatuses.conProblema ||
+                        nextStatus == CrmStatuses.garantia ||
+                        nextStatus == CrmStatuses.solucionGarantia) {
+                      final title = nextStatus == CrmStatuses.conProblema
+                          ? 'Con problema'
+                          : nextStatus == CrmStatuses.garantia
+                              ? 'Garantía'
+                              : 'Solución de garantía';
 
-                    case CrmStatuses.solucionGarantia:
-                      final result =
-                          await showDialog<SolucionGarantiaDialogResult>(
-                            context: context,
-                            builder: (_) => const SolucionGarantiaDialog(),
-                          );
+                      final result = await showDialog<ProblemStatusDialogResult>(
+                        context: context,
+                        builder: (_) => ProblemStatusDialog(title: title),
+                      );
                       if (result == null) return;
-                      dialogData = result.toJson();
-                      break;
-                  }
-
-                  // Save status first
-                  try {
-                    await onSave({'status': nextStatus});
-
-                    // Then save dialog data to appropriate table
-                    if (auth is! AuthAuthenticated) {
-                      throw Exception('Usuario no autenticado');
+                      payload = {'status': nextStatus, ...result.toJson()};
                     }
 
-                    final empresaId = auth.user.empresaId;
-
-                    switch (nextStatus) {
-                      case CrmStatuses.reserva:
-                        await statusDataRepo.saveReservation(
-                          empresaId: empresaId,
-                          threadId: thread.id,
-                          reservationData: dialogData!,
-                        );
-                        break;
-
-                      case CrmStatuses.servicioReservado:
-                        await statusDataRepo.saveServiceAgenda(
-                          empresaId: empresaId,
-                          threadId: thread.id,
-                          serviceData: dialogData!,
-                        );
-                        break;
-
-                      case CrmStatuses.enGarantia:
-                        await statusDataRepo.saveWarrantyCase(
-                          empresaId: empresaId,
-                          threadId: thread.id,
-                          warrantyData: dialogData!,
-                        );
-                        break;
-
-                      case CrmStatuses.solucionGarantia:
-                        await statusDataRepo.saveWarrantySolution(
-                          empresaId: empresaId,
-                          threadId: thread.id,
-                          solutionData: dialogData!,
-                        );
-                        break;
-                    }
+                    await ref
+                        .read(crmRepositoryProvider)
+                        .postChatStatus(thread.id, payload);
+                    await ref
+                        .read(crmThreadsControllerProvider.notifier)
+                        .refresh();
 
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(

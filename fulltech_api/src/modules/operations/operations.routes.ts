@@ -25,6 +25,14 @@ operationsRouter.post('/jobs', expressAsyncHandler(operationsController.createJo
 operationsRouter.get('/jobs', expressAsyncHandler(operationsController.listJobs));
 operationsRouter.get('/jobs/:id', expressAsyncHandler(operationsController.getJob));
 operationsRouter.patch('/jobs/:id', expressAsyncHandler(operationsController.patchJob));
+operationsRouter.get('/jobs/:id/history', expressAsyncHandler(operationsController.listJobHistory));
+operationsRouter.patch('/jobs/:id/status', expressAsyncHandler(operationsController.patchJobStatus));
+
+// Tasks alias (single-source entity is OperationsJob)
+operationsRouter.get('/tasks', expressAsyncHandler(operationsController.listJobs));
+operationsRouter.get('/tasks/:id', expressAsyncHandler(operationsController.getJob));
+operationsRouter.get('/tasks/:id/history', expressAsyncHandler(operationsController.listJobHistory));
+operationsRouter.patch('/tasks/:id/status', expressAsyncHandler(operationsController.patchJobStatus));
 
 // Survey
 operationsRouter.post('/surveys', expressAsyncHandler(operationsController.submitSurvey));

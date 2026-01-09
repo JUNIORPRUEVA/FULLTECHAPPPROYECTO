@@ -9,6 +9,7 @@ import {
   crmChatMessagesListQuerySchema,
   crmChatsListQuerySchema,
   crmChatPatchSchema,
+  crmChatStatusSchema,
   crmDeleteChatMessageSchema,
   crmEditChatMessageSchema,
   crmOutboundSendTextSchema,
@@ -27,6 +28,12 @@ function actorEmpresaId(req: Request): string {
   const empresaId = (req as any)?.user?.empresaId as string | undefined;
   if (!empresaId) throw new ApiError(401, 'Missing empresaId');
   return empresaId;
+}
+
+function actorUserId(req: Request): string {
+  const userId = (req as any)?.user?.userId as string | undefined;
+  if (!userId) throw new ApiError(401, 'Missing userId');
+  return userId;
 }
 
 let aiMessageAuditsExistsCache: boolean | null = null;
@@ -1022,6 +1029,393 @@ export async function patchChat(req: Request, res: Response) {
   emitCrmEvent({ type: 'chat.updated', chatId });
 
   res.json({ item: toChatApiItem(merged) });
+}
+
+function normalizePriority(raw?: string | null): 'low' | 'normal' | 'high' | null {
+  if (!raw) return null;
+  const v = String(raw).trim();
+  if (!v) return null;
+  if (v === 'BAJA') return 'low';
+  if (v === 'MEDIA') return 'normal';
+  if (v === 'ALTA') return 'high';
+  if (v === 'low' || v === 'normal' || v === 'high') return v;
+  return null;
+}
+
+function needsOperationsTask(status: string): boolean {
+  return (
+    status === 'por_levantamiento' ||
+    status === 'servicio_reservado' ||
+    status === 'solucion_garantia' ||
+    status === 'en_garantia' ||
+    status === 'garantia' ||
+    status === 'con_problema'
+  );
+}
+
+function mapCrmStatusToTaskType(
+  status: string,
+): { taskType: 'LEVANTAMIENTO' | 'SERVICIO_RESERVADO' | 'GARANTIA'; initialJobStatus: string } | null {
+  if (status === 'por_levantamiento') {
+    return { taskType: 'LEVANTAMIENTO', initialJobStatus: 'pending_survey' };
+  }
+  if (status === 'servicio_reservado') {
+    return { taskType: 'SERVICIO_RESERVADO', initialJobStatus: 'scheduled' };
+  }
+  if (
+    status === 'solucion_garantia' ||
+    status === 'en_garantia' ||
+    status === 'garantia' ||
+    status === 'con_problema'
+  ) {
+    return { taskType: 'GARANTIA', initialJobStatus: 'warranty_pending' };
+  }
+  return null;
+}
+
+function parseScheduledAt(value: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatTimeHHmm(d: Date): string {
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+function dateOnlyUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0));
+}
+
+async function ensureCustomerForChat(params: {
+  tx: any;
+  empresaId: string;
+  chat: { id: string; wa_id: string; phone: string | null; display_name: string | null };
+}): Promise<{ id: string; nombre: string; telefono: string; direccion: string | null; ubicacion_mapa: string | null }> {
+  const { tx, empresaId, chat } = params;
+
+  const phoneCandidate = chat.phone ?? phoneFromWaId(String(chat.wa_id ?? ''));
+  const telefono = toPhoneE164(phoneCandidate);
+  if (!telefono) throw new ApiError(400, 'Chat has no valid phone; cannot create operations task');
+
+  const name =
+    chat.display_name && chat.display_name.trim().length > 0
+      ? chat.display_name.trim()
+      : `Cliente WhatsApp ${telefono}`;
+
+  const existing = await tx.customer.findFirst({
+    where: { empresa_id: empresaId, telefono, deleted_at: null },
+  });
+  if (existing) return existing;
+
+  const created = await tx.customer.create({
+    data: {
+      empresa_id: empresaId,
+      nombre: name,
+      telefono,
+      origen: 'whatsapp',
+    },
+  });
+  return created;
+}
+
+export async function postChatStatus(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const user_id = actorUserId(req);
+  const chatId = req.params.chatId;
+
+  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+  if (chat.empresa_id !== empresa_id) throw new ApiError(403, 'Forbidden');
+
+  const parsed = crmChatStatusSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const body = parsed.data;
+  const nextStatus = body.status.trim();
+
+  const scheduledAt =
+    typeof body.scheduledAt !== 'undefined'
+      ? body.scheduledAt
+      : typeof body.scheduled_at !== 'undefined'
+        ? body.scheduled_at
+        : null;
+  const note =
+    typeof body.note !== 'undefined'
+      ? body.note
+      : typeof body.notes !== 'undefined'
+        ? body.notes
+        : null;
+  const productId =
+    typeof body.productId !== 'undefined'
+      ? body.productId
+      : typeof body.product_id !== 'undefined'
+        ? body.product_id
+        : null;
+  const serviceId =
+    typeof body.serviceId !== 'undefined'
+      ? body.serviceId
+      : typeof body.service_id !== 'undefined'
+        ? body.service_id
+        : null;
+  const assignedTechnicianId =
+    typeof body.assignedTechnicianId !== 'undefined'
+      ? body.assignedTechnicianId
+      : typeof body.assigned_technician_id !== 'undefined'
+        ? body.assigned_technician_id
+        : null;
+  const priority = normalizePriority(body.priority ?? null);
+  const problemDescription =
+    typeof body.problemDescription !== 'undefined'
+      ? body.problemDescription
+      : typeof body.problem_description !== 'undefined'
+        ? body.problem_description
+        : null;
+  const cancelReason =
+    typeof body.cancelReason !== 'undefined'
+      ? body.cancelReason
+      : typeof body.cancel_reason !== 'undefined'
+        ? body.cancel_reason
+        : null;
+
+  // Business validations
+  if (nextStatus === 'servicio_reservado') {
+    const d = parseScheduledAt(scheduledAt ?? null);
+    if (!d) throw new ApiError(400, 'scheduledAt is required for servicio_reservado');
+    if (!note || note.trim().length === 0) throw new ApiError(400, 'note is required for servicio_reservado');
+    if (!productId && !serviceId) {
+      throw new ApiError(400, 'productId or serviceId is required for servicio_reservado');
+    }
+  }
+
+  if (nextStatus === 'con_problema' || nextStatus === 'garantia' || nextStatus === 'en_garantia' || nextStatus === 'solucion_garantia') {
+    if (!problemDescription || problemDescription.trim().length === 0) {
+      throw new ApiError(400, 'problemDescription is required for garantia/con_problema');
+    }
+  }
+
+  if (nextStatus === 'cancelado') {
+    if (!cancelReason || cancelReason.trim().length === 0) {
+      throw new ApiError(400, 'cancelReason is required for cancelado');
+    }
+  }
+
+  const mapping = mapCrmStatusToTaskType(nextStatus);
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Always update CRM status first
+    await tx.crmChat.update({ where: { id: chatId }, data: { status: nextStatus } });
+
+    // Upsert CRM meta as best-effort (note/product interest)
+    const metaPatch: any = {};
+    if (typeof note !== 'undefined' && note !== null) metaPatch.internal_note = note;
+    if (typeof productId !== 'undefined' && productId !== null) metaPatch.product_id = productId;
+    if (Object.keys(metaPatch).length > 0) {
+      await upsertChatMeta(chatId, metaPatch);
+    }
+
+    if (!mapping) {
+      // Not an operational status: just return updated chat.
+      const updated = await tx.crmChat.findUnique({ where: { id: chatId } });
+      const metaById = await fetchChatMeta([chatId]);
+      const merged = { ...updated, ...(metaById.get(chatId) ?? {}) };
+      return { merged, operationsJobId: null };
+    }
+
+    // Create customer if needed (Operations schema requires it)
+    const customer = await ensureCustomerForChat({
+      tx,
+      empresaId: empresa_id,
+      chat: {
+        id: chat.id,
+        wa_id: chat.wa_id,
+        phone: chat.phone ?? null,
+        display_name: chat.display_name ?? null,
+      },
+    });
+
+    // Cancel other active jobs for this chat when switching operational types (prevents duplicates)
+    const otherActive = await tx.operationsJob.findMany({
+      where: {
+        empresa_id,
+        deleted_at: null,
+        crm_chat_id: chatId,
+        crm_task_type: { not: mapping.taskType as any },
+        status: { notIn: ['completed', 'closed', 'cancelled'] as any },
+      },
+      orderBy: { updated_at: 'desc' },
+      take: 10,
+    });
+
+    for (const otherJob of otherActive as any[]) {
+      const prev = otherJob.status;
+      const updated = await tx.operationsJob.update({
+        where: { id: otherJob.id },
+        data: {
+          status: 'cancelled' as any,
+          cancel_reason: `Actualizado desde CRM: ${nextStatus}`,
+          last_update_by_user_id: user_id,
+        } as any,
+      });
+      await tx.operationsJobHistory.create({
+        data: {
+          job_id: updated.id,
+          action_type: 'crm_status_switch',
+          old_status: String(prev),
+          new_status: String(updated.status),
+          note: `CRM cambió a ${nextStatus}; se canceló la tarea previa (${String(otherJob.crm_task_type ?? '')}).`,
+          created_by_user_id: user_id,
+        } as any,
+      });
+    }
+
+    const existing = await tx.operationsJob.findFirst({
+      where: {
+        empresa_id,
+        deleted_at: null,
+        crm_chat_id: chatId,
+        crm_task_type: mapping.taskType as any,
+        status: { notIn: ['completed', 'closed', 'cancelled'] as any },
+      },
+      orderBy: { updated_at: 'desc' },
+    });
+
+    const serviceTypeLabel =
+      mapping.taskType === 'LEVANTAMIENTO'
+        ? 'Levantamiento'
+        : mapping.taskType === 'GARANTIA'
+          ? 'Garantía'
+          : 'Servicio reservado';
+
+    const baseJobData: any = {
+      empresa_id,
+      crm_customer_id: customer.id,
+      customer_name: customer.nombre,
+      customer_phone: customer.telefono,
+      customer_address: customer.direccion ?? customer.ubicacion_mapa ?? null,
+      service_type: serviceTypeLabel,
+      priority: priority ?? undefined,
+      notes: note ?? undefined,
+      assigned_tech_id: typeof assignedTechnicianId === 'undefined' ? undefined : assignedTechnicianId,
+      crm_chat_id: chatId,
+      crm_task_type: mapping.taskType,
+      product_id: productId ?? undefined,
+      service_id: serviceId ?? undefined,
+      last_update_by_user_id: user_id,
+    };
+
+    let job: any;
+    let oldStatus: string | null = null;
+
+    if (existing) {
+      oldStatus = String(existing.status ?? '');
+      // Do not regress status if technician already started.
+      const safeStatuses = new Set(['pending_survey', 'pending_scheduling', 'scheduled', 'warranty_pending']);
+      const nextJobStatus =
+        safeStatuses.has(String(existing.status)) ? mapping.initialJobStatus : String(existing.status);
+
+      job = await tx.operationsJob.update({
+        where: { id: existing.id },
+        data: {
+          ...baseJobData,
+          status: nextJobStatus as any,
+        },
+      });
+    } else {
+      job = await tx.operationsJob.create({
+        data: {
+          ...baseJobData,
+          created_by_user_id: user_id,
+          status: mapping.initialJobStatus as any,
+        },
+      });
+    }
+
+    // Upsert schedule / warranty ticket based on type
+    if (mapping.taskType === 'SERVICIO_RESERVADO') {
+      const d = parseScheduledAt(scheduledAt ?? null);
+      if (!d) throw new ApiError(400, 'scheduledAt is required for servicio_reservado');
+
+      await tx.operationsSchedule.upsert({
+        where: { job_id: job.id },
+        create: {
+          job_id: job.id,
+          scheduled_date: dateOnlyUtc(d),
+          preferred_time: formatTimeHHmm(d),
+          assigned_tech_id: assignedTechnicianId ?? null,
+          additional_tech_ids: [],
+          customer_availability_notes: note ?? null,
+        } as any,
+        update: {
+          scheduled_date: dateOnlyUtc(d),
+          preferred_time: formatTimeHHmm(d),
+          assigned_tech_id: typeof assignedTechnicianId === 'undefined' ? undefined : (assignedTechnicianId ?? null),
+          customer_availability_notes: note ?? null,
+        } as any,
+      });
+    }
+
+    if (mapping.taskType === 'GARANTIA') {
+      const reason = (problemDescription ?? '').trim();
+      if (!reason) throw new ApiError(400, 'problemDescription is required for garantia');
+
+      const existingTicket = await tx.operationsWarrantyTicket.findFirst({
+        where: { job_id: job.id, status: { in: ['pending', 'in_progress'] as any } },
+        orderBy: { reported_at: 'desc' },
+      });
+
+      if (!existingTicket) {
+        await tx.operationsWarrantyTicket.create({
+          data: {
+            job_id: job.id,
+            reason,
+            assigned_tech_id: assignedTechnicianId ?? null,
+            status: 'pending',
+          } as any,
+        });
+      } else {
+        await tx.operationsWarrantyTicket.update({
+          where: { id: existingTicket.id },
+          data: {
+            ...(existingTicket.status === 'pending' ? { reason } : {}),
+            assigned_tech_id: typeof assignedTechnicianId === 'undefined' ? undefined : (assignedTechnicianId ?? null),
+          } as any,
+        });
+      }
+    }
+
+    // History entry (always)
+    await tx.operationsJobHistory.create({
+      data: {
+        job_id: job.id,
+        action_type: 'crm_status',
+        old_status: oldStatus,
+        new_status: String(job.status),
+        note:
+          mapping.taskType === 'SERVICIO_RESERVADO'
+            ? `CRM -> ${nextStatus} (programado ${scheduledAt ?? ''})`
+            : mapping.taskType === 'GARANTIA'
+              ? `CRM -> ${nextStatus}: ${(problemDescription ?? '').trim()}`
+              : `CRM -> ${nextStatus}`,
+        created_by_user_id: user_id,
+      } as any,
+    });
+
+    const updatedChat = await tx.crmChat.findUnique({ where: { id: chatId } });
+    const metaById = await fetchChatMeta([chatId]);
+    const merged = { ...updatedChat, ...(metaById.get(chatId) ?? {}) };
+
+    return { merged, operationsJobId: job.id };
+  });
+
+  emitCrmEvent({ type: 'chat.updated', chatId });
+
+  res.json({
+    item: toChatApiItem(result.merged),
+    operations: result.operationsJobId ? { jobId: result.operationsJobId } : null,
+  });
 }
 
 export async function convertChatToCustomer(req: Request, res: Response) {

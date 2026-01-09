@@ -80,3 +80,35 @@ export const crmChatPatchSchema = z.object({
   note: z.string().max(5000).optional().nullable(),
   assignedToUserId: z.string().uuid().optional().nullable(),
 });
+
+// Operational status changes (CRM -> Operations upsert)
+export const crmChatStatusSchema = z.object({
+  status: z.string().min(1).max(50),
+
+  // Optional metadata collected from dialogs
+  scheduledAt: z.string().optional().nullable(),
+  scheduled_at: z.string().optional().nullable(),
+
+  note: z.string().max(5000).optional().nullable(),
+  notes: z.string().max(5000).optional().nullable(),
+
+  productId: z.string().uuid().optional().nullable(),
+  product_id: z.string().uuid().optional().nullable(),
+
+  serviceId: z.string().uuid().optional().nullable(),
+  service_id: z.string().uuid().optional().nullable(),
+
+  assignedTechnicianId: z.string().uuid().optional().nullable(),
+  assigned_technician_id: z.string().uuid().optional().nullable(),
+
+  priority: z
+    .enum(['BAJA', 'MEDIA', 'ALTA', 'low', 'normal', 'high'])
+    .optional()
+    .nullable(),
+
+  problemDescription: z.string().max(5000).optional().nullable(),
+  problem_description: z.string().max(5000).optional().nullable(),
+
+  cancelReason: z.string().max(5000).optional().nullable(),
+  cancel_reason: z.string().max(5000).optional().nullable(),
+});

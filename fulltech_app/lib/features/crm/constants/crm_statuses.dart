@@ -2,43 +2,53 @@
 class CrmStatuses {
   // Status values
   static const String primerContacto = 'primer_contacto';
-  static const String pendiente = 'pendiente';
   static const String interesado = 'interesado';
   static const String reserva = 'reserva';
   static const String compro = 'compro';
   static const String compraFinalizada = 'compra_finalizada';
   static const String servicioReservado = 'servicio_reservado';
   static const String noInteresado = 'no_interesado';
-  static const String activo = 'activo';
+  static const String porLevantamiento = 'por_levantamiento';
+  static const String pendientePago = 'pendiente_pago';
+  static const String conProblema = 'con_problema';
+  static const String garantia = 'garantia';
+  // Legacy-compatible (some existing data uses it)
   static const String enGarantia = 'en_garantia';
   static const String solucionGarantia = 'solucion_garantia';
+  static const String servicioFinalizado = 'servicio_finalizado';
+  static const String cancelado = 'cancelado';
 
   // Status labels
   static const Map<String, String> labels = {
     primerContacto: 'Primer contacto',
-    pendiente: 'Pendiente',
     interesado: 'Interesado',
     reserva: 'Reserva',
     compro: 'Compró',
     compraFinalizada: 'Compra finalizada',
     servicioReservado: 'Servicio reservado',
     noInteresado: 'No interesado',
-    activo: 'Activo',
+    porLevantamiento: 'Por levantamiento',
+    pendientePago: 'Pendiente de pago',
+    conProblema: 'Con problema',
+    garantia: 'Garantía',
     enGarantia: 'En garantía',
     solucionGarantia: 'Solución de garantía',
+    servicioFinalizado: 'Servicio finalizado',
+    cancelado: 'Cancelado',
   };
 
   /// Statuses that require a form dialog
   static const Set<String> requiresDialog = {
     reserva,
     servicioReservado,
-    enGarantia,
+    porLevantamiento,
+    conProblema,
+    garantia,
     solucionGarantia,
   };
 
   /// Statuses that trigger automatic client creation
   static const Set<String> createsClient = {
-    activo,
     compro,
     compraFinalizada,
   };

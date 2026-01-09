@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
@@ -700,6 +701,9 @@ class LocalDbWeb implements LocalDb {
         }
       },
     );
+
+    // Self-heal for legacy installs missing the `id` column in `auth_session`.
+    await _ensureAuthSessionSchema(_database);
   }
 
   sqflite.Database get _database {
@@ -708,13 +712,61 @@ class LocalDbWeb implements LocalDb {
     return db;
   }
 
+  Future<void> _ensureAuthSessionSchema(sqflite.Database db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS auth_session(
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          token TEXT NOT NULL,
+          user_json TEXT NOT NULL
+        );
+      ''');
+
+      final info = await db.rawQuery('PRAGMA table_info(auth_session);');
+      final columnNames = <String>{
+        for (final row in info)
+          if (row['name'] is String) row['name'] as String,
+      };
+
+      if (!columnNames.contains('token') ||
+          !columnNames.contains('user_json')) {
+        await db.execute('DROP TABLE IF EXISTS auth_session;');
+        await db.execute('''
+          CREATE TABLE auth_session(
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            token TEXT NOT NULL,
+            user_json TEXT NOT NULL
+          );
+        ''');
+        return;
+      }
+
+      if (!columnNames.contains('id')) {
+        await db.execute('ALTER TABLE auth_session ADD COLUMN id INTEGER;');
+      }
+
+      await db.execute(
+        'DELETE FROM auth_session WHERE rowid NOT IN (SELECT MAX(rowid) FROM auth_session);',
+      );
+      await db.execute('UPDATE auth_session SET id = 1;');
+    } catch (_) {
+      // Best-effort only.
+    }
+  }
+
   @override
   Future<void> saveSession(AuthSession session) async {
-    await _database.insert('auth_session', {
-      'id': 1,
-      'token': session.token,
-      'user_json': jsonEncode(session.user.toJson()),
-    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+    try {
+      await _database.insert('auth_session', {
+        'id': 1,
+        'token': session.token,
+        'user_json': jsonEncode(session.user.toJson()),
+      }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[DB][WEB] Failed to save session: $e');
+      }
+    }
   }
 
   @override

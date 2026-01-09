@@ -165,6 +165,14 @@ class SalesRepository {
 
     for (final ev in evidences) {
       final evidenceId = _newId();
+      final localPath = ev.localPath?.trim();
+      if (ev.isFile) {
+        final hasPath = localPath != null && localPath.isNotEmpty;
+        final hasBytes = ev.bytes.isNotEmpty;
+        if (!hasPath && !hasBytes) {
+          throw StateError('No se pudo leer el archivo de evidencia');
+        }
+      }
       final localEvidence = SalesEvidence(
         id: evidenceId,
         saleId: id,
@@ -189,7 +197,10 @@ class SalesRepository {
           'is_file': ev.isFile,
           'filename': ev.filename,
           'mime_type': ev.mimeType,
-          if (ev.isFile) 'bytes_b64': base64Encode(ev.bytes),
+          if (ev.isFile && localPath != null && localPath.isNotEmpty)
+            'local_path': localPath,
+          if (ev.isFile && (localPath == null || localPath.isEmpty))
+            'bytes_b64': base64Encode(ev.bytes),
         }),
       );
     }
@@ -353,20 +364,33 @@ class SalesRepository {
           final saleId = (payload['sale_id'] ?? '').toString();
           final type = (payload['type'] ?? SalesEvidenceType.image).toString();
           final isFile = payload['is_file'] == true;
+          final filename = (payload['filename'] ?? 'evidence').toString();
+          final mimeType = payload['mime_type']?.toString();
 
           Map<String, dynamic> evidencePayload;
 
           if (isFile) {
-            final b64 = (payload['bytes_b64'] ?? '').toString();
-            final bytes = base64Decode(b64);
-            final filename = (payload['filename'] ?? 'evidence').toString();
-            final mimeType = payload['mime_type']?.toString();
+            final localPath = payload['local_path']?.toString().trim();
+            final Map<String, dynamic> upload;
 
-            final upload = await _api.uploadEvidenceFile(
-              bytes: Uint8List.fromList(bytes),
-              filename: filename,
-              mimeType: mimeType,
-            );
+            if (localPath != null && localPath.isNotEmpty) {
+              upload = await _api.uploadEvidenceFile(
+                filePath: localPath,
+                filename: filename,
+                mimeType: mimeType,
+              );
+            } else {
+              final b64 = (payload['bytes_b64'] ?? '').toString();
+              if (b64.trim().isEmpty) {
+                throw Exception('Falta evidencia (bytes_b64/local_path)');
+              }
+              final bytes = base64Decode(b64);
+              upload = await _api.uploadEvidenceFile(
+                bytes: Uint8List.fromList(bytes),
+                filename: filename,
+                mimeType: mimeType,
+              );
+            }
             final url = (upload['url'] ?? '').toString();
             if (url.isEmpty) throw Exception('Upload falló');
 
@@ -382,19 +406,29 @@ class SalesRepository {
               'type': type,
               if (type == SalesEvidenceType.link) 'url': value,
               if (type == SalesEvidenceType.text) 'text': value,
-            };
+              };
           }
 
-          final server = await _api.addEvidence(saleId, evidencePayload);
-          final it = server['item'];
-          if (it is Map<String, dynamic>) {
-            final evidence = SalesEvidence.fromServerJson(
-              it,
-              saleId: saleId,
-              syncStatus: SyncStatus.synced,
-            );
-            await _db.upsertSalesEvidence(row: evidence.toLocalRow());
-          }
+          await _api.addEvidence(saleId, evidencePayload);
+
+          final urlOrPath =
+              (evidencePayload['file_path'] ??
+                      evidencePayload['url'] ??
+                      evidencePayload['text'] ??
+                      '')
+                  .toString();
+          await _db.upsertSalesEvidence(
+            row: {
+              'id': item.entityId,
+              'sale_id': saleId,
+              'type': type,
+              'url_or_path': urlOrPath,
+              'caption': mimeType,
+              'created_at': DateTime.now().toIso8601String(),
+              'sync_status': SyncStatus.synced,
+              'last_error': null,
+            },
+          );
 
           await _db.markSyncItemSent(item.id);
           continue;
@@ -531,18 +565,21 @@ class EvidenceDraft {
   final List<int> bytes;
   final String filename;
   final String? mimeType;
+  final String? localPath;
 
   const EvidenceDraft.file({
     required this.type,
-    required this.bytes,
     required this.filename,
     this.mimeType,
+    this.bytes = const [],
+    this.localPath,
   }) : isFile = true,
-       value = '';
+        value = '';
 
   const EvidenceDraft.value({required this.type, required this.value})
     : isFile = false,
       bytes = const [],
       filename = '',
-      mimeType = null;
+      mimeType = null,
+      localPath = null;
 }

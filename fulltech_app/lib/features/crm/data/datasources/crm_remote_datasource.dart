@@ -264,6 +264,13 @@ class CrmRemoteDataSource {
     return patchThread(chatId, patch);
   }
 
+  Future<CrmThread> postChatStatus(String chatId, Map<String, dynamic> payload) async {
+    final res = await _dio.post('/crm/chats/$chatId/status', data: payload);
+    final data = res.data as Map<String, dynamic>;
+    final item = (data['item'] as Map<String, dynamic>);
+    return CrmThread.fromJson(item);
+  }
+
   Future<void> deleteChat(String chatId) async {
     await _dio.delete('/crm/chats/$chatId');
   }

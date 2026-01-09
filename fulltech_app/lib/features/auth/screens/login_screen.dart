@@ -73,7 +73,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         setState(() => _error = parts.join(' '));
       } else {
-        setState(() => _error = 'No se pudo iniciar sesión. API: $baseUrl');
+        final msg = e.toString();
+        setState(
+          () => _error = msg.trim().isEmpty
+              ? 'No se pudo iniciar sesión. API: $baseUrl'
+              : 'No se pudo iniciar sesión. $msg API: $baseUrl',
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);

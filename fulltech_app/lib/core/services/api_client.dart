@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../storage/local_db.dart';
 import 'app_config.dart';
 import 'auth_events.dart';
+import 'auth_token_store.dart';
 import 'http_offline_cache.dart';
 import 'offline_http_queue.dart';
 
@@ -26,13 +27,16 @@ class ApiClient {
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 40),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
       ),
     );
 
     final client = ApiClient._(dio, db);
+
+    bool hasNonEmptyAuthHeader(RequestOptions options) {
+      final auth = options.headers['Authorization'];
+      return auth != null && auth.toString().trim().isNotEmpty;
+    }
 
     dio.interceptors.add(
       InterceptorsWrapper(
@@ -69,11 +73,24 @@ class ApiClient {
               );
             }
           }
+
+          // Fallback: if local persistence failed but we still have an in-memory token
+          // (e.g. just logged in), attach it so requests don't get 401.
+          if (!hasNonEmptyAuthHeader(options)) {
+            final token = AuthTokenStore.token;
+            if (token != null && token.trim().isNotEmpty) {
+              options.headers['Authorization'] = 'Bearer $token';
+            }
+          }
           handler.next(options);
         },
         onResponse: (response, handler) async {
           try {
-            await HttpOfflineCache.put(db, response.requestOptions, response.data);
+            await HttpOfflineCache.put(
+              db,
+              response.requestOptions,
+              response.data,
+            );
           } catch (_) {
             // Best-effort only.
           }
@@ -83,13 +100,18 @@ class ApiClient {
           // Offline-first GET fallback: serve cached snapshot when offline.
           try {
             final method = error.requestOptions.method.toUpperCase();
-            final offlineCache = error.requestOptions.extra['offlineCache'] == true;
-            final isOffline = error.type == DioExceptionType.connectionError ||
+            final offlineCache =
+                error.requestOptions.extra['offlineCache'] == true;
+            final isOffline =
+                error.type == DioExceptionType.connectionError ||
                 error.type == DioExceptionType.connectionTimeout ||
                 error.type == DioExceptionType.receiveTimeout;
 
             if (method == 'GET' && offlineCache && isOffline) {
-              final cached = await HttpOfflineCache.get(db, error.requestOptions);
+              final cached = await HttpOfflineCache.get(
+                db,
+                error.requestOptions,
+              );
               if (cached != null) {
                 handler.resolve(
                   Response(
@@ -107,12 +129,18 @@ class ApiClient {
 
           // If offline and this is a write request, enqueue it for later.
           // This is best-effort: skips multipart/FormData payloads.
-          final offlineQueue = error.requestOptions.extra['offlineQueue'] == true;
+          final offlineQueue =
+              error.requestOptions.extra['offlineQueue'] == true;
           final method = error.requestOptions.method.toUpperCase();
-          final isWrite = method == 'POST' || method == 'PUT' || method == 'PATCH' || method == 'DELETE';
+          final isWrite =
+              method == 'POST' ||
+              method == 'PUT' ||
+              method == 'PATCH' ||
+              method == 'DELETE';
 
           if (offlineQueue && isWrite) {
-            final isOffline = error.type == DioExceptionType.connectionError ||
+            final isOffline =
+                error.type == DioExceptionType.connectionError ||
                 error.type == DioExceptionType.connectionTimeout ||
                 error.type == DioExceptionType.receiveTimeout;
 
@@ -140,20 +168,31 @@ class ApiClient {
           // wipe the session in that case (it causes an immediate "bounce back" after login).
           final status = error.response?.statusCode;
           if (status == 401) {
-            final suppress = error.requestOptions.extra['suppressUnauthorizedEvent'] == true;
+            final suppress =
+                error.requestOptions.extra['suppressUnauthorizedEvent'] == true;
             final authHeader = error.requestOptions.headers['Authorization'];
-            final hadAuthHeader = authHeader != null && authHeader.toString().trim().isNotEmpty;
+            final hadAuthHeader =
+                authHeader != null && authHeader.toString().trim().isNotEmpty;
 
             final path = error.requestOptions.path;
+
+            // Do not warn about missing auth headers for public endpoints.
+            final isPublicAuthEndpoint =
+                path == '/auth/login' ||
+                path == '/auth/register' ||
+                path == '/auth/forgot-password' ||
+                path == '/auth/reset-password';
             final detail =
-              '$status ${error.requestOptions.method} $path hadAuthHeader=$hadAuthHeader';
+                '$status ${error.requestOptions.method} $path hadAuthHeader=$hadAuthHeader';
 
             // CRITICAL: Only log ONCE per path to prevent spam
             // Track last 401 path+time to avoid repeated logs
             final now = DateTime.now();
-            final recent = _lastUnauthorizedAt != null &&
-                now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 10);
-            
+            final recent =
+                _lastUnauthorizedAt != null &&
+                now.difference(_lastUnauthorizedAt!) <
+                    const Duration(seconds: 10);
+
             if (kDebugMode && !recent) {
               debugPrint('[AUTH][HTTP] $detail baseUrl=${dio.options.baseUrl}');
             }
@@ -165,12 +204,14 @@ class ApiClient {
                 _lastUnauthorizedAt = now;
                 try {
                   if (kDebugMode) {
-                    debugPrint('[AUTH] emitting unauthorized event for $detail');
+                    debugPrint(
+                      '[AUTH] emitting unauthorized event for $detail',
+                    );
                   }
                   // Let AuthController handle session clearing to avoid race conditions
                   // and ensure proper state management
                   AuthEvents.unauthorized(status, detail);
-                  
+
                   // Keep the flag set for a bit longer to prevent race conditions
                   // from multiple simultaneous 401 responses
                   await Future.delayed(const Duration(milliseconds: 500));
@@ -179,12 +220,16 @@ class ApiClient {
                   _handlingUnauthorized = false;
                 }
               }
-            } else if (!hadAuthHeader && !recent) {
+            } else if (!hadAuthHeader && !recent && !isPublicAuthEndpoint) {
               // WARNING: Request sent without auth header
               // This indicates a bug - authenticated endpoints should always have the header
               if (kDebugMode) {
-                debugPrint('[AUTH][BUG] Request to $path sent without Authorization header!');
-                debugPrint('[AUTH][BUG] This should not happen for protected endpoints.');
+                debugPrint(
+                  '[AUTH][BUG] Request to $path sent without Authorization header!',
+                );
+                debugPrint(
+                  '[AUTH][BUG] This should not happen for protected endpoints.',
+                );
               }
             }
           }
@@ -197,5 +242,3 @@ class ApiClient {
     return client;
   }
 }
-
-

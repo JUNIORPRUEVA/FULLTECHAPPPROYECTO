@@ -120,6 +120,9 @@ class CrmRepository {
   Future<CrmThread> patchChat(String chatId, Map<String, dynamic> patch) =>
       _remote.patchChat(chatId, patch);
 
+  Future<CrmThread> postChatStatus(String chatId, Map<String, dynamic> payload) =>
+      _remote.postChatStatus(chatId, payload);
+
   Future<void> deleteChat(String chatId) => _remote.deleteChat(chatId);
 
   Future<MessagesPage> listMessages({

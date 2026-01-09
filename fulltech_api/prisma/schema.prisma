@@ -266,6 +266,7 @@ model Usuario {
   operations_schedules_assigned OperationsSchedule[] @relation("OperationsScheduleAssignedTech")
   operations_installation_reports_created OperationsInstallationReport[] @relation("OperationsInstallationReportCreator")
   operations_warranty_tickets_assigned OperationsWarrantyTicket[] @relation("OperationsWarrantyAssignedTech")
+  operations_job_history_created OperationsJobHistory[] @relation("OperationsJobHistoryCreator")
 
   sales_records_created SalesRecord[] @relation("SalesRecordCreator")
   
@@ -925,6 +926,13 @@ enum OperationsWarrantyStatus {
   resolved
 }
 
+enum OperationsCrmTaskType {
+  LEVANTAMIENTO
+  SERVICIO_RESERVADO
+  GARANTIA
+  INSTALACION
+}
+
 model OperationsJob {
   id                  String @id @default(uuid()) @db.Uuid
   empresa_id          String @db.Uuid
@@ -942,6 +950,15 @@ model OperationsJob {
   status              OperationsJobStatus @default(pending_survey)
   notes               String? @db.Text
 
+  // CRM (new WhatsApp CRM) linkage
+  crm_chat_id         String? @db.Uuid
+  crm_task_type       OperationsCrmTaskType?
+  product_id          String? @db.Uuid
+  service_id          String? @db.Uuid
+  technician_notes    String? @db.Text
+  cancel_reason       String? @db.Text
+  last_update_by_user_id String? @db.Uuid
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   deleted_at DateTime?
@@ -950,20 +967,45 @@ model OperationsJob {
   created_by Usuario @relation("OperationsJobCreator", fields: [created_by_user_id], references: [id])
   assigned_tech Usuario? @relation("OperationsJobAssignedTech", fields: [assigned_tech_id], references: [id])
   crm_customer Customer @relation(fields: [crm_customer_id], references: [id])
+  crm_chat CrmChat? @relation("CrmChatToOperationsJobs", fields: [crm_chat_id], references: [id], onDelete: SetNull)
 
   survey OperationsSurvey?
   schedule OperationsSchedule?
   installation_reports OperationsInstallationReport[]
   warranty_tickets OperationsWarrantyTicket[]
+  history OperationsJobHistory[]
 
   @@index([empresa_id])
   @@index([crm_customer_id])
+  @@index([crm_chat_id])
+  @@index([crm_task_type])
+  @@index([product_id])
+  @@index([service_id])
   @@index([status])
   @@index([priority])
   @@index([assigned_tech_id])
   @@index([created_at(sort: Desc)])
   @@index([deleted_at])
   @@map("operations_jobs")
+}
+
+model OperationsJobHistory {
+  id                 String   @id @default(uuid()) @db.Uuid
+  job_id             String   @db.Uuid
+  action_type        String
+  old_status         String?
+  new_status         String?
+  note               String?  @db.Text
+  created_by_user_id String?  @db.Uuid
+  created_at         DateTime @default(now())
+
+  job        OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  created_by Usuario?      @relation("OperationsJobHistoryCreator", fields: [created_by_user_id], references: [id])
+
+  @@index([job_id])
+  @@index([created_at(sort: Desc)])
+  @@index([created_by_user_id])
+  @@map("operations_job_history")
 }
 
 model OperationsSurvey {
@@ -1010,14 +1052,14 @@ model OperationsSchedule {
   job_id                String @unique @db.Uuid
   scheduled_date        DateTime @db.Date
   preferred_time        String?
-  assigned_tech_id      String @db.Uuid
+  assigned_tech_id      String? @db.Uuid
   additional_tech_ids   String[] @default([])
   customer_availability_notes String? @db.Text
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
-  assigned_tech Usuario @relation("OperationsScheduleAssignedTech", fields: [assigned_tech_id], references: [id])
+  assigned_tech Usuario? @relation("OperationsScheduleAssignedTech", fields: [assigned_tech_id], references: [id])
 
   @@index([job_id])
   @@index([scheduled_date])
@@ -1347,6 +1389,7 @@ model CrmChat {
 
   empresa  Empresa           @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
   messages CrmChatMessage[]
+  operations_jobs OperationsJob[] @relation("CrmChatToOperationsJobs")
 
   @@unique([wa_id])
   @@index([last_message_at])

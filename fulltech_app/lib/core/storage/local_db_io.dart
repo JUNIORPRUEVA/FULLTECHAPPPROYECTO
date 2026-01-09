@@ -375,7 +375,7 @@ class LocalDbIo implements LocalDb {
         );
 
         // === CRM Status-Related Tables ===
-        
+
         // CRM Reservations (status: reserva)
         await db.execute('''
           CREATE TABLE crm_reservations(
@@ -881,7 +881,7 @@ class LocalDbIo implements LocalDb {
 
         if (oldVersion < 10) {
           // CRM Status-Related Tables
-          
+
           await db.execute('''
             CREATE TABLE IF NOT EXISTS crm_reservations(
               id TEXT PRIMARY KEY,
@@ -1047,6 +1047,60 @@ class LocalDbIo implements LocalDb {
         }
       },
     );
+
+    // Self-heal: older installations may have an `auth_session` table without the `id` column.
+    // That breaks `readSession/saveSession` (they query/insert `id=1`). Fix it on startup.
+    await _ensureAuthSessionSchema(_database);
+  }
+
+  Future<void> _ensureAuthSessionSchema(sqflite.Database db) async {
+    try {
+      // Ensure table exists.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS auth_session(
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          token TEXT NOT NULL,
+          user_json TEXT NOT NULL
+        );
+      ''');
+
+      final info = await db.rawQuery('PRAGMA table_info(auth_session);');
+      final columnNames = <String>{
+        for (final row in info)
+          if (row['name'] is String) row['name'] as String,
+      };
+
+      // If token/user_json are missing, the table is not compatible. Recreate it.
+      if (!columnNames.contains('token') ||
+          !columnNames.contains('user_json')) {
+        await db.execute('DROP TABLE IF EXISTS auth_session;');
+        await db.execute('''
+          CREATE TABLE auth_session(
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            token TEXT NOT NULL,
+            user_json TEXT NOT NULL
+          );
+        ''');
+        return;
+      }
+
+      // Add missing id column (common legacy case).
+      if (!columnNames.contains('id')) {
+        await db.execute('ALTER TABLE auth_session ADD COLUMN id INTEGER;');
+      }
+
+      // Normalize to a single-row session at id=1.
+      // Keep the latest row by rowid (if legacy schema allowed multiple rows).
+      await db.execute(
+        'DELETE FROM auth_session WHERE rowid NOT IN (SELECT MAX(rowid) FROM auth_session);',
+      );
+      await db.execute('UPDATE auth_session SET id = 1;');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[DB] Failed to ensure auth_session schema: $e');
+      }
+      // Best-effort only.
+    }
   }
 
   Future<String> _resolveDbPath() async {
@@ -1079,7 +1133,6 @@ class LocalDbIo implements LocalDb {
       if (kDebugMode) {
         debugPrint('[DB] Failed to save session: $e');
       }
-      rethrow;
     }
   }
 

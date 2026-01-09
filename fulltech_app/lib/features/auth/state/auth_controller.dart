@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 
 import '../../../core/services/auth_events.dart';
+import '../../../core/services/auth_token_store.dart';
 import '../../../core/services/auth_api.dart';
 import '../../../core/storage/local_db.dart';
 import 'auth_state.dart';
@@ -52,6 +53,7 @@ class AuthController extends StateNotifier<AuthState> {
         if (kDebugMode) {
           debugPrint('[AUTH] clearing session and logging out');
         }
+        AuthTokenStore.clear();
         await _db.clearSession();
         state = const AuthUnauthenticated();
       }
@@ -63,9 +65,13 @@ class AuthController extends StateNotifier<AuthState> {
     final session = await _db.readSession();
     if (session == null) {
       if (kDebugMode) debugPrint('[AUTH] bootstrap: no session');
+      AuthTokenStore.clear();
       state = const AuthUnauthenticated();
       return;
     }
+
+    // Make token available immediately for ApiClient fallbacks.
+    AuthTokenStore.set(session.token);
 
     if (kDebugMode) {
       debugPrint(
@@ -103,6 +109,7 @@ class AuthController extends StateNotifier<AuthState> {
               '[AUTH] bootstrap: token invalid (401), clearing session',
             );
           }
+          AuthTokenStore.clear();
           await _db.clearSession();
           state = const AuthUnauthenticated();
           return;
@@ -122,7 +129,17 @@ class AuthController extends StateNotifier<AuthState> {
     if (kDebugMode) debugPrint('[AUTH] login() email=$email');
     final result = await _api.login(email: email, password: password);
     final session = AuthSession(token: result.token, user: result.user);
-    await _db.saveSession(session);
+
+    // Ensure token is available even if DB persistence fails.
+    AuthTokenStore.set(session.token);
+    try {
+      await _db.saveSession(session);
+    } catch (e) {
+      // Don't block login on local persistence issues.
+      if (kDebugMode) {
+        debugPrint('[AUTH] login: failed to persist session: $e');
+      }
+    }
     if (kDebugMode) {
       debugPrint('[AUTH] login: saved session role=${session.user.role}');
     }
@@ -131,6 +148,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     if (kDebugMode) debugPrint('[AUTH] logout()');
+    AuthTokenStore.clear();
     await _db.clearSession();
     state = const AuthUnauthenticated();
   }

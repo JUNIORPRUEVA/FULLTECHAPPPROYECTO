@@ -12,6 +12,8 @@ import '../../../core/services/app_config.dart';
 import '../../../core/state/api_endpoint_settings_provider.dart';
 import '../../catalogo/state/catalog_providers.dart';
 import '../../catalogo/models/producto.dart';
+import '../../usuarios/models/registered_user.dart';
+import '../../usuarios/state/users_providers.dart';
 import '../data/datasources/crm_remote_datasource.dart';
 import '../data/datasources/customers_remote_datasource.dart';
 import '../data/repositories/crm_repository.dart';
@@ -142,6 +144,35 @@ final crmProductsProvider = StreamProvider<List<Producto>>((ref) async* {
       // Best-effort.
     }
   }
+});
+
+final crmTechniciansProvider = FutureProvider<List<RegisteredUserSummary>>((
+  ref,
+) async {
+  // Best-effort: fetch a single page per role and merge.
+  // NOTE: Uses /users because this is already a dependency for multiple modules.
+  final api = ref.watch(usersApiProvider);
+
+  Future<List<RegisteredUserSummary>> listByRole(String rol) async {
+    final page = await api.listUsers(page: 1, pageSize: 200, rol: rol);
+    return page.items;
+  }
+
+  final pages = await Future.wait([
+    listByRole('tecnico'),
+    listByRole('tecnico_fijo'),
+    listByRole('contratista'),
+  ]);
+
+  final byId = <String, RegisteredUserSummary>{};
+  for (final list in pages) {
+    for (final u in list) {
+      byId[u.id] = u;
+    }
+  }
+  final out = byId.values.toList(growable: false);
+  out.sort((a, b) => a.nombreCompleto.compareTo(b.nombreCompleto));
+  return out;
 });
 
 final crmSseClientProvider = Provider<CrmSseClient>((ref) {

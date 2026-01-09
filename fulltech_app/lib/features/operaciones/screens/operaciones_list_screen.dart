@@ -10,7 +10,8 @@ class OperacionesListScreen extends ConsumerStatefulWidget {
   const OperacionesListScreen({super.key});
 
   @override
-  ConsumerState<OperacionesListScreen> createState() => _OperacionesListScreenState();
+  ConsumerState<OperacionesListScreen> createState() =>
+      _OperacionesListScreenState();
 }
 
 class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
@@ -25,7 +26,9 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(operationsJobsControllerProvider.notifier).refresh());
+    Future.microtask(
+      () => ref.read(operationsJobsControllerProvider.notifier).refresh(),
+    );
   }
 
   @override
@@ -37,7 +40,8 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
       actions: [
         IconButton(
           tooltip: 'Refrescar',
-          onPressed: () => ref.read(operationsJobsControllerProvider.notifier).refresh(),
+          onPressed: () =>
+              ref.read(operationsJobsControllerProvider.notifier).refresh(),
           icon: const Icon(Icons.refresh),
         ),
       ],
@@ -55,15 +59,19 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                     width: 320,
                     child: TextField(
                       controller: _searchCtrl,
-                      onChanged: (v) => ref.read(operationsJobsControllerProvider.notifier).setSearch(v),
+                      onChanged: (v) => ref
+                          .read(operationsJobsControllerProvider.notifier)
+                          .setSearch(v),
                       decoration: const InputDecoration(
-                        labelText: 'Buscar (cliente, teléfono, dirección, servicio...)',
+                        labelText:
+                            'Buscar (cliente, teléfono, dirección, servicio...)',
                         prefixIcon: Icon(Icons.search),
                       ),
                     ),
                   ),
-                  Flexible(
-                    child: DropdownButtonFormField<String>(
+                  SizedBox(
+                    width: 280,
+                    child: DropdownButtonFormField<String?>(
                       initialValue: state.status,
                       decoration: const InputDecoration(
                         labelText: 'Estado',
@@ -71,24 +79,58 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                       ),
                       isExpanded: true,
                       items: const [
-                        DropdownMenuItem(value: null, child: Text('Todos')),
-                        DropdownMenuItem(value: 'pending_survey', child: Text('Pendiente levantamiento')),
-                        DropdownMenuItem(value: 'pending_scheduling', child: Text('Pendiente agenda')),
-                        DropdownMenuItem(value: 'scheduled', child: Text('Programado')),
-                        DropdownMenuItem(value: 'installation_in_progress', child: Text('Instalación en progreso')),
-                        DropdownMenuItem(value: 'completed', child: Text('Completado')),
-                        DropdownMenuItem(value: 'warranty_pending', child: Text('Garantía pendiente')),
-                        DropdownMenuItem(value: 'warranty_in_progress', child: Text('Garantía en progreso')),
-                        DropdownMenuItem(value: 'closed', child: Text('Cerrado')),
-                        DropdownMenuItem(value: 'cancelled', child: Text('Cancelado')),
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Todos'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'pending_survey',
+                          child: Text('Pendiente levantamiento'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'pending_scheduling',
+                          child: Text('Pendiente agenda'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'scheduled',
+                          child: Text('Programado'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'installation_in_progress',
+                          child: Text('Instalación en progreso'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'completed',
+                          child: Text('Completado'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'warranty_pending',
+                          child: Text('Garantía pendiente'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'warranty_in_progress',
+                          child: Text('Garantía en progreso'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'closed',
+                          child: Text('Cerrado'),
+                        ),
+                        DropdownMenuItem<String?>(
+                          value: 'cancelled',
+                          child: Text('Cancelado'),
+                        ),
                       ],
-                      onChanged: (v) => ref.read(operationsJobsControllerProvider.notifier).setStatus(v),
+                      onChanged: (v) => ref
+                          .read(operationsJobsControllerProvider.notifier)
+                          .setStatus(v),
                     ),
                   ),
                   if (state.error != null)
                     Text(
                       state.error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                 ],
               ),
@@ -118,12 +160,19 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                           child: FilledButton.icon(
                             onPressed: state.loading
                                 ? null
-                                : () => ref.read(operationsJobsControllerProvider.notifier).loadMore(),
+                                : () => ref
+                                      .read(
+                                        operationsJobsControllerProvider
+                                            .notifier,
+                                      )
+                                      .loadMore(),
                             icon: state.loading
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Icon(Icons.expand_more),
                             label: const Text('Cargar más'),
@@ -132,12 +181,13 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                       }
 
                       final job = state.items[i];
-                        final title = job.customerName.trim().isNotEmpty
+                      final title = job.customerName.trim().isNotEmpty
                           ? job.customerName.trim()
                           : 'Cliente';
                       final subtitleParts = <String>[
                         job.serviceType,
-                        if (job.customerPhone != null && job.customerPhone!.trim().isNotEmpty)
+                        if (job.customerPhone != null &&
+                            job.customerPhone!.trim().isNotEmpty)
                           job.customerPhone!.trim(),
                         job.status,
                       ];
@@ -147,7 +197,8 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                         title: Text(title),
                         subtitle: Text(subtitleParts.join(' • ')),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.go(AppRoutes.operacionesDetail(job.id)),
+                        onTap: () =>
+                            context.go(AppRoutes.operacionesDetail(job.id)),
                       );
                     },
                   );

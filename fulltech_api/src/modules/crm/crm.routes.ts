@@ -21,6 +21,7 @@ import {
   listPurchasedClients,
   markChatRead,
   patchChat,
+  postChatStatus,
   postUpload,
   recordMediaMessage,
   sendOutboundTextMessage,
@@ -64,6 +65,7 @@ crmRouter.get('/chats/:chatId', expressAsyncHandler(getChat));
 crmRouter.get('/chats/:chatId/messages', expressAsyncHandler(listChatMessages));
 crmRouter.patch('/chats/:chatId/messages/:messageId', expressAsyncHandler(editChatMessage));
 crmRouter.delete('/chats/:chatId/messages/:messageId', expressAsyncHandler(deleteChatMessage));
+crmRouter.post('/chats/:chatId/status', expressAsyncHandler(postChatStatus));
 crmRouter.patch('/chats/:chatId', expressAsyncHandler(patchChat));
 crmRouter.post('/chats/:chatId/convert-to-customer', expressAsyncHandler(convertChatToCustomer));
 crmRouter.patch('/chats/:chatId/read', expressAsyncHandler(markChatRead));

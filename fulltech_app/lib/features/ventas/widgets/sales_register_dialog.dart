@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -383,42 +384,63 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
   }
 
   Future<void> _pickEvidenceFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      withData: true,
-      type: FileType.custom,
-      allowedExtensions: const ['png', 'jpg', 'jpeg', 'pdf'],
-    );
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        // En desktop/mobile preferimos usar `path` para no cargar bytes en memoria.
+        // En web necesitamos `bytes`.
+        withData: kIsWeb,
+        type: FileType.custom,
+        allowedExtensions: const ['png', 'jpg', 'jpeg', 'pdf'],
+      );
 
-    if (result == null || result.files.isEmpty) return;
-    final f = result.files.single;
-    final bytes = f.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      setState(() => _error = 'No se pudo leer el archivo.');
-      return;
+      if (result == null || result.files.isEmpty) return;
+      final f = result.files.single;
+      const maxBytes = 8 * 1024 * 1024; // backend limit
+      if (f.size > maxBytes) {
+        setState(() {
+          _error = 'El archivo excede 8MB. Selecciona uno más pequeño.';
+        });
+        return;
+      }
+      final bytes = f.bytes;
+      final path = f.path;
+
+      final hasBytes = bytes != null && bytes.isNotEmpty;
+      final hasPath = path != null && path.trim().isNotEmpty;
+      if (!hasBytes && !hasPath) {
+        setState(() => _error = 'No se pudo leer el archivo.');
+        return;
+      }
+
+      final ext = (f.extension ?? '').toLowerCase();
+      final type =
+          ext == 'pdf' ? SalesEvidenceType.pdf : SalesEvidenceType.image;
+      final filename = f.name;
+
+      final String? mimeType = switch (ext) {
+        'pdf' => 'application/pdf',
+        'png' => 'image/png',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        _ => null,
+      };
+
+      setState(() {
+        _error = null;
+        _evidences.add(
+          EvidenceDraft.file(
+            type: type,
+            filename: filename,
+            mimeType: mimeType,
+            bytes: bytes ?? const [],
+            localPath: path,
+          ),
+        );
+      });
+    } catch (e) {
+      setState(() => _error = 'Error seleccionando archivo: $e');
     }
-
-    final ext = (f.extension ?? '').toLowerCase();
-    final type = ext == 'pdf' ? SalesEvidenceType.pdf : SalesEvidenceType.image;
-    final filename = f.name;
-
-    final String? mimeType = switch (ext) {
-      'pdf' => 'application/pdf',
-      'png' => 'image/png',
-      'jpg' => 'image/jpeg',
-      'jpeg' => 'image/jpeg',
-      _ => null,
-    };
-
-    setState(() {
-      _error = null;
-      _evidences.add(EvidenceDraft.file(
-        type: type,
-        bytes: bytes,
-        filename: filename,
-        mimeType: mimeType,
-      ));
-    });
   }
 
   Future<void> _submit() async {

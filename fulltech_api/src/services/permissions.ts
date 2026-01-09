@@ -6,10 +6,17 @@ export type PermissionCode = string;
 const ROLE_DEFAULTS: Record<string, PermissionCode[]> = {
   admin: ['*'],
   administrador: ['*'],
-  vendedor: ['pos.sell', 'pos.reports.view', 'printing.use'],
-  tecnico: ['inventory.view'],
-  tecnico_fijo: ['inventory.view'],
-  contratista: ['inventory.view'],
+  vendedor: [
+    'pos.sell',
+    'pos.reports.view',
+    'printing.use',
+    'operations.view',
+    'operations.assign_technician',
+    'operations.view_history',
+  ],
+  tecnico: ['inventory.view', 'operations.view', 'operations.update_status', 'operations.view_history'],
+  tecnico_fijo: ['inventory.view', 'operations.view', 'operations.update_status', 'operations.view_history'],
+  contratista: ['inventory.view', 'operations.view', 'operations.update_status', 'operations.view_history'],
   asistente_administrativo: ['users.view', 'reports.view'],
 };
 
