@@ -93,13 +93,6 @@ class _ApiEndpointSettingsScreenState
                           .read(apiEndpointSettingsProvider.notifier)
                           .setLocalBaseUrl(v);
                     },
-                    onChanged: (v) {
-                      // Persist on change, but keep it light: only when it looks like a URL.
-                      if (v.trim().length < 8) return;
-                      ref
-                          .read(apiEndpointSettingsProvider.notifier)
-                          .setLocalBaseUrl(v);
-                    },
                   ),
                   const SizedBox(height: 8),
                   Text(

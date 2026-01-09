@@ -1,50 +1,115 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/offline_http_queue.dart';
+import '../domain/pos_pricing.dart';
 import '../data/pos_repository.dart';
 import '../models/pos_models.dart';
 
 class PosTicket {
   final String id;
   final String name;
+  final bool isCustomName;
   final String? customerId;
   final String? customerName;
   final String? customerRnc;
   final String invoiceType; // NORMAL|FISCAL
-  final double globalDiscount;
+  final PosDiscount globalDiscount;
+  final bool itbisEnabled;
+  final double itbisRate;
+  final String? fiscalDocType;
   final List<PosSaleItemDraft> items;
 
   const PosTicket({
     required this.id,
     required this.name,
+    required this.isCustomName,
     required this.customerId,
     required this.customerName,
     required this.customerRnc,
     required this.invoiceType,
     required this.globalDiscount,
+    required this.itbisEnabled,
+    required this.itbisRate,
+    required this.fiscalDocType,
     required this.items,
   });
 
   PosTicket copyWith({
     String? name,
+    bool? isCustomName,
     String? customerId,
     String? customerName,
     String? customerRnc,
     String? invoiceType,
     double? globalDiscount,
+    PosDiscount? globalDiscountNext,
+    bool? itbisEnabled,
+    double? itbisRate,
+    String? fiscalDocType,
+    bool clearFiscalDocType = false,
     List<PosSaleItemDraft>? items,
   }) {
     return PosTicket(
       id: id,
       name: name ?? this.name,
+      isCustomName: isCustomName ?? this.isCustomName,
       customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
       customerRnc: customerRnc ?? this.customerRnc,
       invoiceType: invoiceType ?? this.invoiceType,
-      globalDiscount: globalDiscount ?? this.globalDiscount,
+      globalDiscount: globalDiscountNext ?? (globalDiscount != null ? PosDiscount(type: 'AMOUNT', value: globalDiscount) : this.globalDiscount),
+      itbisEnabled: itbisEnabled ?? this.itbisEnabled,
+      itbisRate: itbisRate ?? this.itbisRate,
+      fiscalDocType: clearFiscalDocType ? null : (fiscalDocType ?? this.fiscalDocType),
       items: items ?? this.items,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'is_custom_name': isCustomName,
+      'customer_id': customerId,
+      'customer_name': customerName,
+      'customer_rnc': customerRnc,
+      'invoice_type': invoiceType,
+      'global_discount': globalDiscount.toJson(),
+      'itbis_enabled': itbisEnabled,
+      'itbis_rate': itbisRate,
+      'fiscal_doc_type': fiscalDocType,
+      'items': items.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  factory PosTicket.fromJson(Map<String, dynamic> json) {
+    final itemsRaw = (json['items'] as List?) ?? const [];
+    final discountRaw = (json['global_discount'] as Map?)?.cast<String, dynamic>();
+    return PosTicket(
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? 'Ticket').toString(),
+      isCustomName: (json['is_custom_name'] is bool)
+          ? (json['is_custom_name'] as bool)
+          : ((json['is_custom_name'] ?? false).toString() == 'true'),
+      customerId: (json['customer_id'] ?? '').toString().trim().isEmpty ? null : (json['customer_id'] ?? '').toString(),
+      customerName: (json['customer_name'] ?? '').toString().trim().isEmpty ? null : (json['customer_name'] ?? '').toString(),
+      customerRnc: (json['customer_rnc'] ?? '').toString().trim().isEmpty ? null : (json['customer_rnc'] ?? '').toString(),
+      invoiceType: (json['invoice_type'] ?? 'NORMAL').toString(),
+      globalDiscount: discountRaw == null ? PosDiscount.none : PosDiscount.fromJson(discountRaw),
+      itbisEnabled: (json['itbis_enabled'] is bool)
+          ? (json['itbis_enabled'] as bool)
+          : ((json['itbis_enabled'] ?? false).toString() == 'true'),
+      itbisRate: (json['itbis_rate'] is num) ? (json['itbis_rate'] as num).toDouble() : 0.18,
+      fiscalDocType: (json['fiscal_doc_type'] ?? '').toString().trim().isEmpty
+          ? null
+          : (json['fiscal_doc_type'] ?? '').toString(),
+      items: itemsRaw
+          .whereType<Map>()
+          .map((e) => PosSaleItemDraft.fromJson(e.cast<String, dynamic>()))
+          .toList(),
     );
   }
 
@@ -55,6 +120,15 @@ class PosTicket {
   double get baseAfterLineDiscounts => items.fold<double>(
     0,
     (acc, it) => acc + (it.lineSubtotal < 0 ? 0 : it.lineSubtotal),
+  );
+
+  PosTicketTotals get totals => PosPricing.totals(
+    grossSubtotal: subtotal,
+    lineDiscounts: lineDiscounts,
+    baseAfterLineDiscounts: baseAfterLineDiscounts,
+    globalDiscount: globalDiscount,
+    itbisEnabled: itbisEnabled,
+    itbisRate: itbisRate,
   );
 }
 
@@ -128,11 +202,15 @@ class PosTpvController extends StateNotifier<PosTpvState> {
             PosTicket(
               id: 'ticket-1',
               name: 'Ticket 1',
+              isCustomName: false,
               customerId: null,
               customerName: null,
               customerRnc: null,
               invoiceType: 'NORMAL',
-              globalDiscount: 0,
+              globalDiscount: PosDiscount.none,
+              itbisEnabled: false,
+              itbisRate: 0.18,
+              fiscalDocType: 'B02',
               items: [],
             ),
           ],
@@ -140,16 +218,58 @@ class PosTpvController extends StateNotifier<PosTpvState> {
           lastPaidSale: null,
         ),
       ) {
+    unawaited(_loadDraft());
     unawaited(refreshProducts());
   }
 
   final PosRepository _repo;
   Timer? _debounce;
+  Timer? _persistDebounce;
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _persistDebounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadDraft() async {
+    try {
+      final jsonStr = await _repo.loadTpvDraftJson();
+      if (jsonStr == null || jsonStr.trim().isEmpty) return;
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is! Map<String, dynamic>) return;
+
+      final ticketsRaw = (decoded['tickets'] as List?) ?? const [];
+      final tickets = ticketsRaw
+          .whereType<Map>()
+          .map((e) => PosTicket.fromJson(e.cast<String, dynamic>()))
+          .where((t) => t.id.trim().isNotEmpty)
+          .toList();
+      if (tickets.isEmpty) return;
+
+      final activeId = (decoded['active_ticket_id'] ?? '').toString();
+      final safeActive = tickets.any((t) => t.id == activeId) ? activeId : tickets.first.id;
+
+      state = state.copyWith(tickets: tickets, activeTicketId: safeActive);
+    } catch (_) {
+      // Ignore draft restore errors.
+    }
+  }
+
+  void _schedulePersistDraft() {
+    _persistDebounce?.cancel();
+    _persistDebounce = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_persistDraft());
+    });
+  }
+
+  Future<void> _persistDraft() async {
+    final payload = {
+      'active_ticket_id': state.activeTicketId,
+      'tickets': state.tickets.map((t) => t.toJson()).toList(),
+    };
+    await _repo.saveTpvDraftJson(jsonEncode(payload));
   }
 
   Future<void> refreshProducts() async {
@@ -190,11 +310,15 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     final ticket = PosTicket(
       id: id,
       name: 'Ticket $n',
+      isCustomName: false,
       customerId: null,
       customerName: null,
       customerRnc: null,
       invoiceType: 'NORMAL',
-      globalDiscount: 0,
+      globalDiscount: PosDiscount.none,
+      itbisEnabled: false,
+      itbisRate: 0.18,
+      fiscalDocType: 'B02',
       items: const [],
     );
 
@@ -202,15 +326,17 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       tickets: [...state.tickets, ticket],
       activeTicketId: id,
     );
+    _schedulePersistDraft();
   }
 
   void renameTicket(String id, String name) {
     final nextName = name.trim();
     if (nextName.isEmpty) return;
     final tickets = state.tickets
-        .map((t) => t.id == id ? t.copyWith(name: nextName) : t)
+        .map((t) => t.id == id ? t.copyWith(name: nextName, isCustomName: true) : t)
         .toList();
     state = state.copyWith(tickets: tickets);
+    _schedulePersistDraft();
   }
 
   void closeTicket(String id) {
@@ -221,10 +347,12 @@ class PosTpvController extends StateNotifier<PosTpvState> {
         ? tickets.first.id
         : state.activeTicketId;
     state = state.copyWith(tickets: tickets, activeTicketId: active);
+    _schedulePersistDraft();
   }
 
   void selectTicket(String id) {
     state = state.copyWith(activeTicketId: id);
+    _schedulePersistDraft();
   }
 
   void setInvoiceType(String invoiceType) {
@@ -234,7 +362,9 @@ class PosTpvController extends StateNotifier<PosTpvState> {
 
   void setCustomer({String? customerId, String? name, String? rnc}) {
     final t = state.activeTicket;
-    final label = (name ?? '').trim().isEmpty ? t.name : name!.trim();
+    final cleanedName = (name ?? '').trim();
+    final shouldAutoName = !t.isCustomName;
+    final label = (shouldAutoName && cleanedName.isNotEmpty) ? cleanedName : t.name;
     _updateTicket(
       t.copyWith(
         customerId: customerId,
@@ -245,9 +375,25 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     );
   }
 
-  void setGlobalDiscount(double amount) {
+  void setGlobalDiscount(PosDiscount discount) {
     final t = state.activeTicket;
-    _updateTicket(t.copyWith(globalDiscount: amount < 0 ? 0 : amount));
+    _updateTicket(t.copyWith(globalDiscountNext: discount));
+  }
+
+  void setItbisEnabled(bool enabled) {
+    final t = state.activeTicket;
+    _updateTicket(t.copyWith(itbisEnabled: enabled));
+  }
+
+  void setItbisRate(double rate) {
+    final t = state.activeTicket;
+    _updateTicket(t.copyWith(itbisRate: rate < 0 ? 0 : rate));
+  }
+
+  void setFiscalDocType(String? docType) {
+    final t = state.activeTicket;
+    final cleaned = (docType ?? '').trim();
+    _updateTicket(t.copyWith(fiscalDocType: cleaned.isEmpty ? null : cleaned));
   }
 
   void addProduct(PosProduct product) {
@@ -302,6 +448,17 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       throw StateError('El carrito está vacío');
     }
 
+    if (t.invoiceType == 'FISCAL') {
+      final rnc = (t.customerRnc ?? '').trim();
+      if (rnc.isEmpty) {
+        throw StateError('Para comprobante fiscal, el cliente debe tener RNC');
+      }
+      final dt = (docType ?? t.fiscalDocType ?? '').trim();
+      if (dt.isEmpty) {
+        throw StateError('Selecciona el tipo de comprobante (NCF)');
+      }
+    }
+
     state = state.copyWith(loading: true, error: null);
     try {
       final sale = await _repo.createSale(
@@ -310,7 +467,7 @@ class PosTpvController extends StateNotifier<PosTpvState> {
         customerName: t.customerName,
         customerRnc: t.customerRnc,
         items: t.items,
-        discountTotal: t.globalDiscount,
+        discountTotal: t.totals.globalDiscount,
       );
 
       final paid = await _repo.paySale(
@@ -320,12 +477,12 @@ class PosTpvController extends StateNotifier<PosTpvState> {
         receivedAmount: receivedAmount,
         dueDateIso: dueDate?.toIso8601String(),
         initialPayment: initialPayment,
-        docType: docType,
+        docType: t.invoiceType == 'FISCAL' ? (docType ?? t.fiscalDocType) : null,
         customerRnc: t.customerRnc,
       );
 
       // Clear current ticket after payment.
-      final cleared = t.copyWith(items: const [], globalDiscount: 0);
+      final cleared = t.copyWith(items: const [], globalDiscountNext: PosDiscount.none);
       _updateTicket(cleared);
 
       state = state.copyWith(loading: false, lastPaidSale: paid);
@@ -333,13 +490,18 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     } catch (e) {
       // Offline-first: queue the checkout and clear the ticket so the user can continue.
       if (OfflineHttpQueue.isNetworkError(e)) {
+        if (t.invoiceType == 'FISCAL') {
+          state = state.copyWith(loading: false, error: null);
+          throw StateError('Para emitir comprobante fiscal (NCF) se requiere internet');
+        }
+
         await _repo.queueOfflineCheckout(
           invoiceType: t.invoiceType,
           customerId: t.customerId,
           customerName: t.customerName,
           customerRnc: t.customerRnc,
           items: t.items,
-          discountTotal: t.globalDiscount,
+          discountTotal: t.totals.globalDiscount,
           paymentMethod: paymentMethod,
           paidAmount: paidAmount,
           receivedAmount: receivedAmount,
@@ -349,7 +511,7 @@ class PosTpvController extends StateNotifier<PosTpvState> {
           note: null,
         );
 
-        final cleared = t.copyWith(items: const [], globalDiscount: 0);
+        final cleared = t.copyWith(items: const [], globalDiscountNext: PosDiscount.none);
         _updateTicket(cleared);
         state = state.copyWith(loading: false, error: null);
         return null;
@@ -365,5 +527,6 @@ class PosTpvController extends StateNotifier<PosTpvState> {
         .map((t) => t.id == next.id ? next : t)
         .toList();
     state = state.copyWith(tickets: tickets);
+    _schedulePersistDraft();
   }
 }

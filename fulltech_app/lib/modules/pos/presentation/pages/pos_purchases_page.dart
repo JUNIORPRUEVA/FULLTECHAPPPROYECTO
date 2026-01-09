@@ -9,6 +9,7 @@ import 'pos_purchase_pdf_preview_page.dart';
 import '../../state/pos_providers.dart';
 import '../widgets/pos_supplier_form_dialog.dart';
 
+// FIX: debe ser ConsumerStatefulWidget para poder usar ConsumerState + ref
 class PosPurchasesPage extends ConsumerStatefulWidget {
   const PosPurchasesPage({super.key});
 
@@ -20,11 +21,6 @@ class _PosPurchasesPageState extends ConsumerState<PosPurchasesPage> {
   final _supplierSearch = TextEditingController();
   Future<List<PosSupplier>>? _suppliersFuture;
   String _supplierQuery = '';
-
-  Future<List<PosPurchaseOrder>> _load() async {
-    final repo = ref.read(posRepositoryProvider);
-    return repo.listPurchases();
-  }
 
   void _toast(String msg) {
     if (!mounted) return;
@@ -58,6 +54,11 @@ class _PosPurchasesPageState extends ConsumerState<PosPurchasesPage> {
     if (created != null && mounted) {
       _refreshSuppliers();
     }
+  }
+
+  Future<List<PosPurchaseOrder>> _load() async {
+    final repo = ref.read(posRepositoryProvider);
+    return repo.listPurchases();
   }
 
   Widget _buildPurchasesList() {
@@ -338,9 +339,8 @@ class _PurchaseDetailDialog extends StatelessWidget {
                         return ListTile(
                           dense: true,
                           title: Text(it.productName),
-                          subtitle: Text(
-                            'Cant: ${it.qty.toStringAsFixed(2)}  Costo: ${money(it.unitCost)}',
-                          ),
+                          // REMOVE "Costo" del detalle
+                          subtitle: Text('Cant: ${it.qty.toStringAsFixed(2)}'),
                           trailing: Text(money(it.lineTotal)),
                         );
                       },
@@ -393,22 +393,111 @@ class _CreatePurchaseDialogState extends ConsumerState<_CreatePurchaseDialog> {
 
   final List<({PosProduct product, double qty, double unitCost})> _items = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadProducts();
+  // NEW: estado fiscal/ITBIS (aquí es donde se usa)
+  bool _isFiscalInvoice = false;
+  bool _includeItbis = true;
+
+  static const List<Map<String, String>> _ncfTypes = [
+    {'code': 'B01', 'label': 'B01 - Crédito Fiscal'},
+    {'code': 'B02', 'label': 'B02 - Consumidor Final'},
+    {'code': 'B14', 'label': 'B14 - Régimen Especial'},
+    {'code': 'B15', 'label': 'B15 - Gubernamental'},
+  ];
+  String _selectedNcfType = 'B02';
+
+  static const double _itbisRate = 0.18;
+  num _itbisIfIncluded(num itbis) => _includeItbis ? itbis : 0;
+
+  Widget _moneyRow(BuildContext context, {required String label, required String value, bool strong = false}) {
+    final t = Theme.of(context).textTheme;
+    final labelStyle = strong ? t.titleMedium?.copyWith(fontWeight: FontWeight.w800) : t.bodyMedium;
+    final valueStyle = strong ? t.titleMedium?.copyWith(fontWeight: FontWeight.w900) : t.bodyMedium;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: labelStyle)),
+          Text(value, style: valueStyle),
+        ],
+      ),
+    );
   }
 
-  @override
-  void dispose() {
-    _supplier.dispose();
-    _search.dispose();
-    super.dispose();
-  }
+  Widget _buildTotalsPanel(BuildContext context, {required num subTotal, required num itbis, required num total}) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Totales', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
 
-  void _toast(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+            _moneyRow(context, label: 'Subtotal', value: money(subTotal)),
+
+            Row(
+              children: [
+                const Expanded(child: Text('ITBIS')),
+                Switch(
+                  value: _includeItbis,
+                  onChanged: (v) => setState(() => _includeItbis = v),
+                ),
+              ],
+            ),
+            _moneyRow(context, label: 'ITBIS', value: money(_itbisIfIncluded(itbis))),
+
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Factura fiscal', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                Switch(
+                  value: _isFiscalInvoice,
+                  onChanged: (v) => setState(() => _isFiscalInvoice = v),
+                ),
+              ],
+            ),
+            if (_isFiscalInvoice) ...[
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedNcfType,
+                decoration: const InputDecoration(
+                  labelText: 'Comprobante fiscal (NCF)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: _ncfTypes
+                    .map((e) => DropdownMenuItem<String>(
+                          value: e['code'],
+                          child: Text(e['label'] ?? e['code'] ?? ''),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedNcfType = v ?? _selectedNcfType),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(.6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _moneyRow(context, label: 'TOTAL', value: money(total), strong: true),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _pickSupplier() async {
@@ -481,8 +570,27 @@ class _CreatePurchaseDialogState extends ConsumerState<_CreatePurchaseDialog> {
 
   bool get _canCreate => _selectedSupplier != null && _items.isNotEmpty && !_creating;
 
+  // FIX: faltaba este método (se usa muchas veces en este State)
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // FIX: liberar controllers del dialog
+  @override
+  void dispose() {
+    _supplier.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // NEW: totales reales (y sin variables fantasma)
+    final num subTotal = _items.fold<num>(0, (sum, it) => sum + (it.qty * it.unitCost));
+    final num itbis = subTotal * _itbisRate;
+    final num total = subTotal + _itbisIfIncluded(itbis);
+
     return AlertDialog(
       title: const Text('Nueva orden de compra'),
       content: SizedBox(
@@ -570,7 +678,8 @@ class _CreatePurchaseDialogState extends ConsumerState<_CreatePurchaseDialog> {
                         return ListTile(
                           dense: true,
                           title: Text(p.nombre),
-                          subtitle: Text('Costo: ${money(p.costPrice)}  Stock: ${p.stockQty.toStringAsFixed(2)}'),
+                          // REMOVE "Costo" del listado (más limpio / más pro)
+                          subtitle: Text('Stock: ${p.stockQty.toStringAsFixed(2)}'),
                           trailing: OutlinedButton(
                             onPressed: () async {
                               if (_mode == _CreateMode.automatic) {
@@ -610,9 +719,8 @@ class _CreatePurchaseDialogState extends ConsumerState<_CreatePurchaseDialog> {
                         return ListTile(
                           dense: true,
                           title: Text(it.product.nombre),
-                          subtitle: Text(
-                            'Cant: ${it.qty.toStringAsFixed(2)}  Costo: ${money(it.unitCost)}  Total: ${money(it.qty * it.unitCost)}',
-                          ),
+                          // REMOVE "Costo" del resumen del ítem
+                          subtitle: Text('Cant: ${it.qty.toStringAsFixed(2)}  Total: ${money(it.qty * it.unitCost)}'),
                           trailing: IconButton(
                             tooltip: 'Quitar',
                             onPressed: () => setState(() => _items.removeAt(i)),
@@ -622,6 +730,11 @@ class _CreatePurchaseDialogState extends ConsumerState<_CreatePurchaseDialog> {
                       },
                     ),
             ),
+
+            const SizedBox(height: 10),
+
+            // REPLACE: panel viejo de Factura fiscal + ITBIS + filas sueltas por panel profesional
+            _buildTotalsPanel(context, subTotal: subTotal, itbis: itbis, total: total),
           ],
         ),
       ),
@@ -631,32 +744,36 @@ class _CreatePurchaseDialogState extends ConsumerState<_CreatePurchaseDialog> {
           onPressed: !_canCreate
               ? null
               : () async {
-            final supplier = _selectedSupplier;
-            if (supplier == null) {
-              _toast('Debes seleccionar o crear el proveedor.');
-              return;
-            }
-            if (_items.isEmpty) {
-              _toast('Agrega al menos un producto.');
-              return;
-            }
+                  final supplier = _selectedSupplier;
+                  if (supplier == null) {
+                    _toast('Debes seleccionar o crear el proveedor.');
+                    return;
+                  }
+                  if (_items.isEmpty) {
+                    _toast('Agrega al menos un producto.');
+                    return;
+                  }
 
-            try {
-              setState(() => _creating = true);
-              final repo = ref.read(posRepositoryProvider);
-              final created = await repo.createPurchase(
-                supplierId: supplier.id,
-                supplierName: supplier.name,
-                items: _items,
-              );
-              if (!context.mounted) return;
-              Navigator.pop(context, created);
-            } catch (e) {
-              _toast('Error creando compra: $e');
-            } finally {
-              if (mounted) setState(() => _creating = false);
-            }
-          },
+                  try {
+                    setState(() => _creating = true);
+                    final repo = ref.read(posRepositoryProvider);
+
+                    final created = await repo.createPurchase(
+                      supplierId: supplier.id,
+                      supplierName: supplier.name,
+                      items: _items,
+                      // Nota: si luego quieres guardar fiscal/NCF/itbis en backend,
+                      // habría que ampliar el método y el modelo.
+                    );
+
+                    if (!context.mounted) return;
+                    Navigator.pop(context, created);
+                  } catch (e) {
+                    _toast('Error creando compra: $e');
+                  } finally {
+                    if (mounted) setState(() => _creating = false);
+                  }
+                },
           child: Text(_creating ? 'Creando...' : 'Crear'),
         ),
       ],

@@ -67,21 +67,38 @@ async function assertCanEditUser(req: Request, targetUserId: string) {
 
 export async function listUsers(req: Request, res: Response) {
   const actor = req.user!;
-  if (!isAdminRole(actor.role)) {
-    throw new ApiError(403, 'Only administrador can list users');
-  }
+  const isAdmin = isAdminRole(actor.role);
 
   const parsed = listUsersQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     throw new ApiError(400, 'Invalid query', parsed.error.flatten());
   }
 
-  const { page, page_size, q, rol, estado } = parsed.data;
+  const { page, page_size, q, rol, roles, estado } = parsed.data as any;
+
+  const requestedRoles: string[] | undefined =
+    Array.isArray(roles) && roles.length > 0 ? roles : rol ? [rol] : undefined;
+
+  if (!isAdmin) {
+    // Non-admin access is only allowed for restricted technician listing.
+    if (!requestedRoles || requestedRoles.length === 0) {
+      throw new ApiError(403, 'Forbidden');
+    }
+
+    const allowed = new Set(['tecnico', 'tecnico_fijo', 'contratista']);
+    for (const r of requestedRoles) {
+      if (!allowed.has(String(r))) {
+        throw new ApiError(403, 'Forbidden');
+      }
+    }
+  }
 
   const where: any = {
     empresa_id: actor.empresaId,
-    ...(rol ? { rol: rol as any } : {}),
-    ...(estado ? { estado } : {}),
+    ...(requestedRoles && requestedRoles.length > 0
+      ? { rol: { in: requestedRoles as any } }
+      : {}),
+    ...(estado ? { estado } : !isAdmin ? { estado: 'activo' } : {}),
     ...(q && q.trim().length > 0
       ? {
           OR: [
@@ -101,19 +118,30 @@ export async function listUsers(req: Request, res: Response) {
       orderBy: [{ updated_at: 'desc' }],
       skip: (page - 1) * page_size,
       take: page_size,
-      select: {
-        id: true,
-        empresa_id: true,
-        nombre_completo: true,
-        email: true,
-        rol: true,
-        posicion: true,
-        telefono: true,
-        estado: true,
-        foto_perfil_url: true,
-        created_at: true,
-        updated_at: true,
-      },
+      select: isAdmin
+        ? {
+            id: true,
+            empresa_id: true,
+            nombre_completo: true,
+            email: true,
+            rol: true,
+            posicion: true,
+            telefono: true,
+            estado: true,
+            foto_perfil_url: true,
+            created_at: true,
+            updated_at: true,
+          }
+        : {
+            id: true,
+            empresa_id: true,
+            nombre_completo: true,
+            rol: true,
+            posicion: true,
+            telefono: true,
+            estado: true,
+            foto_perfil_url: true,
+          },
     }),
   ]);
 

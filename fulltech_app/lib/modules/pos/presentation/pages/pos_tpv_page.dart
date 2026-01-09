@@ -12,6 +12,7 @@ import '../../../../features/auth/state/auth_state.dart';
 import '../../../../features/catalogo/models/producto.dart';
 import '../../../../features/presupuesto/state/presupuesto_catalog_controller.dart';
 import '../../../../features/presupuesto/state/presupuesto_catalog_state.dart';
+import '../../domain/pos_pricing.dart';
 import '../../models/pos_models.dart';
 import '../../state/pos_providers.dart';
 import '../../state/pos_tpv_controller.dart';
@@ -327,7 +328,11 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
 
     double clamp0(double v) => v < 0 ? 0 : v;
     final grossSubtotal = ticket.subtotal;
-    final discountTotal = ticket.lineDiscounts + ticket.globalDiscount;
+    final globalDiscountAmount = PosPricing.computeGlobalDiscountAmount(
+      discount: ticket.globalDiscount,
+      baseAfterLineDiscounts: ticket.baseAfterLineDiscounts,
+    );
+    final discountTotal = ticket.lineDiscounts + globalDiscountAmount;
     final base = clamp0(grossSubtotal - discountTotal);
     final itbis = base * 0.18;
     final total = base + itbis;
@@ -946,7 +951,11 @@ class _PosSalePane extends ConsumerWidget {
 
     double clamp0(double v) => v < 0 ? 0 : v;
     final grossSubtotal = ticket.subtotal;
-    final discountTotal = ticket.lineDiscounts + ticket.globalDiscount;
+    final globalDiscountAmount = PosPricing.computeGlobalDiscountAmount(
+      discount: ticket.globalDiscount,
+      baseAfterLineDiscounts: ticket.baseAfterLineDiscounts,
+    );
+    final discountTotal = ticket.lineDiscounts + globalDiscountAmount;
     final base = clamp0(grossSubtotal - discountTotal);
     final itbis = base * 0.18;
     final total = base + itbis;

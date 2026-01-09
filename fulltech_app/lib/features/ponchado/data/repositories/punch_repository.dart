@@ -13,8 +13,35 @@ class PunchRepository {
   static const String _store = 'attendance_records';
   static const String _syncModule = 'attendance';
 
+  static const int _maxSyncAttempts = 3;
+  static const Duration _minRetryDelay = Duration(seconds: 30);
+
   PunchRepository(this.remoteDataSource, this.db) {
     _cancelToken = CancelToken();
+  }
+
+  bool _isOffline(DioException e) {
+    return e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout;
+  }
+
+  bool _isNonRetryableClientError(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == null) return false;
+    if (status == 429) return false; // server-driven backoff; treat separately
+    return status >= 400 && status < 500;
+  }
+
+  String _extractServerErrorMessage(DioException e) {
+    final data = e.response?.data;
+    if (data is Map) {
+      final err = data['error'];
+      if (err is String && err.trim().isNotEmpty) return err;
+      final message = data['message'];
+      if (message is String && message.trim().isNotEmpty) return message;
+    }
+    return e.message ?? 'Solicitud inválida';
   }
 
   void cancelRequests() {
@@ -81,6 +108,44 @@ class PunchRepository {
     final session = await db.readSession();
     if (session == null) {
       throw StateError('No session');
+    }
+
+    // Prefer remote-first when possible so business-rule 4xx errors
+    // surface to the user instead of being enqueued and retried forever.
+    try {
+      final created = await remoteDataSource.createPunch(
+        dto,
+        cancelToken: _cancelToken,
+      );
+
+      await _upsertLocalPunch(
+        created,
+        extra: {
+          '_localOnly': false,
+          '_syncAttempts': 0,
+          '_lastSyncAttemptMs': DateTime.now().millisecondsSinceEpoch,
+        },
+      );
+
+      return created;
+    } on DioException catch (e) {
+      // Hard stop: do not queue and retry 4xx (validation/business rules).
+      if (_isNonRetryableClientError(e)) {
+        assert(() {
+          final status = e.response?.statusCode;
+          final msg = _extractServerErrorMessage(e);
+          // ignore: avoid_print
+          print('[PunchRepository] createPunch rejected ($status): $msg');
+          return true;
+        }());
+        throw Exception(_extractServerErrorMessage(e));
+      }
+
+      // If offline (or any other transient issue), fall back to queue.
+      // Offline-first behavior remains for connectivity issues.
+      if (!_isOffline(e) && (e.response?.statusCode ?? 0) < 500) {
+        // Unknown non-offline error but not a clear 4xx; still allow fallback.
+      }
     }
 
     final now = DateTime.now().toUtc();
@@ -212,6 +277,45 @@ class PunchRepository {
           return;
         }
 
+        // CRITICAL: Do not retry 4xx (validation/business rules). Remove from
+        // sync queue permanently and mark local record as permanently FAILED.
+        if (e is DioException && _isNonRetryableClientError(e)) {
+          assert(() {
+            final status = e.response?.statusCode;
+            final msg = _extractServerErrorMessage(e);
+            // ignore: avoid_print
+            print(
+              '[PunchRepository] Permanent sync failure ($status) for ${item.entityId}: $msg',
+            );
+            return true;
+          }());
+
+          await db.markSyncItemSent(item.id);
+
+          try {
+            final localRaw = await db.getEntityJson(
+              store: _store,
+              id: item.entityId,
+            );
+            if (localRaw != null) {
+              final local = jsonDecode(localRaw) as Map<String, dynamic>;
+              local['syncStatus'] = 'FAILED';
+              local['_syncFailurePermanent'] = true;
+              local['_syncFailureStatusCode'] = e.response?.statusCode;
+              local['_failureReason'] = _extractServerErrorMessage(e);
+              local['_lastSyncAttemptMs'] =
+                  DateTime.now().millisecondsSinceEpoch;
+              await db.upsertEntity(
+                store: _store,
+                id: item.entityId,
+                json: jsonEncode(local),
+              );
+            }
+          } catch (_) {}
+
+          continue;
+        }
+
         await db.markSyncItemError(item.id);
 
         // Mark local record as FAILED (best-effort)
@@ -224,6 +328,10 @@ class PunchRepository {
             final local = jsonDecode(localRaw) as Map<String, dynamic>;
             local['syncStatus'] = 'FAILED';
             local['_lastSyncAttemptMs'] = DateTime.now().millisecondsSinceEpoch;
+            if (e is DioException) {
+              local['_syncFailureStatusCode'] = e.response?.statusCode;
+              local['_failureReason'] = _extractServerErrorMessage(e);
+            }
             await db.upsertEntity(
               store: _store,
               id: item.entityId,
@@ -237,11 +345,33 @@ class PunchRepository {
 
   /// Re-enqueue FAILED local attendance records so they can be retried.
   Future<void> retryFailed() async {
+    final pendingItems = await db.getPendingSyncItems();
+    final pendingIds = pendingItems
+        .where((i) => i.module == _syncModule && i.op == 'create')
+        .map((i) => i.entityId)
+        .toSet();
+
     final rows = await db.listEntitiesJson(store: _store);
     for (final raw in rows) {
       try {
         final map = jsonDecode(raw) as Map<String, dynamic>;
         if (map['syncStatus'] != 'FAILED') continue;
+
+        // Permanent failures (4xx / business rules) must not auto-retry.
+        if (map['_syncFailurePermanent'] == true) continue;
+
+        // Avoid duplicate queue items for the same local record.
+        final id = map['id']?.toString();
+        if (id != null && pendingIds.contains(id)) continue;
+
+        // Bounded retries with backoff.
+        final attempts = (map['_syncAttempts'] as int? ?? 0);
+        if (attempts >= _maxSyncAttempts) continue;
+
+        final lastMs = (map['_lastSyncAttemptMs'] as int? ?? 0);
+        final lastAttempt = DateTime.fromMillisecondsSinceEpoch(lastMs);
+        if (DateTime.now().difference(lastAttempt) < _minRetryDelay) continue;
+
         final record = PunchRecord.fromJson(map);
 
         final dto = CreatePunchDto(

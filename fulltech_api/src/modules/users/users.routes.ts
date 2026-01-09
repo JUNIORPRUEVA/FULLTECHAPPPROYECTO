@@ -31,7 +31,7 @@ const uploadCedulaForIa = multer({
   },
 });
 
-usersRouter.get('/', requireRole(['admin', 'administrador']), expressAsyncHandler(listUsers));
+usersRouter.get('/', expressAsyncHandler(listUsers));
 usersRouter.post('/', requireRole(['admin', 'administrador']), expressAsyncHandler(createUser));
 
 usersRouter.get('/:id', expressAsyncHandler(getUser));

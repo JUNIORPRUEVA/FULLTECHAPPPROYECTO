@@ -26,9 +26,7 @@ class ApiClient {
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 40),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
       ),
     );
 
@@ -73,7 +71,11 @@ class ApiClient {
         },
         onResponse: (response, handler) async {
           try {
-            await HttpOfflineCache.put(db, response.requestOptions, response.data);
+            await HttpOfflineCache.put(
+              db,
+              response.requestOptions,
+              response.data,
+            );
           } catch (_) {
             // Best-effort only.
           }
@@ -83,13 +85,18 @@ class ApiClient {
           // Offline-first GET fallback: serve cached snapshot when offline.
           try {
             final method = error.requestOptions.method.toUpperCase();
-            final offlineCache = error.requestOptions.extra['offlineCache'] == true;
-            final isOffline = error.type == DioExceptionType.connectionError ||
+            final offlineCache =
+                error.requestOptions.extra['offlineCache'] == true;
+            final isOffline =
+                error.type == DioExceptionType.connectionError ||
                 error.type == DioExceptionType.connectionTimeout ||
                 error.type == DioExceptionType.receiveTimeout;
 
             if (method == 'GET' && offlineCache && isOffline) {
-              final cached = await HttpOfflineCache.get(db, error.requestOptions);
+              final cached = await HttpOfflineCache.get(
+                db,
+                error.requestOptions,
+              );
               if (cached != null) {
                 handler.resolve(
                   Response(
@@ -107,12 +114,18 @@ class ApiClient {
 
           // If offline and this is a write request, enqueue it for later.
           // This is best-effort: skips multipart/FormData payloads.
-          final offlineQueue = error.requestOptions.extra['offlineQueue'] == true;
+          final offlineQueue =
+              error.requestOptions.extra['offlineQueue'] == true;
           final method = error.requestOptions.method.toUpperCase();
-          final isWrite = method == 'POST' || method == 'PUT' || method == 'PATCH' || method == 'DELETE';
+          final isWrite =
+              method == 'POST' ||
+              method == 'PUT' ||
+              method == 'PATCH' ||
+              method == 'DELETE';
 
           if (offlineQueue && isWrite) {
-            final isOffline = error.type == DioExceptionType.connectionError ||
+            final isOffline =
+                error.type == DioExceptionType.connectionError ||
                 error.type == DioExceptionType.connectionTimeout ||
                 error.type == DioExceptionType.receiveTimeout;
 
@@ -139,47 +152,66 @@ class ApiClient {
           // Some endpoints may respond 401 for anonymous requests; we should not
           // wipe the session in that case (it causes an immediate "bounce back" after login).
           final status = error.response?.statusCode;
-          if (status == 401) {
-            final suppress = error.requestOptions.extra['suppressUnauthorizedEvent'] == true;
+          if (status == 401 || status == 403) {
+            final suppress =
+                error.requestOptions.extra['suppressUnauthorizedEvent'] == true;
             final authHeader = error.requestOptions.headers['Authorization'];
-            final hadAuthHeader = authHeader != null && authHeader.toString().trim().isNotEmpty;
+            final hadAuthHeader =
+                authHeader != null && authHeader.toString().trim().isNotEmpty;
+
+            String tokenSuffix = '';
+            if (authHeader != null) {
+              final s = authHeader.toString();
+              final idx = s.lastIndexOf(' ');
+              final token = (idx >= 0) ? s.substring(idx + 1).trim() : s.trim();
+              if (token.isNotEmpty) {
+                tokenSuffix = token.length <= 6
+                    ? token
+                    : token.substring(token.length - 6);
+              }
+            }
 
             final path = error.requestOptions.path;
             final detail =
-              '$status ${error.requestOptions.method} $path hadAuthHeader=$hadAuthHeader';
+                '$status ${error.requestOptions.method} $path hadAuthHeader=$hadAuthHeader token=…$tokenSuffix';
 
             // CRITICAL: Only log ONCE per path to prevent spam
             // Track last 401 path+time to avoid repeated logs
             final now = DateTime.now();
-            final recent = _lastUnauthorizedAt != null &&
-                now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 5);
-            
+            final recent =
+                _lastUnauthorizedAt != null &&
+                now.difference(_lastUnauthorizedAt!) <
+                    const Duration(seconds: 5);
+
             if (kDebugMode && !recent) {
               debugPrint('[AUTH][HTTP] $detail baseUrl=${dio.options.baseUrl}');
+              final data = error.response?.data;
+              if (data != null) {
+                debugPrint('[AUTH][HTTP] response=$data');
+              }
             }
 
-            if (hadAuthHeader && !suppress) {
-              // Debounce/lock: avoid clearing session + emitting unauthorized repeatedly.
+            if (status == 401 && hadAuthHeader && !suppress) {
+              // Debounce/lock: avoid emitting unauthorized repeatedly.
               if (!_handlingUnauthorized && !recent) {
                 _handlingUnauthorized = true;
                 _lastUnauthorizedAt = now;
                 try {
-                  if (kDebugMode) {
-                    debugPrint('[AUTH] clearing local session due to $detail');
-                  }
-                  await db.clearSession();
                   AuthEvents.unauthorized(status, detail);
                 } finally {
-                  // Release lock shortly after to allow future real logouts.
                   _handlingUnauthorized = false;
                 }
               }
-            } else if (!hadAuthHeader && !recent) {
+            } else if (status == 401 && !hadAuthHeader && !recent) {
               // WARNING: Request sent without auth header
               // This indicates a bug - authenticated endpoints should always have the header
               if (kDebugMode) {
-                debugPrint('[AUTH][BUG] Request to $path sent without Authorization header!');
-                debugPrint('[AUTH][BUG] This should not happen for protected endpoints.');
+                debugPrint(
+                  '[AUTH][BUG] Request to $path sent without Authorization header!',
+                );
+                debugPrint(
+                  '[AUTH][BUG] This should not happen for protected endpoints.',
+                );
               }
             }
           }
@@ -192,5 +224,3 @@ class ApiClient {
     return client;
   }
 }
-
-

@@ -5,18 +5,28 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'auth_session.dart';
 import 'local_db_interface.dart';
 import 'sync_queue_item.dart';
 import 'db_write_queue.dart';
 import '../../offline/local_db/migrations/offline_schema_migrator.dart';
+import '../services/app_config.dart';
 import '../services/sync_signals.dart';
 
 class LocalDbIo implements LocalDb {
   sqflite.Database? _db;
 
-  static const _schemaVersion = 11;
+  static const _schemaVersion = 12;
+
+  static const FlutterSecureStorage _secure = FlutterSecureStorage();
+
+  String _serverKey() => AppConfig.apiBaseUrl;
+
+  String _tokenKeyForServer(String serverKey) {
+    return 'auth.token.${Uri.encodeComponent(serverKey)}';
+  }
 
   @override
   Future<void> init() async {
@@ -40,7 +50,7 @@ class LocalDbIo implements LocalDb {
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE auth_session(
-            id INTEGER PRIMARY KEY CHECK (id = 1),
+            server_key TEXT PRIMARY KEY,
             token TEXT NOT NULL,
             user_json TEXT NOT NULL
           );
@@ -374,7 +384,7 @@ class LocalDbIo implements LocalDb {
         );
 
         // === CRM Status-Related Tables ===
-        
+
         // CRM Reservations (status: reserva)
         await db.execute('''
           CREATE TABLE crm_reservations(
@@ -544,6 +554,66 @@ class LocalDbIo implements LocalDb {
         await OfflineSchemaMigrator.migrateToLatest(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        // === Auth session migration (single session -> per-server sessions) ===
+        if (oldVersion < 12) {
+          try {
+            await db.execute(
+              'ALTER TABLE auth_session RENAME TO auth_session_old;',
+            );
+          } catch (_) {
+            // If it doesn't exist, continue.
+          }
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS auth_session(
+              server_key TEXT PRIMARY KEY,
+              token TEXT NOT NULL,
+              user_json TEXT NOT NULL
+            );
+          ''');
+
+          try {
+            final rows = await db.query('auth_session_old', where: 'id = 1');
+            if (rows.isNotEmpty) {
+              final row = rows.first;
+              final token = (row['token'] as String?) ?? '';
+              final userJson = (row['user_json'] as String?) ?? '{}';
+              final serverKey = _serverKey();
+
+              var tokenForDb = '';
+              if (token.isNotEmpty) {
+                try {
+                  await _secure.write(
+                    key: _tokenKeyForServer(serverKey),
+                    value: token,
+                  );
+                } catch (_) {
+                  // Fallback: keep token in DB if secure storage fails.
+                  tokenForDb = token;
+                }
+              }
+
+              await db.insert(
+                'auth_session',
+                {
+                  'server_key': serverKey,
+                  'token': tokenForDb,
+                  'user_json': userJson,
+                },
+                conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
+              );
+            }
+          } catch (_) {
+            // Best-effort migration.
+          }
+
+          try {
+            await db.execute('DROP TABLE IF EXISTS auth_session_old;');
+          } catch (_) {
+            // ignore
+          }
+        }
+
         if (oldVersion < 2) {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS store_entities(
@@ -880,7 +950,7 @@ class LocalDbIo implements LocalDb {
 
         if (oldVersion < 10) {
           // CRM Status-Related Tables
-          
+
           await db.execute('''
             CREATE TABLE IF NOT EXISTS crm_reservations(
               id TEXT PRIMARY KEY,
@@ -1066,27 +1136,85 @@ class LocalDbIo implements LocalDb {
 
   @override
   Future<void> saveSession(AuthSession session) async {
+    final serverKey = _serverKey();
+
+    var tokenForDb = '';
+    try {
+      await _secure.write(
+        key: _tokenKeyForServer(serverKey),
+        value: session.token,
+      );
+    } catch (_) {
+      // Fallback: if secure storage isn't available, store token in DB.
+      tokenForDb = session.token;
+    }
+
     await _database.insert('auth_session', {
-      'id': 1,
-      'token': session.token,
+      'server_key': serverKey,
+      'token': tokenForDb,
       'user_json': jsonEncode(session.user.toJson()),
     }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
   }
 
   @override
   Future<AuthSession?> readSession() async {
-    final rows = await _database.query('auth_session', where: 'id = 1');
+    final serverKey = _serverKey();
+    final rows = await _database.query(
+      'auth_session',
+      where: 'server_key = ?',
+      whereArgs: [serverKey],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     final row = rows.first;
+
+    // Prefer secure storage token, with DB fallback.
+    String token = '';
+    try {
+      token = (await _secure.read(key: _tokenKeyForServer(serverKey))) ?? '';
+    } catch (_) {
+      token = '';
+    }
+
+    if (token.isEmpty) {
+      token = (row['token'] as String?) ?? '';
+      if (token.isNotEmpty) {
+        // Try migrating into secure storage.
+        try {
+          await _secure.write(key: _tokenKeyForServer(serverKey), value: token);
+          await _database.update(
+            'auth_session',
+            {'token': ''},
+            where: 'server_key = ?',
+            whereArgs: [serverKey],
+          );
+        } catch (_) {
+          // Keep token in DB.
+        }
+      }
+    }
+
+    if (token.isEmpty) return null;
+
     return AuthSession.fromJson({
-      'token': row['token'] as String,
+      'token': token,
       'user': jsonDecode(row['user_json'] as String) as Map<String, dynamic>,
     });
   }
 
   @override
   Future<void> clearSession() async {
-    await _database.delete('auth_session');
+    final serverKey = _serverKey();
+    await _database.delete(
+      'auth_session',
+      where: 'server_key = ?',
+      whereArgs: [serverKey],
+    );
+    try {
+      await _secure.delete(key: _tokenKeyForServer(serverKey));
+    } catch (_) {
+      // Best-effort.
+    }
   }
 
   @override

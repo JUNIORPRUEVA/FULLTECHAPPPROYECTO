@@ -169,7 +169,7 @@ model Empresa {
   payroll_movements PayrollMovement[]
   statutory_configs StatutoryConfig[]
   audit_logs        AuditLog[]
-  
+
   // Services and Agenda
   services     Service[]
   agenda_items AgendaItem[]
@@ -260,38 +260,40 @@ model Usuario {
   rules_contents_created RulesContent[] @relation("RulesContentCreator")
 
   // Operations (work orders)
-  operations_jobs_created OperationsJob[] @relation("OperationsJobCreator")
-  operations_jobs_assigned OperationsJob[] @relation("OperationsJobAssignedTech")
-  operations_surveys_created OperationsSurvey[] @relation("OperationsSurveyCreator")
-  operations_schedules_assigned OperationsSchedule[] @relation("OperationsScheduleAssignedTech")
+  operations_jobs_created                 OperationsJob[]                @relation("OperationsJobCreator")
+  operations_jobs_assigned                OperationsJob[]                @relation("OperationsJobAssignedTech")
+  operations_jobs_as_vendedor             OperationsJob[]                @relation("OperationsJobVendedor")
+  operations_jobs_as_technician           OperationsJob[]                @relation("OperationsJobTechnician")
+  operations_surveys_created              OperationsSurvey[]             @relation("OperationsSurveyCreator")
+  operations_schedules_assigned           OperationsSchedule[]           @relation("OperationsScheduleAssignedTech")
   operations_installation_reports_created OperationsInstallationReport[] @relation("OperationsInstallationReportCreator")
-  operations_warranty_tickets_assigned OperationsWarrantyTicket[] @relation("OperationsWarrantyAssignedTech")
+  operations_warranty_tickets_assigned    OperationsWarrantyTicket[]     @relation("OperationsWarrantyAssignedTech")
 
   sales_records_created SalesRecord[] @relation("SalesRecordCreator")
-  
+
   // Agenda items assigned to this technician
   agenda_items_assigned AgendaItem[]
 }
 
 model RulesContent {
-  id                 String        @id @default(uuid()) @db.Uuid
-  empresa_id         String        @db.Uuid
-  title              String        @db.VarChar(200)
-  category           RulesCategory
-  content            String
+  id         String        @id @default(uuid()) @db.Uuid
+  empresa_id String        @db.Uuid
+  title      String        @db.VarChar(200)
+  category   RulesCategory
+  content    String
 
-  visible_to_all     Boolean       @default(true)
-  role_visibility    UserRole[]    @default([])
+  visible_to_all  Boolean    @default(true)
+  role_visibility UserRole[] @default([])
 
-  is_active          Boolean       @default(true)
-  order_index        Int           @default(0)
+  is_active   Boolean @default(true)
+  order_index Int     @default(0)
 
-  created_by_user_id String        @db.Uuid
-  created_at         DateTime      @default(now())
-  updated_at         DateTime      @updatedAt
+  created_by_user_id String   @db.Uuid
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
-  empresa            Empresa       @relation("RulesContentEmpresa", fields: [empresa_id], references: [id])
-  created_by         Usuario       @relation("RulesContentCreator", fields: [created_by_user_id], references: [id])
+  empresa    Empresa @relation("RulesContentEmpresa", fields: [empresa_id], references: [id])
+  created_by Usuario @relation("RulesContentCreator", fields: [created_by_user_id], references: [id])
 
   @@index([empresa_id, category])
   @@index([empresa_id, is_active])
@@ -557,28 +559,30 @@ model CategoriaProducto {
 }
 
 model Producto {
-  id            String   @id @default(uuid()) @db.Uuid
-  empresa_id    String   @db.Uuid
-  nombre        String
-  precio_compra Decimal  @db.Decimal(12, 2)
-  precio_venta  Decimal  @db.Decimal(12, 2)
+  id                   String   @id @default(uuid()) @db.Uuid
+  empresa_id           String   @db.Uuid
+  nombre               String
+  precio_compra        Decimal  @db.Decimal(12, 2)
+  precio_venta         Decimal  @db.Decimal(12, 2)
   // POS/TPV stock control (single-store)
-  stock_qty            Decimal @default(0) @db.Decimal(14, 2)
-  min_stock            Decimal @default(0) @db.Decimal(14, 2)
-  max_stock            Decimal @default(0) @db.Decimal(14, 2)
-  allow_negative_stock Boolean @default(false)
+  stock_qty            Decimal  @default(0) @db.Decimal(14, 2)
+  min_stock            Decimal  @default(0) @db.Decimal(14, 2)
+  max_stock            Decimal  @default(0) @db.Decimal(14, 2)
+  // Minimum quantity allowed per sale line (integer semantics)
+  min_purchase_qty     Int      @default(1)
+  allow_negative_stock Boolean  @default(false)
   // Inventory metadata
-  brand               String?
-  supplier_id         String?  @db.Uuid
-  product_type  String   @default("simple")
-  total_cost    Decimal  @default(0) @db.Decimal(12, 2)
-  total_price   Decimal  @default(0) @db.Decimal(12, 2)
-  imagen_url    String
-  categoria_id  String   @db.Uuid
-  search_count  Int      @default(0)
-  is_active     Boolean  @default(true)
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  brand                String?
+  supplier_id          String?  @db.Uuid
+  product_type         String   @default("simple")
+  total_cost           Decimal  @default(0) @db.Decimal(12, 2)
+  total_price          Decimal  @default(0) @db.Decimal(12, 2)
+  imagen_url           String
+  categoria_id         String   @db.Uuid
+  search_count         Int      @default(0)
+  is_active            Boolean  @default(true)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
 
   empresa   Empresa           @relation(fields: [empresa_id], references: [id])
   categoria CategoriaProducto @relation(fields: [categoria_id], references: [id])
@@ -593,6 +597,8 @@ model Producto {
   inventory_audit_items InventoryAuditItem[]
 
   quotation_items QuotationItem[]
+
+  operations_jobs OperationsJob[]
 
   @@index([empresa_id])
   @@index([categoria_id])
@@ -665,6 +671,11 @@ model PosStockMovement {
   ref_type           String
   ref_id             String?  @db.Uuid
   qty_change         Decimal  @db.Decimal(14, 2)
+  // New audit fields (filled for new movements)
+  movement_type      String?
+  qty                Int?
+  before_stock       Int?
+  after_stock        Int?
   unit_cost          Decimal  @default(0) @db.Decimal(14, 2)
   note               String?
   created_by_user_id String?  @db.Uuid
@@ -678,14 +689,14 @@ model PosStockMovement {
 
 model PosFiscalSequence {
   id             String   @id @default(uuid()) @db.Uuid
-  empresa_id      String   @db.Uuid
-  doc_type        String
-  series          String?
-  prefix          String?
-  current_number  BigInt   @default(0)
-  max_number      BigInt?
-  active          Boolean  @default(true)
-  updated_at      DateTime @default(now())
+  empresa_id     String   @db.Uuid
+  doc_type       String
+  series         String?
+  prefix         String?
+  current_number BigInt   @default(0)
+  max_number     BigInt?
+  active         Boolean  @default(true)
+  updated_at     DateTime @default(now())
 
   @@unique([empresa_id, doc_type])
   @@map("pos_fiscal_sequences")
@@ -693,7 +704,7 @@ model PosFiscalSequence {
 
 model PosSupplier {
   id         String   @id @default(uuid()) @db.Uuid
-  empresa_id  String   @db.Uuid
+  empresa_id String   @db.Uuid
   name       String
   phone      String?
   rnc        String?
@@ -701,26 +712,26 @@ model PosSupplier {
   address    String?
   created_at DateTime @default(now())
 
-  productos  Producto[]
+  productos Producto[]
 
   @@index([empresa_id])
   @@map("pos_suppliers")
 }
 
 model PosPurchaseOrder {
-  id                 String   @id @default(uuid()) @db.Uuid
-  empresa_id          String   @db.Uuid
-  supplier_id         String?  @db.Uuid
-  supplier_name       String
-  status              String
-  expected_date       DateTime? @db.Date
-  subtotal            Decimal  @db.Decimal(14, 2)
-  itbis_total         Decimal  @default(0) @db.Decimal(14, 2)
-  total               Decimal  @db.Decimal(14, 2)
-  note                String?
-  created_by_user_id  String?  @db.Uuid
-  created_at          DateTime @default(now())
-  updated_at          DateTime @default(now())
+  id                 String    @id @default(uuid()) @db.Uuid
+  empresa_id         String    @db.Uuid
+  supplier_id        String?   @db.Uuid
+  supplier_name      String
+  status             String
+  expected_date      DateTime? @db.Date
+  subtotal           Decimal   @db.Decimal(14, 2)
+  itbis_total        Decimal   @default(0) @db.Decimal(14, 2)
+  total              Decimal   @db.Decimal(14, 2)
+  note               String?
+  created_by_user_id String?   @db.Uuid
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @default(now())
 
   items PosPurchaseOrderItem[]
 
@@ -731,10 +742,10 @@ model PosPurchaseOrder {
 
 model PosPurchaseOrderItem {
   id                String  @id @default(uuid()) @db.Uuid
-  empresa_id         String  @db.Uuid
-  purchase_order_id  String  @db.Uuid
-  product_id         String  @db.Uuid
-  product_name       String
+  empresa_id        String  @db.Uuid
+  purchase_order_id String  @db.Uuid
+  product_id        String  @db.Uuid
+  product_name      String
   qty               Decimal @db.Decimal(14, 2)
   unit_cost         Decimal @db.Decimal(14, 2)
   line_total        Decimal @db.Decimal(14, 2)
@@ -746,17 +757,17 @@ model PosPurchaseOrderItem {
 }
 
 model PosCreditAccount {
-  id            String   @id @default(uuid()) @db.Uuid
-  empresa_id     String   @db.Uuid
-  sale_id        String   @unique @db.Uuid
-  customer_id    String?  @db.Uuid
-  customer_name  String
-  total          Decimal  @db.Decimal(14, 2)
-  paid           Decimal  @default(0) @db.Decimal(14, 2)
-  balance        Decimal  @db.Decimal(14, 2)
-  due_date       DateTime? @db.Date
-  status         String
-  created_at     DateTime @default(now())
+  id            String    @id @default(uuid()) @db.Uuid
+  empresa_id    String    @db.Uuid
+  sale_id       String    @unique @db.Uuid
+  customer_id   String?   @db.Uuid
+  customer_name String
+  total         Decimal   @db.Decimal(14, 2)
+  paid          Decimal   @default(0) @db.Decimal(14, 2)
+  balance       Decimal   @db.Decimal(14, 2)
+  due_date      DateTime? @db.Date
+  status        String
+  created_at    DateTime  @default(now())
 
   @@index([empresa_id])
   @@index([status])
@@ -801,10 +812,10 @@ model Customer {
   created_at   DateTime  @default(now())
   updated_at   DateTime  @updatedAt
 
-  empresa    Empresa     @relation(fields: [empresa_id], references: [id])
-  threads    CrmThread[]
-  sales      Sale[]
-  quotations Quotation[]
+  empresa         Empresa         @relation(fields: [empresa_id], references: [id])
+  threads         CrmThread[]
+  sales           Sale[]
+  quotations      Quotation[]
   operations_jobs OperationsJob[]
 
   @@unique([empresa_id, telefono])
@@ -827,8 +838,9 @@ model Service {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  empresa       Empresa       @relation(fields: [empresa_id], references: [id])
-  agenda_items  AgendaItem[]
+  empresa         Empresa         @relation(fields: [empresa_id], references: [id])
+  agenda_items    AgendaItem[]
+  operations_jobs OperationsJob[]
 
   @@index([empresa_id])
   @@index([empresa_id, is_active])
@@ -895,6 +907,16 @@ enum OperationsJobPriority {
 }
 
 enum OperationsJobStatus {
+  // Canonical CRM-driven operation statuses (required)
+  POR_LEVANTAMIENTO
+  SERVICIO_RESERVADO
+  SOLUCION_GARANTIA
+  INSTALACION_PENDIENTE
+  INSTALACION_FINALIZADA
+  RESERVA
+  EN_GARANTIA
+
+  // Legacy operations statuses (kept for backward compatibility)
   pending_survey
   survey_in_progress
   survey_completed
@@ -926,38 +948,78 @@ enum OperationsWarrantyStatus {
 }
 
 model OperationsJob {
-  id                  String @id @default(uuid()) @db.Uuid
-  empresa_id          String @db.Uuid
-  created_by_user_id  String @db.Uuid
-  assigned_tech_id    String? @db.Uuid
-  assigned_team_ids   String[] @default([])
+  id                 String   @id @default(uuid()) @db.Uuid
+  empresa_id         String   @db.Uuid
+  created_by_user_id String   @db.Uuid
+  assigned_tech_id   String?  @db.Uuid
+  assigned_team_ids  String[] @default([])
 
-  crm_customer_id     String @db.Uuid
-  customer_name       String
-  customer_phone      String
-  customer_address    String?
+  // CRM link (single source of truth per chat)
+  chat_id String? @unique @db.Uuid
 
-  service_type        String
-  priority            OperationsJobPriority @default(normal)
-  status              OperationsJobStatus @default(pending_survey)
-  notes               String? @db.Text
+  // CRM/customer snapshot fields
+  customer_name    String
+  customer_phone   String
+  customer_address String?
+  address_text     String? @db.Text
+  gps_lat          Float?
+  gps_lng          Float?
 
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  // Legacy: customer link + service_type (kept for compatibility)
+  crm_customer_id String @db.Uuid
+  service_type    String
+
+  // Product/service + assignment
+  product_id         String? @db.Uuid
+  service_id         String? @db.Uuid
+  vendedor_user_id   String? @db.Uuid
+  technician_user_id String? @db.Uuid
+
+  // Scheduling
+  scheduled_at   DateTime?
+  reservation_at DateTime?
+
+  // Warranty
+  warranty_start_date DateTime? @db.Date
+  warranty_end_date   DateTime? @db.Date
+  warranty_months     Int?
+  product_serial      String?   @db.Text
+  issue_details       String?   @db.Text
+
+  // Completion / SLA
+  resolution_due_at DateTime?
+  completed_at      DateTime?
+  priority          OperationsJobPriority @default(normal)
+  status            OperationsJobStatus   @default(pending_survey)
+  notes             String?               @db.Text
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
   deleted_at DateTime?
 
-  empresa Empresa @relation(fields: [empresa_id], references: [id])
-  created_by Usuario @relation("OperationsJobCreator", fields: [created_by_user_id], references: [id])
+  empresa       Empresa  @relation(fields: [empresa_id], references: [id])
+  created_by    Usuario  @relation("OperationsJobCreator", fields: [created_by_user_id], references: [id])
   assigned_tech Usuario? @relation("OperationsJobAssignedTech", fields: [assigned_tech_id], references: [id])
-  crm_customer Customer @relation(fields: [crm_customer_id], references: [id])
+  crm_customer  Customer @relation(fields: [crm_customer_id], references: [id])
 
-  survey OperationsSurvey?
-  schedule OperationsSchedule?
+  chat       CrmChat?  @relation(fields: [chat_id], references: [id])
+  service    Service?  @relation(fields: [service_id], references: [id])
+  product    Producto? @relation(fields: [product_id], references: [id])
+  vendedor   Usuario?  @relation("OperationsJobVendedor", fields: [vendedor_user_id], references: [id])
+  technician Usuario?  @relation("OperationsJobTechnician", fields: [technician_user_id], references: [id])
+
+  survey               OperationsSurvey?
+  schedule             OperationsSchedule?
   installation_reports OperationsInstallationReport[]
-  warranty_tickets OperationsWarrantyTicket[]
+  warranty_tickets     OperationsWarrantyTicket[]
 
   @@index([empresa_id])
+  @@index([empresa_id, status])
   @@index([crm_customer_id])
+  @@index([chat_id])
+  @@index([scheduled_at])
+  @@index([reservation_at])
+  @@index([resolution_due_at])
   @@index([status])
   @@index([priority])
   @@index([assigned_tech_id])
@@ -967,24 +1029,24 @@ model OperationsJob {
 }
 
 model OperationsSurvey {
-  id               String @id @default(uuid()) @db.Uuid
-  job_id           String @unique @db.Uuid
-  mode             OperationsSurveyMode
-  gps_lat          Float?
-  gps_lng          Float?
-  address_confirmed String? @db.Text
-  complexity       OperationsSurveyComplexity @default(basic)
-  site_notes       String? @db.Text
-  tools_needed     Json?
-  materials_needed Json?
-  products_to_use  Json?
-  future_opportunities String? @db.Text
-  created_by_tech_id String @db.Uuid
-  created_at DateTime @default(now())
+  id                   String                     @id @default(uuid()) @db.Uuid
+  job_id               String                     @unique @db.Uuid
+  mode                 OperationsSurveyMode
+  gps_lat              Float?
+  gps_lng              Float?
+  address_confirmed    String?                    @db.Text
+  complexity           OperationsSurveyComplexity @default(basic)
+  site_notes           String?                    @db.Text
+  tools_needed         Json?
+  materials_needed     Json?
+  products_to_use      Json?
+  future_opportunities String?                    @db.Text
+  created_by_tech_id   String                     @db.Uuid
+  created_at           DateTime                   @default(now())
 
-  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
-  created_by Usuario @relation("OperationsSurveyCreator", fields: [created_by_tech_id], references: [id])
-  media OperationsSurveyMedia[]
+  job        OperationsJob           @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  created_by Usuario                 @relation("OperationsSurveyCreator", fields: [created_by_tech_id], references: [id])
+  media      OperationsSurveyMedia[]
 
   @@index([job_id])
   @@index([created_at(sort: Desc)])
@@ -992,12 +1054,12 @@ model OperationsSurvey {
 }
 
 model OperationsSurveyMedia {
-  id        String @id @default(uuid()) @db.Uuid
-  survey_id String @db.Uuid
-  type      String
+  id          String   @id @default(uuid()) @db.Uuid
+  survey_id   String   @db.Uuid
+  type        String
   url_or_path String
-  caption   String?
-  created_at DateTime @default(now())
+  caption     String?
+  created_at  DateTime @default(now())
 
   survey OperationsSurvey @relation(fields: [survey_id], references: [id], onDelete: Cascade)
 
@@ -1006,18 +1068,18 @@ model OperationsSurveyMedia {
 }
 
 model OperationsSchedule {
-  id                    String @id @default(uuid()) @db.Uuid
-  job_id                String @unique @db.Uuid
-  scheduled_date        DateTime @db.Date
-  preferred_time        String?
-  assigned_tech_id      String @db.Uuid
-  additional_tech_ids   String[] @default([])
-  customer_availability_notes String? @db.Text
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id                          String   @id @default(uuid()) @db.Uuid
+  job_id                      String   @unique @db.Uuid
+  scheduled_date              DateTime @db.Date
+  preferred_time              String?
+  assigned_tech_id            String   @db.Uuid
+  additional_tech_ids         String[] @default([])
+  customer_availability_notes String?  @db.Text
+  created_at                  DateTime @default(now())
+  updated_at                  DateTime @updatedAt
 
-  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
-  assigned_tech Usuario @relation("OperationsScheduleAssignedTech", fields: [assigned_tech_id], references: [id])
+  job           OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  assigned_tech Usuario       @relation("OperationsScheduleAssignedTech", fields: [assigned_tech_id], references: [id])
 
   @@index([job_id])
   @@index([scheduled_date])
@@ -1026,20 +1088,20 @@ model OperationsSchedule {
 }
 
 model OperationsInstallationReport {
-  id            String @id @default(uuid()) @db.Uuid
-  job_id        String @db.Uuid
-  started_at    DateTime?
-  finished_at   DateTime?
-  tech_notes    String? @db.Text
-  work_done_summary String? @db.Text
+  id                 String    @id @default(uuid()) @db.Uuid
+  job_id             String    @db.Uuid
+  started_at         DateTime?
+  finished_at        DateTime?
+  tech_notes         String?   @db.Text
+  work_done_summary  String?   @db.Text
   installed_products Json?
-  media_urls    String[] @default([])
-  signature_name String?
-  created_by_tech_id String @db.Uuid
-  created_at DateTime @default(now())
+  media_urls         String[]  @default([])
+  signature_name     String?
+  created_by_tech_id String    @db.Uuid
+  created_at         DateTime  @default(now())
 
-  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
-  created_by Usuario @relation("OperationsInstallationReportCreator", fields: [created_by_tech_id], references: [id])
+  job        OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  created_by Usuario       @relation("OperationsInstallationReportCreator", fields: [created_by_tech_id], references: [id])
 
   @@index([job_id])
   @@index([created_at(sort: Desc)])
@@ -1047,18 +1109,18 @@ model OperationsInstallationReport {
 }
 
 model OperationsWarrantyTicket {
-  id            String @id @default(uuid()) @db.Uuid
-  job_id        String @db.Uuid
-  reason        String @db.Text
-  reported_at   DateTime @default(now())
-  status        OperationsWarrantyStatus @default(pending)
-  assigned_tech_id String? @db.Uuid
-  resolution_notes String? @db.Text
-  resolved_at   DateTime?
-  created_at DateTime @default(now())
+  id               String                   @id @default(uuid()) @db.Uuid
+  job_id           String                   @db.Uuid
+  reason           String                   @db.Text
+  reported_at      DateTime                 @default(now())
+  status           OperationsWarrantyStatus @default(pending)
+  assigned_tech_id String?                  @db.Uuid
+  resolution_notes String?                  @db.Text
+  resolved_at      DateTime?
+  created_at       DateTime                 @default(now())
 
-  job OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
-  assigned_tech Usuario? @relation("OperationsWarrantyAssignedTech", fields: [assigned_tech_id], references: [id])
+  job           OperationsJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  assigned_tech Usuario?      @relation("OperationsWarrantyAssignedTech", fields: [assigned_tech_id], references: [id])
 
   @@index([job_id])
   @@index([status])
@@ -1127,30 +1189,30 @@ model Sale {
 }
 
 model SalesRecord {
-  id          String  @id @default(uuid()) @db.Uuid
-  empresa_id  String  @db.Uuid
-  user_id     String  @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  empresa_id String @db.Uuid
+  user_id    String @db.Uuid
 
-  customer_name  String?
-  customer_phone String?
-  customer_document String?
+  customer_name      String?
+  customer_phone     String?
+  customer_document  String?
   product_or_service String
-  amount            Decimal @db.Decimal(12, 2)
-  details           Json?   @db.JsonB
-  payment_method    SalesPaymentMethod? @default(other)
-  channel           SalesChannel
-  status            SalesStatus? @default(confirmed)
-  notes             String?
-  sold_at           DateTime @db.Date
+  amount             Decimal             @db.Decimal(12, 2)
+  details            Json?               @db.JsonB
+  payment_method     SalesPaymentMethod? @default(other)
+  channel            SalesChannel
+  status             SalesStatus?        @default(confirmed)
+  notes              String?
+  sold_at            DateTime            @db.Date
 
-  evidence_required Boolean @default(true)
-  deleted           Boolean @default(false)
+  evidence_required Boolean   @default(true)
+  deleted           Boolean   @default(false)
   deleted_at        DateTime?
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
 
-  empresa Empresa @relation(fields: [empresa_id], references: [id])
-  user    Usuario @relation("SalesRecordCreator", fields: [user_id], references: [id])
+  empresa  Empresa         @relation(fields: [empresa_id], references: [id])
+  user     Usuario         @relation("SalesRecordCreator", fields: [user_id], references: [id])
   evidence SalesEvidence[]
 
   @@index([empresa_id])
@@ -1163,12 +1225,12 @@ model SalesRecord {
 }
 
 model SalesEvidence {
-  id       String @id @default(uuid()) @db.Uuid
-  sale_id  String @db.Uuid
-  type     SalesEvidenceType
+  id          String            @id @default(uuid()) @db.Uuid
+  sale_id     String            @db.Uuid
+  type        SalesEvidenceType
   url_or_path String
-  caption  String?
-  created_at DateTime @default(now())
+  caption     String?
+  created_at  DateTime          @default(now())
 
   sale SalesRecord @relation(fields: [sale_id], references: [id], onDelete: Cascade)
 
@@ -1254,9 +1316,9 @@ model Letter {
   created_at DateTime @default(now()) @map("created_at")
   updated_at DateTime @updatedAt @map("updated_at")
 
-  empresa   Empresa    @relation(fields: [empresa_id], references: [id])
-  user      Usuario    @relation(fields: [user_id], references: [id])
-  quotation Quotation? @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
+  empresa   Empresa        @relation(fields: [empresa_id], references: [id])
+  user      Usuario        @relation(fields: [user_id], references: [id])
+  quotation Quotation?     @relation(fields: [quotation_id], references: [id], onDelete: SetNull)
   exports   LetterExport[]
 
   @@index([empresa_id])
@@ -1268,11 +1330,11 @@ model Letter {
 }
 
 model LetterExport {
-  id        String           @id @default(uuid()) @db.Uuid
-  letter_id String           @db.Uuid
-  format    LetterExportFormat
-  file_url  String?          @map("file_url")
-  created_at DateTime        @default(now()) @map("created_at")
+  id         String             @id @default(uuid()) @db.Uuid
+  letter_id  String             @db.Uuid
+  format     LetterExportFormat
+  file_url   String?            @map("file_url")
+  created_at DateTime           @default(now()) @map("created_at")
 
   letter Letter @relation(fields: [letter_id], references: [id], onDelete: Cascade)
 
@@ -1345,8 +1407,9 @@ model CrmChat {
   created_at           DateTime  @default(now())
   updated_at           DateTime  @updatedAt
 
-  empresa  Empresa           @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
-  messages CrmChatMessage[]
+  empresa        Empresa          @relation(fields: [empresa_id], references: [id], onDelete: Cascade)
+  messages       CrmChatMessage[]
+  operations_job OperationsJob?
 
   @@unique([wa_id])
   @@index([last_message_at])
@@ -1372,8 +1435,8 @@ model CrmChatMessage {
   timestamp         DateTime
   created_at        DateTime @default(now())
 
-  empresa Empresa  @relation("CrmChatMessageToEmpresa", fields: [empresa_id], references: [id])
-  chat    CrmChat  @relation(fields: [chat_id], references: [id], onDelete: Cascade)
+  empresa Empresa @relation("CrmChatMessageToEmpresa", fields: [empresa_id], references: [id])
+  chat    CrmChat @relation(fields: [chat_id], references: [id], onDelete: Cascade)
 
   @@index([chat_id, timestamp(sort: Desc)])
   @@index([empresa_id])

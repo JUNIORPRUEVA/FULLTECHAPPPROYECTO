@@ -6,6 +6,7 @@ import {
   createJobSchema,
   listJobsQuerySchema,
   patchJobSchema,
+  completeJobSchema,
   submitSurveySchema,
   scheduleJobSchema,
   startInstallationSchema,
@@ -102,17 +103,30 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
     throw new ApiError(400, 'Invalid query', parsed.error.flatten());
   }
 
-  const q = parsed.data.q?.trim();
+  const q = (parsed.data.search ?? parsed.data.q)?.trim();
   const status = parsed.data.status;
   const assigned_tech_id = parsed.data.assigned_tech_id;
   const from = parseDate(parsed.data.from);
   const to = parseDate(parsed.data.to);
 
+  const limit = parsed.data.limit;
+  const offset =
+    typeof parsed.data.offset === 'number'
+      ? parsed.data.offset
+      : (parsed.data.page - 1) * parsed.data.limit;
+
   const where: Prisma.OperationsJobWhereInput = {
     empresa_id,
     deleted_at: null,
     ...(status ? { status } : {}),
-    ...(assigned_tech_id ? { assigned_tech_id } : {}),
+    ...(assigned_tech_id
+      ? {
+          OR: [
+            { assigned_tech_id },
+            { technician_user_id: assigned_tech_id },
+          ],
+        }
+      : {}),
     ...(from || to
       ? {
           created_at: {
@@ -127,36 +141,104 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
             { customer_name: { contains: q, mode: 'insensitive' } },
             { customer_phone: { contains: q, mode: 'insensitive' } },
             { customer_address: { contains: q, mode: 'insensitive' } },
+            { address_text: { contains: q, mode: 'insensitive' } },
             { id: { equals: q } },
           ],
         }
       : {}),
   };
 
-  const [total, items] = await Promise.all([
-    prisma.operationsJob.count({ where }),
-    prisma.operationsJob.findMany({
-      where,
-      orderBy: [{ created_at: 'desc' }],
-      take: parsed.data.limit,
-      skip: parsed.data.offset,
-      include: {
-        survey: true,
-        schedule: true,
-        warranty_tickets: {
-          where: { status: { in: ['pending', 'in_progress'] } },
-          orderBy: { reported_at: 'desc' },
+  try {
+    const [total, items] = await Promise.all([
+      prisma.operationsJob.count({ where }),
+      prisma.operationsJob.findMany({
+        where,
+        orderBy: [{ created_at: 'desc' }],
+        take: limit,
+        skip: offset,
+        include: {
+          service: true,
+          product: true,
+          technician: true,
+          vendedor: true,
         },
-      },
-    }),
-  ]);
+      }),
+    ]);
 
-  res.json({
-    items,
-    total,
-    limit: parsed.data.limit,
-    offset: parsed.data.offset,
+    res.json({ items, total, limit, offset });
+  } catch (e: any) {
+    // Avoid hard 500 loops if migrations haven't been applied yet.
+    const code = e?.code ?? e?.meta?.code;
+    const msg = e?.message ?? String(e);
+    console.error('[Operations] listJobs failed', { code, msg });
+
+    // Prisma: P2021 = table does not exist, P2022 = column does not exist
+    if (code === 'P2021' || code === 'P2022') {
+      res.json({ items: [], total: 0, limit, offset });
+      return;
+    }
+
+    // PrismaClientValidationError often means the runtime Prisma Client is out of date
+    // (e.g. deployed without running prisma generate). Fall back to a minimal query.
+    const name = String(e?.name ?? '');
+    const looksLikeValidation =
+      name.includes('PrismaClientValidationError') ||
+      msg.includes('Unknown arg') ||
+      msg.includes('Unknown field') ||
+      msg.includes('include');
+
+    if (looksLikeValidation) {
+      try {
+        const [total, items] = await Promise.all([
+          prisma.operationsJob.count({ where }),
+          prisma.operationsJob.findMany({
+            where,
+            orderBy: [{ created_at: 'desc' }],
+            take: limit,
+            skip: offset,
+          }),
+        ]);
+
+        res.json({ items, total, limit, offset });
+        return;
+      } catch (fallbackErr: any) {
+        const fCode = fallbackErr?.code ?? fallbackErr?.meta?.code;
+        const fMsg = fallbackErr?.message ?? String(fallbackErr);
+        console.error('[Operations] listJobs fallback failed', { fCode, fMsg });
+        res.json({ items: [], total: 0, limit, offset });
+        return;
+      }
+    }
+
+    throw e;
+  }
+}
+
+export async function completeJob(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+  const id = req.params.id;
+
+  const parsed = completeJobSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+  }
+
+  const existing = await prisma.operationsJob.findFirst({
+    where: { id, empresa_id, deleted_at: null },
   });
+  if (!existing) throw new ApiError(404, 'Job not found');
+
+  const completedAt = parseDate(parsed.data.completed_at) ?? new Date();
+
+  const updated = await prisma.operationsJob.update({
+    where: { id },
+    data: {
+      status: 'INSTALACION_FINALIZADA',
+      completed_at: completedAt,
+    },
+  });
+
+  res.json(updated);
 }
 
 export async function getJob(req: Request, res: Response): Promise<void> {

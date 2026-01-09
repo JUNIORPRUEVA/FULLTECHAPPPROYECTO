@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+function intFromUnknown(v: unknown): number {
+  if (typeof v === 'number') return Math.trunc(v);
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : NaN;
+  }
+  return NaN;
+}
+
 export const posListProductsSchema = z.object({
   search: z.string().optional(),
   lowStock: z
@@ -26,7 +35,7 @@ export const posCreateSaleSchema = z.object({
     .array(
       z.object({
         product_id: z.string().uuid(),
-        qty: z.number().positive(),
+        qty: z.preprocess(intFromUnknown, z.number().int().positive()),
         unit_price: z.number().min(0),
         discount_amount: z.number().min(0).optional().default(0),
       }),
@@ -67,7 +76,7 @@ export const posCreatePurchaseSchema = z.object({
     .array(
       z.object({
         product_id: z.string().uuid(),
-        qty: z.number().positive(),
+        qty: z.preprocess(intFromUnknown, z.number().int().positive()),
         unit_cost: z.number().min(0),
       }),
     )
@@ -87,8 +96,22 @@ export const posListPurchasesSchema = z.object({
 
 export const posInventoryAdjustSchema = z.object({
   product_id: z.string().uuid(),
-  qty_change: z.number().refine((n) => n !== 0, 'qty_change must be != 0'),
+  qty_change: z.preprocess(intFromUnknown, z.number().int().refine((n) => n !== 0, 'qty_change must be != 0')),
   note: z.string().trim().optional().nullable(),
+});
+
+export const posRefundSaleSchema = z.object({
+  // If omitted: full refund of remaining quantities.
+  note: z.string().trim().optional().nullable(),
+  items: z
+    .array(
+      z.object({
+        product_id: z.string().uuid(),
+        qty: z.preprocess(intFromUnknown, z.number().int().positive()),
+      }),
+    )
+    .optional()
+    .nullable(),
 });
 
 export const posListMovementsSchema = z.object({

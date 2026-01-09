@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 const uuidSchema = z.string().uuid();
 
+function intFromUnknown(v: unknown): number {
+  if (typeof v === 'number') return Math.trunc(v);
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.trunc(n) : NaN;
+  }
+  return NaN;
+}
+
 export const createCategoriaProductoSchema = z.object({
   nombre: z.string().min(1).max(120),
   descripcion: z.string().max(500).optional(),
@@ -16,6 +25,15 @@ const productoCommonSchema = z.object({
   categoria_id: uuidSchema,
   is_active: z.boolean().optional(),
   product_type: z.enum(['simple', 'servicio']),
+
+  // Stock fields (POS/TPV)
+  stock_qty: z.preprocess(intFromUnknown, z.number().int().min(0)).optional(),
+  min_purchase_qty: z.preprocess(intFromUnknown, z.number().int().min(1)).optional(),
+  low_stock_threshold: z.preprocess(intFromUnknown, z.number().int().min(0)).optional(),
+
+  // Optional inventory metadata
+  supplier_id: uuidSchema.optional().nullable(),
+  brand: z.string().trim().max(120).optional().nullable(),
 });
 
 const productoSimpleSchema = productoCommonSchema

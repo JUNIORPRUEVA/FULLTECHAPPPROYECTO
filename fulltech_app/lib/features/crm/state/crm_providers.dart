@@ -10,6 +10,7 @@ import '../../auth/state/auth_state.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/app_config.dart';
 import '../../../core/state/api_endpoint_settings_provider.dart';
+import '../../../core/services/api_endpoint_settings.dart';
 import '../../catalogo/state/catalog_providers.dart';
 import '../../catalogo/models/producto.dart';
 import '../data/datasources/crm_remote_datasource.dart';
@@ -33,13 +34,13 @@ import 'customers_state.dart';
 
 final crmApiClientProvider = Provider<ApiClient>((ref) {
   // Rebuild client when the API endpoint setting changes.
-  ref.watch(apiEndpointSettingsProvider);
+  final settings = ref.watch(apiEndpointSettingsProvider);
   if (kDebugMode) {
     debugPrint('[CRM] baseUrl=${AppConfig.crmApiBaseUrl}');
   }
   return ApiClient.forBaseUrl(
     ref.watch(localDbProvider),
-    AppConfig.crmApiBaseUrl,
+    effectiveCrmApiBaseUrl(settings),
   );
 });
 
@@ -71,7 +72,9 @@ final crmRepositoryProvider = Provider<CrmRepository>((ref) {
   );
 });
 
-final crmStatusDataRepositoryProvider = Provider<CrmStatusDataRepository>((ref) {
+final crmStatusDataRepositoryProvider = Provider<CrmStatusDataRepository>((
+  ref,
+) {
   return CrmStatusDataRepository();
 });
 

@@ -19,6 +19,7 @@ import {
   posListSuppliersSchema,
   posCreateSupplierSchema,
   posUpdateSupplierSchema,
+  posRefundSaleSchema,
 } from './pos.schema';
 import { parseDateOrNull, round2, suggestReorderQty, wouldBlockStock } from './pos.logic';
 
@@ -121,8 +122,11 @@ export async function listPosProducts(req: Request, res: Response) {
       precio_venta: Number(p.precio_venta),
       cost_price: Number(p.precio_compra),
       stock_qty: stockQty,
+      // min_stock is used as low-stock threshold in POS.
       min_stock: minStock,
       max_stock: maxStock,
+      min_purchase_qty: (p as any).min_purchase_qty ?? 1,
+      low_stock_threshold: minStock,
       allow_negative_stock: p.allow_negative_stock,
       low_stock: stockQty <= minStock,
       suggested_reorder_qty: suggestReorderQty({ stockQty, minStock, maxStock }),
@@ -413,10 +417,10 @@ export async function payPosSale(req: Request, res: Response) {
     const items = sale.items;
     if (!items || items.length === 0) throw new ApiError(400, 'Sale has no items');
 
-    // Aggregate qty per product
+    // Aggregate qty per product (integer semantics)
     const qtyByProduct = new Map<string, number>();
     for (const it of items) {
-      const qty = Number(it.qty);
+      const qty = Math.trunc(Number(it.qty));
       qtyByProduct.set(it.product_id, (qtyByProduct.get(it.product_id) ?? 0) + qty);
     }
 
@@ -437,16 +441,19 @@ export async function payPosSale(req: Request, res: Response) {
       throw new ApiError(400, 'One or more products not found for this empresa');
     }
 
+    const insufficient: Array<{ product_id: string; requested: number; available: number }> = [];
     for (const p of lockedProducts) {
       const qtyOut = qtyByProduct.get(p.id) ?? 0;
-      const stockQty = Number(p.stock_qty);
-      const block = wouldBlockStock(
-        { allow_negative_stock: p.allow_negative_stock, stock_qty: stockQty },
-        qtyOut,
-      );
+      const stockQty = Math.trunc(Number(p.stock_qty));
+
+      // Safety-first: do not allow oversell (ignore allow_negative_stock).
+      const block = wouldBlockStock({ allow_negative_stock: false, stock_qty: stockQty }, qtyOut);
       if (block) {
-        throw new ApiError(409, `Stock insufficient for product ${p.id}`);
+        insufficient.push({ product_id: p.id, requested: qtyOut, available: Math.max(0, stockQty) });
       }
+    }
+    if (insufficient.length > 0) {
+      throw new ApiError(409, 'Insufficient stock', { items: insufficient }, 'INSUFFICIENT_STOCK');
     }
 
     // Payment calculations
@@ -464,6 +471,9 @@ export async function payPosSale(req: Request, res: Response) {
       const qtyOut = qtyByProduct.get(p.id) ?? 0;
       if (qtyOut <= 0) continue;
 
+      const beforeStock = Math.trunc(Number(p.stock_qty));
+      const afterStock = beforeStock - qtyOut;
+
       await tx.producto.update({
         where: { id: p.id },
         data: {
@@ -478,6 +488,10 @@ export async function payPosSale(req: Request, res: Response) {
           ref_type: 'SALE',
           ref_id: sale.id,
           qty_change: -qtyOut,
+          movement_type: 'SALE_DEDUCT',
+          qty: qtyOut,
+          before_stock: beforeStock,
+          after_stock: afterStock,
           unit_cost: 0,
           note: 'POS sale',
           created_by_user_id: actorId,
@@ -552,9 +566,9 @@ export async function cancelPosSale(req: Request, res: Response) {
       }
       const productIds = [...qtyByProduct.keys()];
 
-      const lockedProducts = await tx.$queryRaw<Array<{ id: string }>>(
+      const lockedProducts = await tx.$queryRaw<Array<{ id: string; stock_qty: any }>>(
         Prisma.sql`
-          SELECT id
+          SELECT id, stock_qty
           FROM "Producto"
           WHERE empresa_id = ${empresa_id}::uuid
             AND id IN (${Prisma.join(productIds.map((id) => Prisma.sql`${id}::uuid`))})
@@ -565,6 +579,9 @@ export async function cancelPosSale(req: Request, res: Response) {
       for (const p of lockedProducts) {
         const qtyIn = qtyByProduct.get(p.id) ?? 0;
         if (qtyIn <= 0) continue;
+
+        const beforeStock = Math.trunc(Number(p.stock_qty));
+        const afterStock = beforeStock + qtyIn;
 
         await tx.producto.update({
           where: { id: p.id },
@@ -580,6 +597,10 @@ export async function cancelPosSale(req: Request, res: Response) {
             ref_type: 'RETURN',
             ref_id: sale.id,
             qty_change: qtyIn,
+            movement_type: 'CANCEL_RESTORE',
+            qty: qtyIn,
+            before_stock: beforeStock,
+            after_stock: afterStock,
             unit_cost: 0,
             note: 'POS sale cancel',
             created_by_user_id: actorId,
@@ -594,6 +615,158 @@ export async function cancelPosSale(req: Request, res: Response) {
     const updated = await tx.posSale.update({
       where: { id: sale.id },
       data: { status: 'CANCELLED', updated_at: new Date() },
+      include: { items: true },
+    });
+
+    return updated;
+  });
+
+  ok(res, result);
+}
+
+export async function refundPosSale(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const actorId = actorUserId(req);
+  const saleId = String(req.params.id);
+
+  const parsed = posRefundSaleSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const body = parsed.data;
+
+  const result = await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    const sale = await tx.posSale.findFirst({
+      where: { id: saleId, empresa_id },
+      include: { items: true },
+    });
+    if (!sale) throw new ApiError(404, 'Sale not found');
+
+    // Only sales that already affected stock can be refunded.
+    const stockAffected = sale.status === 'PAID' || sale.status === 'CREDIT' || sale.status === 'PARTIAL_REFUNDED';
+    if (!stockAffected && sale.status !== 'REFUNDED') {
+      throw new ApiError(409, 'Sale is not refundable', { status: sale.status }, 'SALE_NOT_REFUNDABLE');
+    }
+
+    if (sale.status === 'REFUNDED') return sale;
+
+    const soldQtyByProduct = new Map<string, number>();
+    for (const it of sale.items) {
+      soldQtyByProduct.set(it.product_id, (soldQtyByProduct.get(it.product_id) ?? 0) + Math.trunc(Number(it.qty)));
+    }
+
+    // Sum previously refunded quantities (idempotency + partial refunds)
+    const prevRefundRows = await tx.posStockMovement.groupBy({
+      by: ['product_id'],
+      where: {
+        empresa_id,
+        ref_type: 'REFUND',
+        ref_id: sale.id,
+      },
+      _sum: { qty: true, qty_change: true },
+    });
+
+    const refundedQtyByProduct = new Map<string, number>();
+    for (const r of prevRefundRows) {
+      const q = r._sum.qty ?? Math.trunc(Number(r._sum.qty_change ?? 0));
+      refundedQtyByProduct.set(r.product_id, Math.trunc(Number(q ?? 0)));
+    }
+
+    const remainingByProduct = new Map<string, number>();
+    for (const [pid, soldQty] of soldQtyByProduct.entries()) {
+      const already = refundedQtyByProduct.get(pid) ?? 0;
+      remainingByProduct.set(pid, Math.max(0, soldQty - already));
+    }
+
+    const requestedItemsRaw = (body.items ?? undefined) as Array<{ product_id: string; qty: number }> | undefined;
+    const refundItems: Array<{ product_id: string; qty: number }> = [];
+
+    if (!requestedItemsRaw || requestedItemsRaw.length === 0) {
+      // Full refund of all remaining quantities.
+      for (const [pid, rem] of remainingByProduct.entries()) {
+        if (rem > 0) refundItems.push({ product_id: pid, qty: rem });
+      }
+    } else {
+      for (const it of requestedItemsRaw) {
+        const rem = remainingByProduct.get(it.product_id);
+        if (rem === undefined) {
+          throw new ApiError(400, 'Refund item is not part of sale', { product_id: it.product_id }, 'INVALID_REFUND_ITEM');
+        }
+        if (it.qty <= 0) continue;
+        if (it.qty > rem) {
+          throw new ApiError(
+            409,
+            'Refund qty exceeds remaining',
+            { product_id: it.product_id, requested: it.qty, remaining: rem },
+            'REFUND_QTY_EXCEEDS_REMAINING',
+          );
+        }
+        refundItems.push({ product_id: it.product_id, qty: it.qty });
+      }
+    }
+
+    if (refundItems.length === 0) {
+      // Nothing left to refund -> idempotent.
+      return sale;
+    }
+
+    const productIds = refundItems.map((i) => i.product_id);
+    const lockedProducts = await tx.$queryRaw<Array<{ id: string; stock_qty: any }>>(
+      Prisma.sql`
+        SELECT id, stock_qty
+        FROM "Producto"
+        WHERE empresa_id = ${empresa_id}::uuid
+          AND id IN (${Prisma.join(productIds.map((id) => Prisma.sql`${id}::uuid`))})
+        FOR UPDATE
+      `,
+    );
+
+    const qtyByProduct = new Map(refundItems.map((i) => [i.product_id, i.qty]));
+    for (const p of lockedProducts) {
+      const qtyIn = qtyByProduct.get(p.id) ?? 0;
+      if (qtyIn <= 0) continue;
+
+      const beforeStock = Math.trunc(Number(p.stock_qty));
+      const afterStock = beforeStock + qtyIn;
+
+      await tx.producto.update({
+        where: { id: p.id },
+        data: { stock_qty: { increment: qtyIn } },
+      });
+
+      await tx.posStockMovement.create({
+        data: {
+          empresa_id,
+          product_id: p.id,
+          ref_type: 'REFUND',
+          ref_id: sale.id,
+          qty_change: qtyIn,
+          movement_type: 'REFUND_RESTORE',
+          qty: qtyIn,
+          before_stock: beforeStock,
+          after_stock: afterStock,
+          unit_cost: 0,
+          note: body.note ?? 'POS refund',
+          created_by_user_id: actorId,
+        },
+      });
+    }
+
+    // Compute remaining after this refund
+    let anyRemaining = false;
+    for (const [pid, soldQty] of soldQtyByProduct.entries()) {
+      const already = (refundedQtyByProduct.get(pid) ?? 0) + (qtyByProduct.get(pid) ?? 0);
+      if (soldQty - already > 0) {
+        anyRemaining = true;
+        break;
+      }
+    }
+
+    const updated = await tx.posSale.update({
+      where: { id: sale.id },
+      data: {
+        status: anyRemaining ? 'PARTIAL_REFUNDED' : 'REFUNDED',
+        updated_at: new Date(),
+      },
       include: { items: true },
     });
 

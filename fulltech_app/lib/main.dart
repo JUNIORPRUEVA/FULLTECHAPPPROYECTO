@@ -50,11 +50,8 @@ Future<void> main() async {
   // Helps ensure PDFium/pdfrx is initialized before any PdfViewer builds.
   pdfrxFlutterInitialize(dismissPdfiumWasmWarnings: true);
 
-  final db = getLocalDb();
-  await db.init();
-
-  // Apply API endpoint overrides only when the persisted session is admin.
-  // In debug builds, allow selecting cloud/local consistently even before login.
+  // Load API endpoint settings early to avoid baseUrl races on desktop.
+  // (In release builds, local overrides are always disabled.)
   ApiEndpointSettings? savedSettings;
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -63,23 +60,15 @@ Future<void> main() async {
     savedSettings = null;
   }
 
-  try {
-    await db.readSession();
-    // If there is a saved session, we still apply endpoint settings in debug
-    // to keep behavior consistent between login and authenticated flows.
-    if (kDebugMode && savedSettings != null) {
-      // Apply saved settings in debug so login+post-login are consistent.
-      // This prevents "login succeeds then immediately logs out" when the app
-      // switches backend after authentication.
-      applyApiEndpointSettings(savedSettings);
-    } else {
-      AppConfig.setRuntimeApiBaseUrlOverride(null);
-      AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
-    }
-  } catch (_) {
+  if (kDebugMode && savedSettings != null) {
+    applyApiEndpointSettings(savedSettings);
+  } else {
     AppConfig.setRuntimeApiBaseUrlOverride(null);
     AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
   }
+
+  final db = getLocalDb();
+  await db.init();
 
   // CRM media cache cleanup (7-day TTL). Best-effort and non-blocking.
   CrmImageCache.instance.startMaintenance();
@@ -105,9 +94,6 @@ class _BootstrapperState extends ConsumerState<_Bootstrapper> {
   ProviderSubscription<ApiEndpointSettings>? _apiSettingsSub;
 
   void _enforceApiForRole() {
-    final auth = ref.read(authControllerProvider);
-    if (auth is AuthUnknown) return;
-
     final settings = ref.read(apiEndpointSettingsProvider);
 
     // Never allow local override in non-debug builds.
@@ -138,6 +124,13 @@ class _BootstrapperState extends ConsumerState<_Bootstrapper> {
       apiEndpointSettingsProvider,
       (prev, next) {
         _enforceApiForRole();
+
+        // IMPORTANT: switching server changes the session namespace
+        // (sessions are stored per-baseUrl). Reload the appropriate session.
+        // This avoids random logouts caused by provider rebuilds.
+        Future.microtask(
+          () => ref.read(authControllerProvider.notifier).bootstrap(),
+        );
       },
     );
 

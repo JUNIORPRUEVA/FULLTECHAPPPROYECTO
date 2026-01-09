@@ -155,7 +155,76 @@ class PosSaleItemDraft {
     );
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'product': product.toJson(),
+      'qty': qty,
+      'unit_price': unitPrice,
+      'discount_amount': discountAmount,
+    };
+  }
+
+  factory PosSaleItemDraft.fromJson(Map<String, dynamic> json) {
+    final productJson = (json['product'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return PosSaleItemDraft(
+      product: PosProduct.fromJson(productJson),
+      qty: _asDouble(json['qty']),
+      unitPrice: _asDouble(json['unit_price']),
+      discountAmount: _asDouble(json['discount_amount']),
+    );
+  }
+
   double get lineSubtotal => (qty * unitPrice) - discountAmount;
+}
+
+class PosFiscalSequence {
+  final String id;
+  final String docType;
+  final String? series;
+  final String? prefix;
+  final int currentNumber;
+  final int? maxNumber;
+  final bool active;
+
+  const PosFiscalSequence({
+    required this.id,
+    required this.docType,
+    required this.series,
+    required this.prefix,
+    required this.currentNumber,
+    required this.maxNumber,
+    required this.active,
+  });
+
+  factory PosFiscalSequence.fromJson(Map<String, dynamic> json) {
+    return PosFiscalSequence(
+      id: (json['id'] ?? '').toString(),
+      docType: (json['doc_type'] ?? json['docType'] ?? '').toString(),
+      series: (json['series'] ?? '').toString().trim().isEmpty ? null : (json['series'] ?? '').toString(),
+      prefix: (json['prefix'] ?? '').toString().trim().isEmpty ? null : (json['prefix'] ?? '').toString(),
+      currentNumber: (json['current_number'] is num)
+          ? (json['current_number'] as num).toInt()
+          : int.tryParse((json['current_number'] ?? '0').toString()) ?? 0,
+      maxNumber: (json['max_number'] == null)
+          ? null
+          : ((json['max_number'] is num)
+              ? (json['max_number'] as num).toInt()
+              : int.tryParse(json['max_number'].toString())),
+      active: (json['active'] is bool) ? (json['active'] as bool) : ((json['active'] ?? true).toString() == 'true'),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'doc_type': docType,
+      'series': series,
+      'prefix': prefix,
+      'current_number': currentNumber,
+      'max_number': maxNumber,
+      'active': active,
+    };
+  }
 }
 
 class PosSaleItem {

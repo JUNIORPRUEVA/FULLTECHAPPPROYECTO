@@ -13,6 +13,7 @@ import 'status_dialogs/reserva_dialog.dart';
 import 'status_dialogs/servicio_reservado_dialog.dart';
 import 'status_dialogs/garantia_dialog.dart';
 import 'status_dialogs/solucion_garantia_dialog.dart';
+import 'status_dialogs/por_levantamiento_dialog.dart';
 
 String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
@@ -334,39 +335,63 @@ class _ActionsSection extends ConsumerWidget {
             // Capture providers before async callbacks
             final statusDataRepo = ref.read(crmStatusDataRepositoryProvider);
             final auth = ref.read(authControllerProvider);
+            final currentStatus = thread.status.trim();
+            final legacyItems = <DropdownMenuItem<String>>[];
+            if (currentStatus == 'pendiente') {
+              legacyItems.add(
+                const DropdownMenuItem(
+                  value: 'pendiente',
+                  child: Text('Pendiente (legacy)'),
+                ),
+              );
+            }
+            if (currentStatus == 'activo') {
+              legacyItems.add(
+                const DropdownMenuItem(
+                  value: 'activo',
+                  child: Text('Activo (legacy)'),
+                ),
+              );
+            }
 
             return DropdownButtonFormField<String>(
               initialValue: thread.status,
-              items: const [
-                DropdownMenuItem(
+              items: [
+                ...legacyItems,
+                const DropdownMenuItem(
                   value: 'primer_contacto',
                   child: Text('Primer contacto'),
                 ),
-                DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
-                DropdownMenuItem(
+                const DropdownMenuItem(
                   value: 'interesado',
                   child: Text('Interesado'),
                 ),
-                DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
-                DropdownMenuItem(value: 'compro', child: Text('Compró')),
-                DropdownMenuItem(
+                const DropdownMenuItem(
+                  value: 'reserva',
+                  child: Text('Reserva'),
+                ),
+                const DropdownMenuItem(
+                  value: 'por_levantamiento',
+                  child: Text('Por levantamiento'),
+                ),
+                const DropdownMenuItem(value: 'compro', child: Text('Compró')),
+                const DropdownMenuItem(
                   value: 'compra_finalizada',
                   child: Text('Compra finalizada'),
                 ),
-                DropdownMenuItem(
+                const DropdownMenuItem(
                   value: 'servicio_reservado',
                   child: Text('Servicio reservado'),
                 ),
-                DropdownMenuItem(
+                const DropdownMenuItem(
                   value: 'no_interesado',
                   child: Text('No interesado'),
                 ),
-                DropdownMenuItem(value: 'activo', child: Text('Activo')),
-                DropdownMenuItem(
+                const DropdownMenuItem(
                   value: 'en_garantia',
                   child: Text('En garantía'),
                 ),
-                DropdownMenuItem(
+                const DropdownMenuItem(
                   value: 'solucion_garantia',
                   child: Text('Solución de garantía'),
                 ),
@@ -399,6 +424,15 @@ class _ActionsSection extends ConsumerWidget {
                       if (result == null) return;
                       dialogData = result.toJson();
                       break;
+                    case CrmStatuses.porLevantamiento:
+                      final result =
+                          await showDialog<PorLevantamientoDialogResult>(
+                            context: context,
+                            builder: (_) => const PorLevantamientoDialog(),
+                          );
+                      if (result == null) return;
+                      dialogData = result.toJson();
+                      break;
 
                     case CrmStatuses.enGarantia:
                       final result = await showDialog<GarantiaDialogResult>(
@@ -422,7 +456,10 @@ class _ActionsSection extends ConsumerWidget {
 
                   // Save status first
                   try {
-                    await onSave({'status': nextStatus});
+                    await onSave({
+                      'status': nextStatus,
+                      'operations_form': dialogData,
+                    });
 
                     // Then save dialog data to appropriate table
                     if (auth is! AuthAuthenticated) {
@@ -438,6 +475,9 @@ class _ActionsSection extends ConsumerWidget {
                           threadId: thread.id,
                           reservationData: dialogData!,
                         );
+                        break;
+                      case CrmStatuses.porLevantamiento:
+                        // No local CRM table yet for this form; backend will create Operations job.
                         break;
 
                       case CrmStatuses.servicioReservado:
@@ -530,9 +570,7 @@ class _ActionsSection extends ConsumerWidget {
 
                     // Refresh CRM customers list so it shows up immediately.
                     // ignore: unawaited_futures
-                    ref
-                        .read(customersControllerProvider.notifier)
-                        .refresh();
+                    ref.read(customersControllerProvider.notifier).refresh();
 
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -904,8 +942,8 @@ class _SummarySection extends ConsumerWidget {
 
     final entries = <_StatusEntry>[
       _StatusEntry(
-        'Pendiente',
-        _countFor(by, const ['pendiente', 'pending']),
+        'Por levantamiento',
+        _countFor(by, const ['por_levantamiento', 'por levantamiento']),
         theme.colorScheme.primary, // azul (según theme)
       ),
       _StatusEntry(
@@ -995,7 +1033,13 @@ class _SummarySection extends ConsumerWidget {
             _MiniStat(label: 'Total', value: stats?.total ?? 0),
             _MiniStat(label: 'No leídos', value: stats?.unreadTotal ?? 0),
             _MiniStat(label: 'Importantes', value: stats?.importantCount ?? 0),
-            _MiniStat(label: 'Pendiente', value: by['pendiente'] ?? 0),
+            _MiniStat(
+              label: 'Por levantamiento',
+              value: _countFor(by, const [
+                'por_levantamiento',
+                'por levantamiento',
+              ]),
+            ),
             _MiniStat(label: 'Interesado', value: by['interesado'] ?? 0),
             _MiniStat(label: 'Reserva', value: by['reserva'] ?? 0),
             _MiniStat(label: 'Compró', value: by['compro'] ?? 0),

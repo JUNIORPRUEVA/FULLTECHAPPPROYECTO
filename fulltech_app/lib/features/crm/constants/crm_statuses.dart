@@ -2,28 +2,26 @@
 class CrmStatuses {
   // Status values
   static const String primerContacto = 'primer_contacto';
-  static const String pendiente = 'pendiente';
   static const String interesado = 'interesado';
   static const String reserva = 'reserva';
   static const String compro = 'compro';
   static const String compraFinalizada = 'compra_finalizada';
   static const String servicioReservado = 'servicio_reservado';
+  static const String porLevantamiento = 'por_levantamiento';
   static const String noInteresado = 'no_interesado';
-  static const String activo = 'activo';
   static const String enGarantia = 'en_garantia';
   static const String solucionGarantia = 'solucion_garantia';
 
   // Status labels
   static const Map<String, String> labels = {
     primerContacto: 'Primer contacto',
-    pendiente: 'Pendiente',
     interesado: 'Interesado',
     reserva: 'Reserva',
     compro: 'Compró',
     compraFinalizada: 'Compra finalizada',
     servicioReservado: 'Servicio reservado',
+    porLevantamiento: 'Por levantamiento',
     noInteresado: 'No interesado',
-    activo: 'Activo',
     enGarantia: 'En garantía',
     solucionGarantia: 'Solución de garantía',
   };
@@ -32,16 +30,13 @@ class CrmStatuses {
   static const Set<String> requiresDialog = {
     reserva,
     servicioReservado,
+    porLevantamiento,
     enGarantia,
     solucionGarantia,
   };
 
   /// Statuses that trigger automatic client creation
-  static const Set<String> createsClient = {
-    activo,
-    compro,
-    compraFinalizada,
-  };
+  static const Set<String> createsClient = {compro, compraFinalizada};
 
   /// Get label for a status value
   static String getLabel(String status) {

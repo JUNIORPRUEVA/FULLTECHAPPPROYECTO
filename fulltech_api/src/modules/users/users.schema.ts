@@ -225,6 +225,19 @@ export const listUsersQuerySchema = z.object({
   page_size: z.coerce.number().int().min(1).max(100).default(20),
   q: z.string().optional(),
   rol: userRoleCompatSchema.optional(),
+  roles: z
+    .preprocess((v) => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === 'string') {
+        const parts = v
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        return parts.length ? parts : undefined;
+      }
+      return undefined;
+    }, z.array(userRoleCompatSchema).min(1).optional())
+    .optional(),
   estado: userEstadoSchema.optional(),
 });
 
