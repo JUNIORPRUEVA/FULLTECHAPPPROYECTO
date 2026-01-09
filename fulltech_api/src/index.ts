@@ -30,9 +30,30 @@ fs.mkdirSync(path.join(uploadsRoot, 'sales'), { recursive: true });
 fs.mkdirSync(path.join(uploadsRoot, 'operations'), { recursive: true });
 
 app.use(helmet());
+const corsOriginRaw = String(env.CORS_ORIGIN ?? '').trim();
+const corsAllowedOrigins = corsOriginRaw
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+// NOTE: When `credentials: true`, browsers require a non-"*" Access-Control-Allow-Origin.
+// For "allow all" scenarios, we reflect the request Origin by using `origin: true`.
+const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
+  // Non-browser clients (no Origin) should still be allowed.
+  if (!origin) return callback(null, true);
+
+  // Empty or '*' means allow all (reflect origin).
+  if (!corsOriginRaw || corsOriginRaw === '*') return callback(null, true);
+
+  // Comma-separated allowlist.
+  if (corsAllowedOrigins.includes(origin)) return callback(null, true);
+
+  return callback(null, false);
+};
+
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: corsOrigin,
     credentials: true,
   }),
 );

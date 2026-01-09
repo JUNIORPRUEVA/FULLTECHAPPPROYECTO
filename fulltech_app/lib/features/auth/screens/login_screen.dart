@@ -59,7 +59,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         final parts = <String>[];
         parts.add('No se pudo iniciar sesión.');
-        if (status != null) parts.add('HTTP $status.');
+        if (status != null) {
+          parts.add('HTTP $status.');
+        } else {
+          // In Flutter Web, CORS/network failures usually have no HTTP status.
+          parts.add('Error de red/CORS.');
+          if (e.message != null && e.message!.trim().isNotEmpty) {
+            parts.add(e.message!.trim());
+          }
+        }
         if (serverMsg.isNotEmpty) parts.add(serverMsg);
         parts.add('API: $baseUrl');
 
