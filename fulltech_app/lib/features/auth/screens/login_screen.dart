@@ -36,9 +36,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
-      await ref.read(authControllerProvider.notifier).login(
+      await ref
+          .read(authControllerProvider.notifier)
+          .login(
             email: _emailCtrl.text.trim(),
-            password: _passCtrl.text,
+            password: _passCtrl.text.trim(),
           );
     } catch (e) {
       final baseUrl = ref.read(apiClientProvider).dio.options.baseUrl;
@@ -105,15 +107,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               children: [
                                 Text(
                                   'FULLTECH',
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
                                 Text(
                                   'CRM & Operaciones',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: cs.onSurfaceVariant,
-                                      ),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(color: cs.onSurfaceVariant),
                                 ),
                               ],
                             ),
@@ -123,9 +123,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 16),
                       Text(
                         'Iniciar sesión',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -168,7 +167,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ? const SizedBox(
                                 height: 18,
                                 width: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Entrar'),
                       ),
