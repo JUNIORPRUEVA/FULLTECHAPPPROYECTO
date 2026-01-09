@@ -24,12 +24,12 @@ Esta guía te explica **cómo hacer cambios en el proyecto, cómo aplicarlos, y 
 ### Software Necesario
 
 **Para el Backend (`fulltech_api`):**
-- Node.js 18 o superior ([Descargar](https://nodejs.org/))
-- PostgreSQL ([Descargar](https://www.postgresql.org/download/))
+- Node.js 18 o superior (versión recomendada: 18.x LTS o 20.x LTS) ([Descargar](https://nodejs.org/))
+- PostgreSQL 12 o superior ([Descargar](https://www.postgresql.org/download/))
 - Git ([Descargar](https://git-scm.com/downloads))
 
 **Para el Frontend (`fulltech_app`):**
-- Flutter SDK 3.10.1 o superior ([Instalar](https://docs.flutter.dev/get-started/install))
+- Flutter SDK 3.10.1 o superior (ver versión exacta en `pubspec.yaml`) ([Instalar](https://docs.flutter.dev/get-started/install))
 - Editor de código (VS Code, Android Studio, etc.)
 
 ---
@@ -73,8 +73,8 @@ npm run dev
 
 **Configuración del archivo `.env`:**
 ```env
-DATABASE_URL="postgresql://usuario:contraseña@localhost:5432/nombre_db"
-JWT_SECRET="tu_secreto_aqui"
+DATABASE_URL="postgresql://your_username:your_password@localhost:5432/your_database_name"
+JWT_SECRET="your_secret_key_here_at_least_32_characters_long"
 PORT=3000
 ```
 
@@ -190,7 +190,7 @@ git push origin feature/mi-nuevo-cambio
 
 #### 7. Crear un Pull Request (PR)
 
-1. Ve a GitHub: https://github.com/JUNIORPRUEVA/FULLTECHAPPPROYECTO
+1. Ve a GitHub (al repositorio del proyecto)
 2. Verás un botón "Compare & pull request"
 3. Escribe una descripción de tus cambios
 4. Solicita revisión de código
@@ -277,14 +277,16 @@ curl -X POST http://localhost:3000/api/mi-endpoint \
 
 ```bash
 # Formato del nombre: YYYY-MM-DD_descripcion.sql
+# Usa la fecha actual cuando crees la migración
 cd fulltech_api/sql
-touch 2026-01-09_agregar_campo_usuario.sql
+touch $(date +%Y-%m-%d)_agregar_campo_usuario.sql
 ```
 
 **Ejemplo de migración:**
 
 ```sql
--- sql/2026-01-09_agregar_campo_usuario.sql
+-- sql/YYYY-MM-DD_agregar_campo_usuario.sql
+-- Reemplaza YYYY-MM-DD con la fecha actual
 ALTER TABLE users ADD COLUMN telefono text;
 CREATE INDEX idx_users_telefono ON users(telefono);
 ```
@@ -708,7 +710,6 @@ git branch -d feature/mi-cambio
 
 ---
 
-**Última Actualización:** Enero 9, 2026  
 **Versión:** 1.0  
 **Mantenedor:** Equipo FULLTECHAPPPROYECTO
 
