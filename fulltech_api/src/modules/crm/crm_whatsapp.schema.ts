@@ -66,6 +66,8 @@ export const crmDeleteChatMessageSchema = z.object({
 export const crmMarkReadSchema = z.object({});
 
 export const crmChatPatchSchema = z.object({
+  display_name: z.string().max(200).optional().nullable(),
+  displayName: z.string().max(200).optional().nullable(),
   status: z.string().max(50).optional(),
   important: z.boolean().optional(),
   follow_up: z.boolean().optional(),

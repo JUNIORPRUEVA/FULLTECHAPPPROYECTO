@@ -1035,6 +1035,8 @@ export async function patchChat(req: Request, res: Response) {
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
 
   const {
+    display_name,
+    displayName,
     status,
     important,
     follow_up,
@@ -1048,6 +1050,8 @@ export async function patchChat(req: Request, res: Response) {
     assignedToUserId,
   } = parsed.data;
 
+  const effectiveDisplayName =
+    typeof displayName !== 'undefined' ? displayName : display_name;
   const effectiveImportant = typeof isImportant !== 'undefined' ? isImportant : important;
   const effectiveFollowUp = typeof followUp !== 'undefined' ? followUp : follow_up;
   const effectiveProductId = typeof productId !== 'undefined' ? productId : product_id;
@@ -1055,10 +1059,18 @@ export async function patchChat(req: Request, res: Response) {
   const effectiveAssigned =
     typeof assignedToUserId !== 'undefined' ? assignedToUserId : assigned_user_id;
 
+  const chatUpdates: Record<string, unknown> = {};
   if (status && status.trim().length > 0) {
+    chatUpdates.status = status.trim();
+  }
+  if (typeof effectiveDisplayName !== 'undefined') {
+    const v = (effectiveDisplayName ?? '').toString().trim();
+    chatUpdates.display_name = v.length === 0 ? null : v;
+  }
+  if (Object.keys(chatUpdates).length > 0) {
     await prisma.crmChat.update({
       where: { id: chatId },
-      data: { status: status.trim() },
+      data: chatUpdates,
     });
   }
 
