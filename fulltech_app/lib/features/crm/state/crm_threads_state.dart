@@ -40,25 +40,27 @@ class CrmThreadsState {
 
   CrmThreadsState copyWith({
     bool? loading,
-    String? error,
     List<CrmThread>? items,
     int? total,
     int? limit,
     int? offset,
     String? search,
     String? estado,
+    bool clearError = false,
+    String? error,
+    bool clearProductId = false,
     String? productId,
   }) {
     return CrmThreadsState(
       loading: loading ?? this.loading,
-      error: error,
+      error: clearError ? null : (error ?? this.error),
       items: items ?? this.items,
       total: total ?? this.total,
       limit: limit ?? this.limit,
       offset: offset ?? this.offset,
       search: search ?? this.search,
       estado: estado ?? this.estado,
-      productId: productId ?? this.productId,
+      productId: clearProductId ? null : (productId ?? this.productId),
     );
   }
 }

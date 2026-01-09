@@ -29,11 +29,13 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
   );
 
   bool _isRightPanelOpen = true;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
+      _isInitialized = true;
       // Start stats controller (with auth guard inside)
       ref.read(crmChatStatsControllerProvider.notifier).start();
       ref.read(crmThreadsControllerProvider.notifier).refresh();
@@ -49,6 +51,17 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen(crmChatFiltersProvider, (prev, next) {
+      // Only refresh if actually initialized and filters actually changed
+      if (!_isInitialized || prev == null) return;
+
+      // Check if any filter actually changed
+      final changed =
+          prev.searchText != next.searchText ||
+          prev.status != next.status ||
+          prev.productId != next.productId;
+
+      if (!changed) return;
+
       // Apply debounce when filters change
       _debouncer.run(() {
         final notifier = ref.read(crmThreadsControllerProvider.notifier);

@@ -11,6 +11,7 @@ import '../models/customer.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/storage/local_db_interface.dart';
+import '../../../../core/storage/db_write_queue.dart';
 
 class CrmRepository {
   final CrmRemoteDataSource _remote;
@@ -41,16 +42,19 @@ class CrmRepository {
     List<CrmThread> threads, {
     bool replace = false,
   }) async {
-    if (replace) {
-      await _db.clearStore(store: threadsStore);
-    }
-    for (final t in threads) {
-      await _db.upsertEntity(
-        store: threadsStore,
-        id: t.id,
-        json: jsonEncode(t.toJson()),
-      );
-    }
+    if (threads.isEmpty) return;
+
+    // Batch all writes into a single queued operation
+    await dbWriteQueue.enqueue(() async {
+      if (replace) {
+        await _db.clearStoreDirect(store: threadsStore);
+      }
+      // Write all threads in this single transaction
+      for (final t in threads) {
+        final json = jsonEncode(t.toJson());
+        await _db.upsertEntityDirect(store: threadsStore, id: t.id, json: json);
+      }
+    });
   }
 
   Future<List<CrmMessage>> readCachedMessages({
@@ -72,17 +76,20 @@ class CrmRepository {
     required String threadId,
     bool replace = false,
   }) async {
+    if (messages.isEmpty) return;
+
     final store = messagesStoreForThread(threadId);
-    if (replace) {
-      await _db.clearStore(store: store);
-    }
-    for (final m in messages) {
-      await _db.upsertEntity(
-        store: store,
-        id: m.id,
-        json: jsonEncode(m.toJson()),
-      );
-    }
+    // Batch all writes into a single queued operation
+    await dbWriteQueue.enqueue(() async {
+      if (replace) {
+        await _db.clearStoreDirect(store: store);
+      }
+      // Write all messages in this single transaction
+      for (final m in messages) {
+        final json = jsonEncode(m.toJson());
+        await _db.upsertEntityDirect(store: store, id: m.id, json: json);
+      }
+    });
   }
 
   Future<ThreadsPage> listThreads({
@@ -241,8 +248,8 @@ class CrmRepository {
   Future<ConvertResult> convertThreadToCustomer(String threadId) =>
       _remote.convertThreadToCustomer(threadId);
 
-  Future<Customer> convertChatToCustomer(String chatId) =>
-      _remote.convertChatToCustomer(chatId);
+  Future<Customer> convertChatToCustomer(String chatId, {String? status}) =>
+      _remote.convertChatToCustomer(chatId, status: status);
 
   Future<CrmChatStats> getChatStats() => _remote.getChatStats();
 

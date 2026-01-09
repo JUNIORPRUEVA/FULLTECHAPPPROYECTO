@@ -15,6 +15,7 @@ import '../../catalogo/models/producto.dart';
 import '../data/datasources/crm_remote_datasource.dart';
 import '../data/datasources/customers_remote_datasource.dart';
 import '../data/repositories/crm_repository.dart';
+import '../data/repositories/crm_status_data_repository.dart';
 import '../data/repositories/customers_repository.dart';
 import '../data/services/crm_sse_client.dart';
 import 'crm_chat_filters_controller.dart';
@@ -68,6 +69,10 @@ final crmRepositoryProvider = Provider<CrmRepository>((ref) {
     ref.watch(crmRemoteDataSourceProvider),
     ref.watch(localDbProvider),
   );
+});
+
+final crmStatusDataRepositoryProvider = Provider<CrmStatusDataRepository>((ref) {
+  return CrmStatusDataRepository();
 });
 
 final crmThreadsControllerProvider =
@@ -154,16 +159,28 @@ final crmRealtimeProvider = Provider<void>((ref) {
 
   final pendingChatIds = <String>{};
   Timer? timer;
+  bool _isRefreshing = false;
 
   void flush() {
     timer?.cancel();
     timer = null;
 
+    // Prevent multiple simultaneous refreshes
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+
     // Always refresh threads once for any CRM event.
     // Controllers are offline-first (cache local then refresh), so this keeps
     // immediate backend updates while maintaining a local base.
-    // ignore: unawaited_futures
-    ref.read(crmThreadsControllerProvider.notifier).refresh();
+    ref
+        .read(crmThreadsControllerProvider.notifier)
+        .refresh()
+        .then((_) {
+          _isRefreshing = false;
+        })
+        .catchError((e) {
+          _isRefreshing = false;
+        });
 
     final selected = ref.read(selectedThreadIdProvider);
     if (selected != null && pendingChatIds.contains(selected)) {
@@ -174,7 +191,8 @@ final crmRealtimeProvider = Provider<void>((ref) {
   }
 
   void scheduleFlush() {
-    timer ??= Timer(const Duration(milliseconds: 250), flush);
+    // Increased debounce to 300ms to reduce DB pressure
+    timer ??= Timer(const Duration(milliseconds: 300), flush);
   }
 
   final sub = client.stream().listen(

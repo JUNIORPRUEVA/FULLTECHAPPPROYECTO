@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/storage/local_db_interface.dart';
@@ -9,11 +10,9 @@ import '../models/sales_models.dart';
 import 'sales_api.dart';
 
 class SalesRepository {
-  SalesRepository({
-    required SalesApi api,
-    required LocalDb db,
-  })  : _api = api,
-        _db = db;
+  SalesRepository({required SalesApi api, required LocalDb db})
+    : _api = api,
+      _db = db;
 
   final SalesApi _api;
   final LocalDb _db;
@@ -96,7 +95,8 @@ class SalesRepository {
       to: to?.toIso8601String(),
     );
 
-    final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final items =
+        (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
 
     for (final it in items) {
       final record = SalesRecord.fromServerJson(it, empresaId: empresaId);
@@ -160,10 +160,7 @@ class SalesRepository {
       module: _syncModule,
       op: 'create',
       entityId: id,
-      payloadJson: jsonEncode({
-        'id': id,
-        ...record.toCreatePayload(),
-      }),
+      payloadJson: jsonEncode({'id': id, ...record.toCreatePayload()}),
     );
 
     for (final ev in evidences) {
@@ -226,20 +223,26 @@ class SalesRepository {
       id: existing.id,
       empresaId: existing.empresaId,
       userId: existing.userId,
-      customerName: (patch['customer_name'] as String?) ?? existing.customerName,
-      customerPhone: (patch['customer_phone'] as String?) ?? existing.customerPhone,
-      customerDocument: (patch['customer_document'] as String?) ?? existing.customerDocument,
-      productOrService: (patch['product_or_service'] as String?) ?? existing.productOrService,
+      customerName:
+          (patch['customer_name'] as String?) ?? existing.customerName,
+      customerPhone:
+          (patch['customer_phone'] as String?) ?? existing.customerPhone,
+      customerDocument:
+          (patch['customer_document'] as String?) ?? existing.customerDocument,
+      productOrService:
+          (patch['product_or_service'] as String?) ?? existing.productOrService,
       items: patchedItems,
       amount: (patch['amount'] as num?)?.toDouble() ?? existing.amount,
-      paymentMethod: (patch['payment_method'] as String?) ?? existing.paymentMethod,
+      paymentMethod:
+          (patch['payment_method'] as String?) ?? existing.paymentMethod,
       channel: (patch['channel'] as String?) ?? existing.channel,
       status: (patch['status'] as String?) ?? existing.status,
       notes: (patch['notes'] as String?) ?? existing.notes,
       soldAt: patch['sold_at'] is String
           ? DateTime.tryParse(patch['sold_at'] as String) ?? existing.soldAt
           : existing.soldAt,
-      evidenceRequired: (patch['evidence_required'] as bool?) ?? existing.evidenceRequired,
+      evidenceRequired:
+          (patch['evidence_required'] as bool?) ?? existing.evidenceRequired,
       evidenceCount: existing.evidenceCount,
       deleted: existing.deleted,
       deletedAt: existing.deletedAt,
@@ -286,6 +289,10 @@ class SalesRepository {
 
   /// Best-effort sync for queued sales ops.
   Future<void> syncPending() async {
+    // CRITICAL: Verify session exists before attempting any sync
+    final session = await _db.readSession();
+    if (session == null) return;
+
     final items = await _db.getPendingSyncItems();
     for (final item in items) {
       if (item.module != _syncModule) continue;
@@ -294,13 +301,20 @@ class SalesRepository {
         if (item.op == 'create') {
           final payload = jsonDecode(item.payloadJson) as Map<String, dynamic>;
           final localRow = await _db.getSalesRecord(id: item.entityId);
-          final localEvidenceCount = localRow == null ? null : SalesRecord.fromLocalRow(localRow).evidenceCount;
+          final localEvidenceCount = localRow == null
+              ? null
+              : SalesRecord.fromLocalRow(localRow).evidenceCount;
 
           final server = await _api.createSale(payload);
           final it = server['item'];
           if (it is Map<String, dynamic>) {
-            final empresaId = (it['empresa_id'] ?? it['empresaId'] ?? '').toString();
-            final record = SalesRecord.fromServerJson(it, empresaId: empresaId, syncStatus: SyncStatus.synced);
+            final empresaId = (it['empresa_id'] ?? it['empresaId'] ?? '')
+                .toString();
+            final record = SalesRecord.fromServerJson(
+              it,
+              empresaId: empresaId,
+              syncStatus: SyncStatus.synced,
+            );
             await _db.upsertSalesRecord(
               row: record.toLocalRow(overrideEvidenceCount: localEvidenceCount),
             );
@@ -315,8 +329,13 @@ class SalesRepository {
           final it = server['item'];
           if (it is Map<String, dynamic>) {
             final local = await _db.getSalesRecord(id: item.entityId);
-            final empresaId = (local?['empresa_id'] ?? it['empresa_id'] ?? '').toString();
-            final record = SalesRecord.fromServerJson(it, empresaId: empresaId, syncStatus: SyncStatus.synced);
+            final empresaId = (local?['empresa_id'] ?? it['empresa_id'] ?? '')
+                .toString();
+            final record = SalesRecord.fromServerJson(
+              it,
+              empresaId: empresaId,
+              syncStatus: SyncStatus.synced,
+            );
             await _db.upsertSalesRecord(row: record.toLocalRow());
           }
           await _db.markSyncItemSent(item.id);
@@ -354,7 +373,8 @@ class SalesRepository {
             evidencePayload = {
               'type': type,
               'file_path': url,
-              if (mimeType != null && mimeType.trim().isNotEmpty) 'mime_type': mimeType,
+              if (mimeType != null && mimeType.trim().isNotEmpty)
+                'mime_type': mimeType,
             };
           } else {
             final value = (payload['value'] ?? '').toString();
@@ -368,7 +388,11 @@ class SalesRepository {
           final server = await _api.addEvidence(saleId, evidencePayload);
           final it = server['item'];
           if (it is Map<String, dynamic>) {
-            final evidence = SalesEvidence.fromServerJson(it, saleId: saleId, syncStatus: SyncStatus.synced);
+            final evidence = SalesEvidence.fromServerJson(
+              it,
+              saleId: saleId,
+              syncStatus: SyncStatus.synced,
+            );
             await _db.upsertSalesEvidence(row: evidence.toLocalRow());
           }
 
@@ -379,6 +403,12 @@ class SalesRepository {
         // Unknown op
         await _db.markSyncItemSent(item.id);
       } catch (e) {
+        // CRITICAL: Stop retry loop on 401
+        if (e is DioException && e.response?.statusCode == 401) {
+          await _db.markSyncItemSent(item.id); // Remove from queue
+          return; // Stop processing - session is invalid
+        }
+
         await _db.markSyncItemError(item.id);
 
         // Best-effort: mark local entity as error (for create/update only)
@@ -387,13 +417,18 @@ class SalesRepository {
             final row = await _db.getSalesRecord(id: item.entityId);
             if (row != null) {
               final current = SalesRecord.fromLocalRow(row);
-              final failed = current.copyWith(syncStatus: SyncStatus.error, lastError: e.toString());
+              final failed = current.copyWith(
+                syncStatus: SyncStatus.error,
+                lastError: e.toString(),
+              );
               await _db.upsertSalesRecord(row: failed.toLocalRow());
             }
           }
           if (item.op == 'add_evidence') {
-            final payload = jsonDecode(item.payloadJson) as Map<String, dynamic>;
-            final evidenceId = (payload['evidence_id'] ?? item.entityId).toString();
+            final payload =
+                jsonDecode(item.payloadJson) as Map<String, dynamic>;
+            final evidenceId = (payload['evidence_id'] ?? item.entityId)
+                .toString();
             // There's no getEvidence method; just upsert a minimal error marker.
             await _db.upsertSalesEvidence(
               row: {
@@ -502,14 +537,12 @@ class EvidenceDraft {
     required this.bytes,
     required this.filename,
     this.mimeType,
-  })  : isFile = true,
-        value = '';
+  }) : isFile = true,
+       value = '';
 
-  const EvidenceDraft.value({
-    required this.type,
-    required this.value,
-  })  : isFile = false,
-        bytes = const [],
-        filename = '',
-        mimeType = null;
+  const EvidenceDraft.value({required this.type, required this.value})
+    : isFile = false,
+      bytes = const [],
+      filename = '',
+      mimeType = null;
 }

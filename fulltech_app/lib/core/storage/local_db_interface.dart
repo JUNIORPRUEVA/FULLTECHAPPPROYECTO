@@ -58,32 +58,30 @@ abstract class LocalDb {
     required String json,
   });
 
-  Future<List<String>> listEntitiesJson({
+  /// Direct upsert without queueing - use ONLY inside a queued operation
+  Future<void> upsertEntityDirect({
     required String store,
+    required String id,
+    required String json,
   });
+
+  Future<List<String>> listEntitiesJson({required String store});
 
   /// Reads a single cached entity JSON by id.
   ///
   /// Returns null when not found.
-  Future<String?> getEntityJson({
-    required String store,
-    required String id,
-  });
+  Future<String?> getEntityJson({required String store, required String id});
 
-  Future<void> deleteEntity({
-    required String store,
-    required String id,
-  });
+  Future<void> deleteEntity({required String store, required String id});
 
-  Future<void> clearStore({
-    required String store,
-  });
+  Future<void> clearStore({required String store});
+
+  /// Direct clear without queueing - use ONLY inside a queued operation
+  Future<void> clearStoreDirect({required String store});
 
   // === Cotizaciones (local mirror tables) ===
 
-  Future<void> upsertCotizacion({
-    required Map<String, Object?> row,
-  });
+  Future<void> upsertCotizacion({required Map<String, Object?> row});
 
   Future<void> replaceCotizacionItems({
     required String quotationId,
@@ -100,17 +98,13 @@ abstract class LocalDb {
     int offset = 0,
   });
 
-  Future<Map<String, Object?>?> getCotizacion({
-    required String id,
-  });
+  Future<Map<String, Object?>?> getCotizacion({required String id});
 
   Future<List<Map<String, Object?>>> listCotizacionItems({
     required String quotationId,
   });
 
-  Future<void> deleteCotizacion({
-    required String id,
-  });
+  Future<void> deleteCotizacion({required String id});
 
   // === Presupuesto draft (local-only) ===
 
@@ -123,19 +117,13 @@ abstract class LocalDb {
     required String draftJson,
   });
 
-  Future<String?> loadPresupuestoDraftJson({
-    required String draftKey,
-  });
+  Future<String?> loadPresupuestoDraftJson({required String draftKey});
 
-  Future<void> clearPresupuestoDraft({
-    required String draftKey,
-  });
+  Future<void> clearPresupuestoDraft({required String draftKey});
 
   // === Cartas (letters) local mirror tables ===
 
-  Future<void> upsertCarta({
-    required Map<String, Object?> row,
-  });
+  Future<void> upsertCarta({required Map<String, Object?> row});
 
   Future<List<Map<String, Object?>>> listCartas({
     required String empresaId,
@@ -148,9 +136,7 @@ abstract class LocalDb {
     int offset = 0,
   });
 
-  Future<Map<String, Object?>?> getCarta({
-    required String id,
-  });
+  Future<Map<String, Object?>?> getCarta({required String id});
 
   Future<void> markCartaDeleted({
     required String id,
@@ -159,9 +145,7 @@ abstract class LocalDb {
 
   // === Ventas (Sales) local mirror tables ===
 
-  Future<void> upsertSalesRecord({
-    required Map<String, Object?> row,
-  });
+  Future<void> upsertSalesRecord({required Map<String, Object?> row});
 
   Future<List<Map<String, Object?>>> listSalesRecords({
     required String empresaId,
@@ -175,18 +159,14 @@ abstract class LocalDb {
     int offset = 0,
   });
 
-  Future<Map<String, Object?>?> getSalesRecord({
-    required String id,
-  });
+  Future<Map<String, Object?>?> getSalesRecord({required String id});
 
   Future<void> markSalesRecordDeleted({
     required String id,
     required String deletedAtIso,
   });
 
-  Future<void> upsertSalesEvidence({
-    required Map<String, Object?> row,
-  });
+  Future<void> upsertSalesEvidence({required Map<String, Object?> row});
 
   Future<List<Map<String, Object?>>> listSalesEvidence({
     required String saleId,
@@ -194,9 +174,7 @@ abstract class LocalDb {
 
   // === Operaciones (Operations) local mirror tables ===
 
-  Future<void> upsertOperationsJob({
-    required Map<String, Object?> row,
-  });
+  Future<void> upsertOperationsJob({required Map<String, Object?> row});
 
   Future<List<Map<String, Object?>>> listOperationsJobs({
     required String empresaId,
@@ -209,18 +187,14 @@ abstract class LocalDb {
     int offset = 0,
   });
 
-  Future<Map<String, Object?>?> getOperationsJob({
-    required String id,
-  });
+  Future<Map<String, Object?>?> getOperationsJob({required String id});
 
   Future<void> markOperationsJobDeleted({
     required String id,
     required String deletedAtIso,
   });
 
-  Future<void> upsertOperationsSurvey({
-    required Map<String, Object?> row,
-  });
+  Future<void> upsertOperationsSurvey({required Map<String, Object?> row});
 
   Future<Map<String, Object?>?> getOperationsSurveyByJob({
     required String jobId,
@@ -235,9 +209,7 @@ abstract class LocalDb {
     required String surveyId,
   });
 
-  Future<void> upsertOperationsSchedule({
-    required Map<String, Object?> row,
-  });
+  Future<void> upsertOperationsSchedule({required Map<String, Object?> row});
 
   Future<Map<String, Object?>?> getOperationsScheduleByJob({
     required String jobId,

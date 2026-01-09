@@ -56,7 +56,9 @@ class LocalDbWeb implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_store_entities_store ON store_entities(store);');
+        await db.execute(
+          'CREATE INDEX idx_store_entities_store ON store_entities(store);',
+        );
 
         await db.execute('''
           CREATE TABLE cotizaciones(
@@ -81,9 +83,15 @@ class LocalDbWeb implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_cotizaciones_empresa_created_at ON cotizaciones(empresa_id, created_at);');
-        await db.execute('CREATE INDEX idx_cotizaciones_empresa_status ON cotizaciones(empresa_id, status);');
-        await db.execute('CREATE INDEX idx_cotizaciones_empresa_customer ON cotizaciones(empresa_id, customer_name);');
+        await db.execute(
+          'CREATE INDEX idx_cotizaciones_empresa_created_at ON cotizaciones(empresa_id, created_at);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_cotizaciones_empresa_status ON cotizaciones(empresa_id, status);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_cotizaciones_empresa_customer ON cotizaciones(empresa_id, customer_name);',
+        );
 
         await db.execute('''
           CREATE TABLE cotizacion_items(
@@ -102,7 +110,9 @@ class LocalDbWeb implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_cotizacion_items_quotation ON cotizacion_items(quotation_id);');
+        await db.execute(
+          'CREATE INDEX idx_cotizacion_items_quotation ON cotizacion_items(quotation_id);',
+        );
 
         await db.execute('''
           CREATE TABLE presupuesto_draft(
@@ -196,7 +206,9 @@ class LocalDbWeb implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_sale_evidence_sale_id ON sale_evidence(sale_id);');
+        await db.execute(
+          'CREATE INDEX idx_sale_evidence_sale_id ON sale_evidence(sale_id);',
+        );
 
         // === Operaciones (Operations) ===
         await db.execute('''
@@ -363,7 +375,9 @@ class LocalDbWeb implements LocalDb {
               PRIMARY KEY (store, id)
             );
           ''');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_store_entities_store ON store_entities(store);');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_store_entities_store ON store_entities(store);',
+          );
         }
 
         if (oldVersion < 3) {
@@ -525,7 +539,9 @@ class LocalDbWeb implements LocalDb {
 
         if (oldVersion < 7) {
           try {
-            await db.execute('ALTER TABLE sales_records ADD COLUMN details_json TEXT;');
+            await db.execute(
+              'ALTER TABLE sales_records ADD COLUMN details_json TEXT;',
+            );
           } catch (_) {
             // ignore (column may already exist)
           }
@@ -694,15 +710,11 @@ class LocalDbWeb implements LocalDb {
 
   @override
   Future<void> saveSession(AuthSession session) async {
-    await _database.insert(
-      'auth_session',
-      {
-        'id': 1,
-        'token': session.token,
-        'user_json': jsonEncode(session.user.toJson()),
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await _database.insert('auth_session', {
+      'id': 1,
+      'token': session.token,
+      'user_json': jsonEncode(session.user.toJson()),
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
   }
 
   @override
@@ -729,19 +741,15 @@ class LocalDbWeb implements LocalDb {
     required String payloadJson,
   }) async {
     final id = '${DateTime.now().millisecondsSinceEpoch}-$module-$entityId';
-    await _database.insert(
-      'sync_queue',
-      {
-        'id': id,
-        'module': module,
-        'op': op,
-        'entity_id': entityId,
-        'payload_json': payloadJson,
-        'created_at_ms': DateTime.now().millisecondsSinceEpoch,
-        'status': 0,
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await _database.insert('sync_queue', {
+      'id': id,
+      'module': module,
+      'op': op,
+      'entity_id': entityId,
+      'payload_json': payloadJson,
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      'status': 0,
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
 
     SyncSignals.instance.notifyQueueChanged();
   }
@@ -828,7 +836,7 @@ class LocalDbWeb implements LocalDb {
     int limit = 50,
     int offset = 0,
   }) async {
-    final where = <String>['empresa_id = ?','deleted_at IS NULL'];
+    final where = <String>['empresa_id = ?', 'deleted_at IS NULL'];
     final args = <Object?>[empresaId];
 
     if (status != null && status.trim().isNotEmpty) {
@@ -853,7 +861,9 @@ class LocalDbWeb implements LocalDb {
 
     if (q != null && q.trim().isNotEmpty) {
       final qq = '%${q.trim()}%';
-      where.add('(customer_name LIKE ? OR customer_phone LIKE ? OR subject LIKE ?)');
+      where.add(
+        '(customer_name LIKE ? OR customer_phone LIKE ? OR subject LIKE ?)',
+      );
       args.addAll([qq, qq, qq]);
     }
 
@@ -871,19 +881,23 @@ class LocalDbWeb implements LocalDb {
 
   @override
   Future<Map<String, Object?>?> getCarta({required String id}) async {
-    final rows = await _database.query('cartas', where: 'id = ?', whereArgs: [id]);
+    final rows = await _database.query(
+      'cartas',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     if (rows.isEmpty) return null;
     return rows.first;
   }
 
   @override
-  Future<void> markCartaDeleted({required String id, required String deletedAtIso}) async {
+  Future<void> markCartaDeleted({
+    required String id,
+    required String deletedAtIso,
+  }) async {
     await _database.update(
       'cartas',
-      {
-        'deleted_at': deletedAtIso,
-        'sync_status': 'pending',
-      },
+      {'deleted_at': deletedAtIso, 'sync_status': 'pending'},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -968,14 +982,13 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<void> markSalesRecordDeleted({required String id, required String deletedAtIso}) async {
+  Future<void> markSalesRecordDeleted({
+    required String id,
+    required String deletedAtIso,
+  }) async {
     await _database.update(
       'sales_records',
-      {
-        'deleted': 1,
-        'deleted_at': deletedAtIso,
-        'sync_status': 'pending',
-      },
+      {'deleted': 1, 'deleted_at': deletedAtIso, 'sync_status': 'pending'},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -991,7 +1004,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listSalesEvidence({required String saleId}) async {
+  Future<List<Map<String, Object?>>> listSalesEvidence({
+    required String saleId,
+  }) async {
     final rows = await _database.query(
       'sale_evidence',
       where: 'sale_id = ?',
@@ -1082,21 +1097,22 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<void> markOperationsJobDeleted({required String id, required String deletedAtIso}) async {
+  Future<void> markOperationsJobDeleted({
+    required String id,
+    required String deletedAtIso,
+  }) async {
     await _database.update(
       'operations_jobs',
-      {
-        'deleted': 1,
-        'deleted_at': deletedAtIso,
-        'sync_status': 'pending',
-      },
+      {'deleted': 1, 'deleted_at': deletedAtIso, 'sync_status': 'pending'},
       where: 'id = ?',
       whereArgs: [id],
     );
   }
 
   @override
-  Future<void> upsertOperationsSurvey({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsSurvey({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_surveys',
       row,
@@ -1105,7 +1121,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<Map<String, Object?>?> getOperationsSurveyByJob({required String jobId}) async {
+  Future<Map<String, Object?>?> getOperationsSurveyByJob({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_surveys',
       where: 'job_id = ?',
@@ -1138,7 +1156,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listOperationsSurveyMedia({required String surveyId}) async {
+  Future<List<Map<String, Object?>>> listOperationsSurveyMedia({
+    required String surveyId,
+  }) async {
     final rows = await _database.query(
       'operations_survey_media',
       where: 'survey_id = ?',
@@ -1149,7 +1169,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<void> upsertOperationsSchedule({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsSchedule({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_schedule',
       row,
@@ -1158,7 +1180,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<Map<String, Object?>?> getOperationsScheduleByJob({required String jobId}) async {
+  Future<Map<String, Object?>?> getOperationsScheduleByJob({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_schedule',
       where: 'job_id = ?',
@@ -1170,7 +1194,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<void> upsertOperationsInstallationReport({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsInstallationReport({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_installation_reports',
       row,
@@ -1179,7 +1205,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listOperationsInstallationReports({required String jobId}) async {
+  Future<List<Map<String, Object?>>> listOperationsInstallationReports({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_installation_reports',
       where: 'job_id = ?',
@@ -1190,7 +1218,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<void> upsertOperationsWarrantyTicket({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsWarrantyTicket({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_warranty_tickets',
       row,
@@ -1199,7 +1229,9 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listOperationsWarrantyTickets({required String jobId}) async {
+  Future<List<Map<String, Object?>>> listOperationsWarrantyTickets({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_warranty_tickets',
       where: 'job_id = ?',
@@ -1258,16 +1290,22 @@ class LocalDbWeb implements LocalDb {
     required String id,
     required String json,
   }) async {
-    await _database.insert(
-      'store_entities',
-      {
-        'store': store,
-        'id': id,
-        'json': json,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await _database.insert('store_entities', {
+      'store': store,
+      'id': id,
+      'json': json,
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+  }
+
+  @override
+  Future<void> upsertEntityDirect({
+    required String store,
+    required String id,
+    required String json,
+  }) async {
+    // Web version doesn't need queueing, just forward to upsertEntity
+    await upsertEntity(store: store, id: id, json: json);
   }
 
   @override
@@ -1284,7 +1322,10 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<String?> getEntityJson({required String store, required String id}) async {
+  Future<String?> getEntityJson({
+    required String store,
+    required String id,
+  }) async {
     final rows = await _database.query(
       'store_entities',
       columns: ['json'],
@@ -1312,6 +1353,12 @@ class LocalDbWeb implements LocalDb {
       where: 'store = ?',
       whereArgs: [store],
     );
+  }
+
+  @override
+  Future<void> clearStoreDirect({required String store}) async {
+    // Web version doesn't need queueing, just forward to clearStore
+    await clearStore(store: store);
   }
 
   // === Cotizaciones (local mirror tables) ===
@@ -1361,7 +1408,9 @@ class LocalDbWeb implements LocalDb {
 
     final qq = q?.trim();
     if (qq != null && qq.isNotEmpty) {
-      whereParts.add('(numero LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)');
+      whereParts.add(
+        '(numero LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)',
+      );
       final like = '%$qq%';
       whereArgs.add(like);
       whereArgs.add(like);
@@ -1429,11 +1478,7 @@ class LocalDbWeb implements LocalDb {
         where: 'quotation_id = ?',
         whereArgs: [id],
       );
-      await txn.delete(
-        'cotizaciones',
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      await txn.delete('cotizaciones', where: 'id = ?', whereArgs: [id]);
     });
   }
 
@@ -1442,21 +1487,15 @@ class LocalDbWeb implements LocalDb {
     required String draftKey,
     required String draftJson,
   }) async {
-    await _database.insert(
-      'presupuesto_draft',
-      {
-        'draft_key': draftKey,
-        'draft_json': draftJson,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await _database.insert('presupuesto_draft', {
+      'draft_key': draftKey,
+      'draft_json': draftJson,
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
   }
 
   @override
-  Future<String?> loadPresupuestoDraftJson({
-    required String draftKey,
-  }) async {
+  Future<String?> loadPresupuestoDraftJson({required String draftKey}) async {
     final rows = await _database.query(
       'presupuesto_draft',
       columns: ['draft_json'],
@@ -1469,9 +1508,7 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
-  Future<void> clearPresupuestoDraft({
-    required String draftKey,
-  }) async {
+  Future<void> clearPresupuestoDraft({required String draftKey}) async {
     await _database.delete(
       'presupuesto_draft',
       where: 'draft_key = ?',

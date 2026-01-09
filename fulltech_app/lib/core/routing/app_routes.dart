@@ -12,6 +12,7 @@ class AppRoutes {
   static const crearCartas = '/crear-cartas';
   static const operaciones = '/operaciones';
   static String operacionesDetail(String id) => '$operaciones/$id';
+  static const operacionesAgenda = '/operaciones/agenda';
   static const garantia = '/garantia';
   static const nomina = '/nomina';
   static const ventas = '/ventas';

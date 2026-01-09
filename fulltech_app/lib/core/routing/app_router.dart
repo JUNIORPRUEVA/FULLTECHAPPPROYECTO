@@ -21,6 +21,7 @@ import '../../features/cotizaciones/screens/informe_cotizaciones_screen.dart';
 import '../../features/cotizaciones/screens/crear_cartas_screen.dart';
 import '../../features/operaciones/screens/operaciones_list_screen.dart';
 import '../../features/operaciones/screens/operaciones_detail_screen.dart';
+import '../../features/operations/presentation/pages/agenda_page.dart';
 import '../../features/garantia/screens/garantia_list_screen.dart';
 import '../../features/nomina/screens/nomina_list_screen.dart';
 import '../../features/nomina/screens/payroll_run_detail_screen.dart';
@@ -167,6 +168,10 @@ GoRouter createRouter(Ref ref) {
             builder: (c, s) => OperacionesDetailScreen(
               title: 'Operación ${s.pathParameters['id']!}',
             ),
+          ),
+          GoRoute(
+            path: 'agenda',
+            builder: (c, s) => const AgendaPage(),
           ),
         ],
       ),

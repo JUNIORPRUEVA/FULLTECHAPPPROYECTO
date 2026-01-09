@@ -144,20 +144,21 @@ class ApiClient {
             final authHeader = error.requestOptions.headers['Authorization'];
             final hadAuthHeader = authHeader != null && authHeader.toString().trim().isNotEmpty;
 
+            final path = error.requestOptions.path;
             final detail =
-              '$status ${error.requestOptions.method} ${error.requestOptions.path} hadAuthHeader=$hadAuthHeader baseUrl=${dio.options.baseUrl}';
+              '$status ${error.requestOptions.method} $path hadAuthHeader=$hadAuthHeader';
 
-            if (kDebugMode) {
-              debugPrint(
-                '[AUTH][HTTP] $detail',
-              );
+            // CRITICAL: Only log ONCE per path to prevent spam
+            // Track last 401 path+time to avoid repeated logs
+            final now = DateTime.now();
+            final recent = _lastUnauthorizedAt != null &&
+                now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 5);
+            
+            if (kDebugMode && !recent) {
+              debugPrint('[AUTH][HTTP] $detail baseUrl=${dio.options.baseUrl}');
             }
 
             if (hadAuthHeader && !suppress) {
-              final now = DateTime.now();
-              final recent = _lastUnauthorizedAt != null &&
-                  now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 2);
-
               // Debounce/lock: avoid clearing session + emitting unauthorized repeatedly.
               if (!_handlingUnauthorized && !recent) {
                 _handlingUnauthorized = true;
@@ -172,6 +173,13 @@ class ApiClient {
                   // Release lock shortly after to allow future real logouts.
                   _handlingUnauthorized = false;
                 }
+              }
+            } else if (!hadAuthHeader && !recent) {
+              // WARNING: Request sent without auth header
+              // This indicates a bug - authenticated endpoints should always have the header
+              if (kDebugMode) {
+                debugPrint('[AUTH][BUG] Request to $path sent without Authorization header!');
+                debugPrint('[AUTH][BUG] This should not happen for protected endpoints.');
               }
             }
           }

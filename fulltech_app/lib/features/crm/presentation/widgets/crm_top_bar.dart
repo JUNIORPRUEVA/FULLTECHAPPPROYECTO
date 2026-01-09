@@ -146,6 +146,22 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
                 ),
               ),
               DropdownMenuItem(
+                value: 'compra_finalizada',
+                child: Text(
+                  'Compra finalizada',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              DropdownMenuItem(
+                value: 'servicio_reservado',
+                child: Text(
+                  'Servicio reservado',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              DropdownMenuItem(
                 value: 'no_interesado',
                 child: Text(
                   'No interesado',
@@ -157,6 +173,22 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
                 value: 'activo',
                 child: Text(
                   'Activo',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              DropdownMenuItem(
+                value: 'en_garantia',
+                child: Text(
+                  'En garantía',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              DropdownMenuItem(
+                value: 'solucion_garantia',
+                child: Text(
+                  'Solución de garantía',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

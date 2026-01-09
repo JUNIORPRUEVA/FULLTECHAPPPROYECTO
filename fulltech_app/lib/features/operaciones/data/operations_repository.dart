@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/storage/local_db_interface.dart';
@@ -8,11 +9,9 @@ import '../models/operations_models.dart';
 import 'operations_api.dart';
 
 class OperationsRepository {
-  OperationsRepository({
-    required OperationsApi api,
-    required LocalDb db,
-  })  : _api = api,
-        _db = db;
+  OperationsRepository({required OperationsApi api, required LocalDb db})
+    : _api = api,
+      _db = db;
 
   final OperationsApi _api;
   final LocalDb _db;
@@ -91,7 +90,9 @@ class OperationsRepository {
       offset: offset,
     );
 
-    final items = (data['items'] as List?)?.whereType<Map>()
+    final items =
+        (data['items'] as List?)
+            ?.whereType<Map>()
             .map((e) => e.cast<String, dynamic>())
             .toList(growable: false) ??
         const <Map<String, dynamic>>[];
@@ -112,17 +113,36 @@ class OperationsRepository {
           row: {
             'id': (scheduleJson['id'] ?? '').toString(),
             'job_id': job.id,
-            'scheduled_date': (scheduleJson['scheduled_date'] ?? scheduleJson['scheduledDate'] ?? '').toString(),
+            'scheduled_date':
+                (scheduleJson['scheduled_date'] ??
+                        scheduleJson['scheduledDate'] ??
+                        '')
+                    .toString(),
             'preferred_time': scheduleJson['preferred_time']?.toString(),
-            'assigned_tech_id': (scheduleJson['assigned_tech_id'] ?? scheduleJson['assignedTechId'] ?? '').toString(),
+            'assigned_tech_id':
+                (scheduleJson['assigned_tech_id'] ??
+                        scheduleJson['assignedTechId'] ??
+                        '')
+                    .toString(),
             'additional_tech_ids_json': jsonEncode(
               (scheduleJson['additional_tech_ids'] is List)
-                  ? (scheduleJson['additional_tech_ids'] as List).map((e) => e.toString()).toList()
+                  ? (scheduleJson['additional_tech_ids'] as List)
+                        .map((e) => e.toString())
+                        .toList()
                   : const <String>[],
             ),
-            'customer_availability_notes': scheduleJson['customer_availability_notes']?.toString(),
-            'created_at': (scheduleJson['created_at'] ?? scheduleJson['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
-            'updated_at': (scheduleJson['updated_at'] ?? scheduleJson['updatedAt'] ?? DateTime.now().toIso8601String()).toString(),
+            'customer_availability_notes':
+                scheduleJson['customer_availability_notes']?.toString(),
+            'created_at':
+                (scheduleJson['created_at'] ??
+                        scheduleJson['createdAt'] ??
+                        DateTime.now().toIso8601String())
+                    .toString(),
+            'updated_at':
+                (scheduleJson['updated_at'] ??
+                        scheduleJson['updatedAt'] ??
+                        DateTime.now().toIso8601String())
+                    .toString(),
             'sync_status': 'synced',
             'last_error': null,
           },
@@ -142,12 +162,26 @@ class OperationsRepository {
             'address_confirmed': surveyJson['address_confirmed']?.toString(),
             'complexity': (surveyJson['complexity'] ?? 'basic').toString(),
             'site_notes': surveyJson['site_notes']?.toString(),
-            'tools_needed_json': surveyJson['tools_needed'] == null ? null : jsonEncode(surveyJson['tools_needed']),
-            'materials_needed_json': surveyJson['materials_needed'] == null ? null : jsonEncode(surveyJson['materials_needed']),
-            'products_to_use_json': surveyJson['products_to_use'] == null ? null : jsonEncode(surveyJson['products_to_use']),
-            'future_opportunities': surveyJson['future_opportunities']?.toString(),
-            'created_by_tech_id': (surveyJson['created_by_tech_id'] ?? surveyJson['createdByTechId'])?.toString(),
-            'created_at': (surveyJson['created_at'] ?? surveyJson['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+            'tools_needed_json': surveyJson['tools_needed'] == null
+                ? null
+                : jsonEncode(surveyJson['tools_needed']),
+            'materials_needed_json': surveyJson['materials_needed'] == null
+                ? null
+                : jsonEncode(surveyJson['materials_needed']),
+            'products_to_use_json': surveyJson['products_to_use'] == null
+                ? null
+                : jsonEncode(surveyJson['products_to_use']),
+            'future_opportunities': surveyJson['future_opportunities']
+                ?.toString(),
+            'created_by_tech_id':
+                (surveyJson['created_by_tech_id'] ??
+                        surveyJson['createdByTechId'])
+                    ?.toString(),
+            'created_at':
+                (surveyJson['created_at'] ??
+                        surveyJson['createdAt'] ??
+                        DateTime.now().toIso8601String())
+                    .toString(),
             'sync_status': 'synced',
             'last_error': null,
           },
@@ -163,12 +197,20 @@ class OperationsRepository {
               'id': (jt['id'] ?? '').toString(),
               'job_id': job.id,
               'reason': (jt['reason'] ?? '').toString(),
-              'reported_at': (jt['reported_at'] ?? jt['reportedAt'] ?? DateTime.now().toIso8601String()).toString(),
+              'reported_at':
+                  (jt['reported_at'] ??
+                          jt['reportedAt'] ??
+                          DateTime.now().toIso8601String())
+                      .toString(),
               'status': (jt['status'] ?? 'pending').toString(),
               'assigned_tech_id': jt['assigned_tech_id']?.toString(),
               'resolution_notes': jt['resolution_notes']?.toString(),
               'resolved_at': jt['resolved_at']?.toString(),
-              'created_at': (jt['created_at'] ?? jt['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+              'created_at':
+                  (jt['created_at'] ??
+                          jt['createdAt'] ??
+                          DateTime.now().toIso8601String())
+                      .toString(),
               'sync_status': 'synced',
               'last_error': null,
             },
@@ -178,11 +220,18 @@ class OperationsRepository {
     }
   }
 
-  Future<Map<String, dynamic>> getJobDetailFromServer({required String jobId}) async {
+  Future<Map<String, dynamic>> getJobDetailFromServer({
+    required String jobId,
+  }) async {
     final data = await _api.getJob(jobId);
 
     final job = OperationsJob.fromServerJson(data);
-    await _db.upsertOperationsJob(row: job.toLocalRow(overrideSyncStatus: 'synced', overrideLastError: null));
+    await _db.upsertOperationsJob(
+      row: job.toLocalRow(
+        overrideSyncStatus: 'synced',
+        overrideLastError: null,
+      ),
+    );
 
     final survey = data['survey'];
     if (survey is Map) {
@@ -197,12 +246,23 @@ class OperationsRepository {
           'address_confirmed': s['address_confirmed']?.toString(),
           'complexity': (s['complexity'] ?? 'basic').toString(),
           'site_notes': s['site_notes']?.toString(),
-          'tools_needed_json': s['tools_needed'] == null ? null : jsonEncode(s['tools_needed']),
-          'materials_needed_json': s['materials_needed'] == null ? null : jsonEncode(s['materials_needed']),
-          'products_to_use_json': s['products_to_use'] == null ? null : jsonEncode(s['products_to_use']),
+          'tools_needed_json': s['tools_needed'] == null
+              ? null
+              : jsonEncode(s['tools_needed']),
+          'materials_needed_json': s['materials_needed'] == null
+              ? null
+              : jsonEncode(s['materials_needed']),
+          'products_to_use_json': s['products_to_use'] == null
+              ? null
+              : jsonEncode(s['products_to_use']),
           'future_opportunities': s['future_opportunities']?.toString(),
-          'created_by_tech_id': (s['created_by_tech_id'] ?? s['createdByTechId'])?.toString(),
-          'created_at': (s['created_at'] ?? s['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+          'created_by_tech_id':
+              (s['created_by_tech_id'] ?? s['createdByTechId'])?.toString(),
+          'created_at':
+              (s['created_at'] ??
+                      s['createdAt'] ??
+                      DateTime.now().toIso8601String())
+                  .toString(),
           'sync_status': 'synced',
           'last_error': null,
         },
@@ -217,14 +277,22 @@ class OperationsRepository {
             'id': (jm['id'] ?? _newId()).toString(),
             'survey_id': (s['id'] ?? '').toString(),
             'type': (jm['type'] ?? 'image').toString(),
-            'url_or_path': (jm['url_or_path'] ?? jm['urlOrPath'] ?? '').toString(),
+            'url_or_path': (jm['url_or_path'] ?? jm['urlOrPath'] ?? '')
+                .toString(),
             'caption': jm['caption']?.toString(),
-            'created_at': (jm['created_at'] ?? jm['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+            'created_at':
+                (jm['created_at'] ??
+                        jm['createdAt'] ??
+                        DateTime.now().toIso8601String())
+                    .toString(),
             'sync_status': 'synced',
             'last_error': null,
           });
         }
-        await _db.replaceOperationsSurveyMedia(surveyId: (s['id'] ?? '').toString(), items: items);
+        await _db.replaceOperationsSurveyMedia(
+          surveyId: (s['id'] ?? '').toString(),
+          items: items,
+        );
       }
     }
 
@@ -235,17 +303,30 @@ class OperationsRepository {
         row: {
           'id': (sc['id'] ?? '').toString(),
           'job_id': job.id,
-          'scheduled_date': (sc['scheduled_date'] ?? sc['scheduledDate'] ?? '').toString(),
+          'scheduled_date': (sc['scheduled_date'] ?? sc['scheduledDate'] ?? '')
+              .toString(),
           'preferred_time': sc['preferred_time']?.toString(),
-          'assigned_tech_id': (sc['assigned_tech_id'] ?? sc['assignedTechId'] ?? '').toString(),
+          'assigned_tech_id':
+              (sc['assigned_tech_id'] ?? sc['assignedTechId'] ?? '').toString(),
           'additional_tech_ids_json': jsonEncode(
             (sc['additional_tech_ids'] is List)
-                ? (sc['additional_tech_ids'] as List).map((e) => e.toString()).toList()
+                ? (sc['additional_tech_ids'] as List)
+                      .map((e) => e.toString())
+                      .toList()
                 : const <String>[],
           ),
-          'customer_availability_notes': sc['customer_availability_notes']?.toString(),
-          'created_at': (sc['created_at'] ?? sc['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
-          'updated_at': (sc['updated_at'] ?? sc['updatedAt'] ?? DateTime.now().toIso8601String()).toString(),
+          'customer_availability_notes': sc['customer_availability_notes']
+              ?.toString(),
+          'created_at':
+              (sc['created_at'] ??
+                      sc['createdAt'] ??
+                      DateTime.now().toIso8601String())
+                  .toString(),
+          'updated_at':
+              (sc['updated_at'] ??
+                      sc['updatedAt'] ??
+                      DateTime.now().toIso8601String())
+                  .toString(),
           'sync_status': 'synced',
           'last_error': null,
         },
@@ -264,11 +345,24 @@ class OperationsRepository {
             'finished_at': jr['finished_at']?.toString(),
             'tech_notes': jr['tech_notes']?.toString(),
             'work_done_summary': jr['work_done_summary']?.toString(),
-            'installed_products_json': jr['installed_products'] == null ? null : jsonEncode(jr['installed_products']),
-            'media_urls_json': jr['media_urls'] == null ? jsonEncode(const <String>[]) : jsonEncode((jr['media_urls'] as List).map((e) => e.toString()).toList()),
+            'installed_products_json': jr['installed_products'] == null
+                ? null
+                : jsonEncode(jr['installed_products']),
+            'media_urls_json': jr['media_urls'] == null
+                ? jsonEncode(const <String>[])
+                : jsonEncode(
+                    (jr['media_urls'] as List)
+                        .map((e) => e.toString())
+                        .toList(),
+                  ),
             'signature_name': jr['signature_name']?.toString(),
-            'created_by_tech_id': (jr['created_by_tech_id'] ?? jr['createdByTechId'])?.toString(),
-            'created_at': (jr['created_at'] ?? jr['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+            'created_by_tech_id':
+                (jr['created_by_tech_id'] ?? jr['createdByTechId'])?.toString(),
+            'created_at':
+                (jr['created_at'] ??
+                        jr['createdAt'] ??
+                        DateTime.now().toIso8601String())
+                    .toString(),
             'sync_status': 'synced',
             'last_error': null,
           },
@@ -285,12 +379,20 @@ class OperationsRepository {
             'id': (jt['id'] ?? '').toString(),
             'job_id': job.id,
             'reason': (jt['reason'] ?? '').toString(),
-            'reported_at': (jt['reported_at'] ?? jt['reportedAt'] ?? DateTime.now().toIso8601String()).toString(),
+            'reported_at':
+                (jt['reported_at'] ??
+                        jt['reportedAt'] ??
+                        DateTime.now().toIso8601String())
+                    .toString(),
             'status': (jt['status'] ?? 'pending').toString(),
             'assigned_tech_id': jt['assigned_tech_id']?.toString(),
             'resolution_notes': jt['resolution_notes']?.toString(),
             'resolved_at': jt['resolved_at']?.toString(),
-            'created_at': (jt['created_at'] ?? jt['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+            'created_at':
+                (jt['created_at'] ??
+                        jt['createdAt'] ??
+                        DateTime.now().toIso8601String())
+                    .toString(),
             'sync_status': 'synced',
             'last_error': null,
           },
@@ -307,33 +409,47 @@ class OperationsRepository {
     return OperationsJob.fromLocalRow(row);
   }
 
-  Future<OperationsSurvey?> getLocalSurveyByJobId({required String jobId}) async {
+  Future<OperationsSurvey?> getLocalSurveyByJobId({
+    required String jobId,
+  }) async {
     final row = await _db.getOperationsSurveyByJob(jobId: jobId);
     if (row == null) return null;
     return OperationsSurvey.fromLocalRow(row);
   }
 
-  Future<List<OperationsSurveyMedia>> listLocalSurveyMediaByJobId({required String jobId}) async {
+  Future<List<OperationsSurveyMedia>> listLocalSurveyMediaByJobId({
+    required String jobId,
+  }) async {
     final survey = await getLocalSurveyByJobId(jobId: jobId);
     if (survey == null) return const <OperationsSurveyMedia>[];
     final rows = await _db.listOperationsSurveyMedia(surveyId: survey.id);
     return rows.map(OperationsSurveyMedia.fromLocalRow).toList(growable: false);
   }
 
-  Future<OperationsSchedule?> getLocalScheduleByJobId({required String jobId}) async {
+  Future<OperationsSchedule?> getLocalScheduleByJobId({
+    required String jobId,
+  }) async {
     final row = await _db.getOperationsScheduleByJob(jobId: jobId);
     if (row == null) return null;
     return OperationsSchedule.fromLocalRow(row);
   }
 
-  Future<List<OperationsInstallationReport>> listLocalInstallationReports({required String jobId}) async {
+  Future<List<OperationsInstallationReport>> listLocalInstallationReports({
+    required String jobId,
+  }) async {
     final rows = await _db.listOperationsInstallationReports(jobId: jobId);
-    return rows.map(OperationsInstallationReport.fromLocalRow).toList(growable: false);
+    return rows
+        .map(OperationsInstallationReport.fromLocalRow)
+        .toList(growable: false);
   }
 
-  Future<List<OperationsWarrantyTicket>> listLocalWarrantyTickets({required String jobId}) async {
+  Future<List<OperationsWarrantyTicket>> listLocalWarrantyTickets({
+    required String jobId,
+  }) async {
     final rows = await _db.listOperationsWarrantyTickets(jobId: jobId);
-    return rows.map(OperationsWarrantyTicket.fromLocalRow).toList(growable: false);
+    return rows
+        .map(OperationsWarrantyTicket.fromLocalRow)
+        .toList(growable: false);
   }
 
   Future<OperationsJob> createJobLocalFirst({
@@ -381,7 +497,9 @@ class OperationsRepository {
       module: _syncModule,
       op: 'create_job',
       entityId: id,
-      payloadJson: jsonEncode(job.toCreatePayload(initialStatus: initialStatus)),
+      payloadJson: jsonEncode(
+        job.toCreatePayload(initialStatus: initialStatus),
+      ),
     );
 
     // ignore: unawaited_futures
@@ -796,6 +914,10 @@ class OperationsRepository {
   }
 
   Future<void> syncPending() async {
+    // CRITICAL: Verify session exists before attempting any sync
+    final session = await _db.readSession();
+    if (session == null) return;
+
     final items = await _db.getPendingSyncItems();
     for (final item in items) {
       if (item.module != _syncModule) continue;
@@ -805,7 +927,12 @@ class OperationsRepository {
           final payload = jsonDecode(item.payloadJson) as Map<String, dynamic>;
           final server = await _api.createJob(payload);
           final job = OperationsJob.fromServerJson(server);
-          await _db.upsertOperationsJob(row: job.toLocalRow(overrideSyncStatus: 'synced', overrideLastError: null));
+          await _db.upsertOperationsJob(
+            row: job.toLocalRow(
+              overrideSyncStatus: 'synced',
+              overrideLastError: null,
+            ),
+          );
           await _db.markSyncItemSent(item.id);
           continue;
         }
@@ -820,10 +947,14 @@ class OperationsRepository {
             getJobDetailFromServer(jobId: jobId);
           }
           // Mark local survey as synced
-          final localSurveyRow = await _db.getOperationsSurveyByJob(jobId: jobId);
+          final localSurveyRow = await _db.getOperationsSurveyByJob(
+            jobId: jobId,
+          );
           if (localSurveyRow != null) {
             final localSurvey = OperationsSurvey.fromLocalRow(localSurveyRow);
-            await _db.upsertOperationsSurvey(row: localSurvey.toLocalRow(overrideSyncStatus: 'synced'));
+            await _db.upsertOperationsSurvey(
+              row: localSurvey.toLocalRow(overrideSyncStatus: 'synced'),
+            );
           }
 
           // If server returned media, we keep local media as-is.
@@ -889,6 +1020,12 @@ class OperationsRepository {
         // Unknown op: mark as error.
         await _db.markSyncItemError(item.id);
       } catch (e) {
+        // CRITICAL: Stop retry loop on 401
+        if (e is DioException && e.response?.statusCode == 401) {
+          await _db.markSyncItemSent(item.id);
+          return;
+        }
+
         await _db.markSyncItemError(item.id);
 
         // Best-effort: mark job row with error if present

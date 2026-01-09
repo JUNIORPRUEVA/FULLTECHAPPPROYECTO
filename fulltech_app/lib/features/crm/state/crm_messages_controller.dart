@@ -11,6 +11,7 @@ import 'crm_messages_state.dart';
 class CrmMessagesController extends StateNotifier<CrmMessagesState> {
   final CrmRepository _repo;
   final String _threadId;
+  bool _isLoadingInitial = false;
 
   CrmMessagesController({required CrmRepository repo, required String threadId})
     : _repo = repo,
@@ -46,6 +47,10 @@ class CrmMessagesController extends StateNotifier<CrmMessagesState> {
   }
 
   Future<void> loadInitial() async {
+    // Prevent duplicate concurrent loads
+    if (_isLoadingInitial || state.loading) return;
+    _isLoadingInitial = true;
+
     if (kDebugMode) {
       debugPrint('[CRM][STATE] loadInitial threadId=$_threadId');
     }
@@ -98,6 +103,8 @@ class CrmMessagesController extends StateNotifier<CrmMessagesState> {
         );
       }
       state = state.copyWith(loading: false, error: _formatError(e));
+    } finally {
+      _isLoadingInitial = false;
     }
   }
 

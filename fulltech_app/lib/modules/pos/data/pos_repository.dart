@@ -9,8 +9,8 @@ import 'pos_api.dart';
 
 class PosRepository {
   PosRepository({required PosApi api, required LocalDb db})
-      : _api = api,
-        _db = db;
+    : _api = api,
+      _db = db;
 
   final PosApi _api;
   final LocalDb _db;
@@ -169,6 +169,10 @@ class PosRepository {
   ///
   /// Used by global AutoSync to upload offline checkouts once online.
   Future<void> syncPending() async {
+    // CRITICAL: Verify session exists before attempting any sync
+    final session = await _db.readSession();
+    if (session == null) return;
+
     final items = await _db.getPendingSyncItems();
 
     for (final item in items) {
@@ -188,7 +192,9 @@ class PosRepository {
           continue;
         }
 
-        final created = await _api.createSale(salePayload.cast<String, dynamic>());
+        final created = await _api.createSale(
+          salePayload.cast<String, dynamic>(),
+        );
         final createdData = (created['data'] as Map).cast<String, dynamic>();
         final saleId = (createdData['id'] ?? '').toString();
         if (saleId.trim().isEmpty) {
@@ -199,6 +205,11 @@ class PosRepository {
         await _api.paySale(saleId, payPayload.cast<String, dynamic>());
         await _db.markSyncItemSent(item.id);
       } on DioException catch (e) {
+        // CRITICAL: Stop retry loop on 401
+        if (e.response?.statusCode == 401) {
+          await _db.markSyncItemSent(item.id);
+          return;
+        }
         await _db.markSyncItemError(item.id);
         if (OfflineHttpQueue.isNetworkError(e)) return;
       } catch (e) {
@@ -333,7 +344,8 @@ class PosRepository {
     required List<({PosProduct product, double qty, double unitCost})> items,
   }) async {
     final payload = {
-      if (supplierId != null && supplierId.trim().isNotEmpty) 'supplier_id': supplierId,
+      if (supplierId != null && supplierId.trim().isNotEmpty)
+        'supplier_id': supplierId,
       'supplier_name': supplierName,
       'status': 'DRAFT',
       'items': items
@@ -369,7 +381,11 @@ class PosRepository {
     DateTime? from,
     DateTime? to,
   }) async {
-    final rows = await _api.listMovements(productId: productId, from: from, to: to);
+    final rows = await _api.listMovements(
+      productId: productId,
+      from: from,
+      to: to,
+    );
     return rows.map(PosStockMovement.fromJson).toList();
   }
 
@@ -378,23 +394,37 @@ class PosRepository {
     required double qtyChange,
     String? note,
   }) async {
-    await _api.adjustInventory(productId: productId, qtyChange: qtyChange, note: note);
+    await _api.adjustInventory(
+      productId: productId,
+      qtyChange: qtyChange,
+      note: note,
+    );
   }
 
-  Future<List<PosCreditAccountRow>> listCredit({String? status, String? search}) async {
+  Future<List<PosCreditAccountRow>> listCredit({
+    String? status,
+    String? search,
+  }) async {
     final rows = await _api.listCredit(status: status, search: search);
     return rows.map(PosCreditAccountRow.fromJson).toList();
   }
 
-  Future<({PosSale sale, Map<String, dynamic> credit})> getCreditDetail(String id) async {
+  Future<({PosSale sale, Map<String, dynamic> credit})> getCreditDetail(
+    String id,
+  ) async {
     final res = await _api.getCredit(id);
     final data = (res['data'] as Map).cast<String, dynamic>();
-    final sale = PosSale.fromJson((data['sale'] as Map).cast<String, dynamic>());
+    final sale = PosSale.fromJson(
+      (data['sale'] as Map).cast<String, dynamic>(),
+    );
     final credit = (data['credit'] as Map).cast<String, dynamic>();
     return (sale: sale, credit: credit);
   }
 
-  Future<({double total, int count, double avgTicket})> salesSummary({DateTime? from, DateTime? to}) async {
+  Future<({double total, int count, double avgTicket})> salesSummary({
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final res = await _api.salesSummary(from: from, to: to);
     final data = (res['data'] as Map).cast<String, dynamic>();
     return (
@@ -404,7 +434,10 @@ class PosRepository {
     );
   }
 
-  Future<List<Map<String, dynamic>>> topProducts({DateTime? from, DateTime? to}) async {
+  Future<List<Map<String, dynamic>>> topProducts({
+    DateTime? from,
+    DateTime? to,
+  }) async {
     return _api.topProducts(from: from, to: to);
   }
 
@@ -412,7 +445,10 @@ class PosRepository {
     return _api.lowStockReport();
   }
 
-  Future<({double total, int count})> purchasesSummary({DateTime? from, DateTime? to}) async {
+  Future<({double total, int count})> purchasesSummary({
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final res = await _api.purchasesSummary(from: from, to: to);
     final data = (res['data'] as Map).cast<String, dynamic>();
     return (

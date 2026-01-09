@@ -16,10 +16,10 @@ class LettersRepository {
     required AiLettersApi aiApi,
     required CompanySettingsApi companySettingsApi,
     required LocalDb db,
-  })  : _lettersApi = lettersApi,
-        _aiApi = aiApi,
-        _companySettingsApi = companySettingsApi,
-        _db = db;
+  }) : _lettersApi = lettersApi,
+       _aiApi = aiApi,
+       _companySettingsApi = companySettingsApi,
+       _db = db;
 
   final LettersApi _lettersApi;
   final AiLettersApi _aiApi;
@@ -86,7 +86,8 @@ class LettersRepository {
       offset: offset,
     );
 
-    final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    final items =
+        (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
 
     for (final it in items) {
       final record = LetterRecord.fromServerJson(
@@ -145,7 +146,10 @@ class LettersRepository {
       if (existing == null) {
         server = await _lettersApi.createLetter(draft.toCreatePayload());
       } else {
-        server = await _lettersApi.updateLetter(localId, draft.toCreatePayload());
+        server = await _lettersApi.updateLetter(
+          localId,
+          draft.toCreatePayload(),
+        );
       }
 
       final item = server['item'];
@@ -179,7 +183,10 @@ class LettersRepository {
         );
 
         // Keep as pending (do not mark error on offline).
-        final pending = draft.copyWith(syncStatus: SyncStatus.pending, lastError: null);
+        final pending = draft.copyWith(
+          syncStatus: SyncStatus.pending,
+          lastError: null,
+        );
         await _db.upsertCarta(row: pending.toLocalRow());
         return pending;
       }
@@ -226,6 +233,10 @@ class LettersRepository {
   ///
   /// This is used by the global AutoSync wrapper.
   Future<void> syncPending() async {
+    // CRITICAL: Verify session exists before attempting any sync
+    final session = await _db.readSession();
+    if (session == null) return;
+
     final items = await _db.getPendingSyncItems();
     for (final item in items) {
       if (item.module != _syncModule) continue;
@@ -245,8 +256,17 @@ class LettersRepository {
 
           final it = server['item'];
           if (it is Map<String, dynamic>) {
-            final empresaId = (it['empresa_id'] ?? it['empresaId'] ?? existing?.empresaId ?? '').toString();
-            final synced = LetterRecord.fromServerJson(it, empresaId: empresaId, syncStatus: SyncStatus.synced);
+            final empresaId =
+                (it['empresa_id'] ??
+                        it['empresaId'] ??
+                        existing?.empresaId ??
+                        '')
+                    .toString();
+            final synced = LetterRecord.fromServerJson(
+              it,
+              empresaId: empresaId,
+              syncStatus: SyncStatus.synced,
+            );
             await _db.upsertCarta(row: synced.toLocalRow());
           }
 
@@ -266,11 +286,20 @@ class LettersRepository {
 
         await _db.markSyncItemSent(item.id);
       } catch (e) {
+        // CRITICAL: Stop retry loop on 401
+        if (e is DioException && e.response?.statusCode == 401) {
+          await _db.markSyncItemSent(item.id);
+          return;
+        }
+
         await _db.markSyncItemError(item.id);
         try {
           final existing = await getLocal(item.entityId);
           if (existing != null) {
-            final failed = existing.copyWith(syncStatus: SyncStatus.error, lastError: e.toString());
+            final failed = existing.copyWith(
+              syncStatus: SyncStatus.error,
+              lastError: e.toString(),
+            );
             await _db.upsertCarta(row: failed.toLocalRow());
           }
         } catch (_) {}
@@ -278,11 +307,15 @@ class LettersRepository {
     }
   }
 
-  Future<LetterRecord?> markSent({required String empresaId, required String id}) async {
+  Future<LetterRecord?> markSent({
+    required String empresaId,
+    required String id,
+  }) async {
     try {
       final server = await _lettersApi.markSent(id);
       final item = server['item'];
-      if (item is! Map<String, dynamic>) throw Exception('Respuesta inválida del servidor');
+      if (item is! Map<String, dynamic>)
+        throw Exception('Respuesta inválida del servidor');
 
       final updated = LetterRecord.fromServerJson(
         item,
@@ -294,7 +327,10 @@ class LettersRepository {
     } catch (e) {
       final existing = await getLocal(id);
       if (existing == null) return null;
-      final failed = existing.copyWith(syncStatus: SyncStatus.error, lastError: e.toString());
+      final failed = existing.copyWith(
+        syncStatus: SyncStatus.error,
+        lastError: e.toString(),
+      );
       await _db.upsertCarta(row: failed.toLocalRow());
       return failed;
     }
@@ -335,7 +371,8 @@ class LettersRepository {
 
     final s = (resp['subject'] ?? '').toString().trim();
     final b = (resp['body'] ?? '').toString().trim();
-    if (s.isEmpty || b.isEmpty) throw Exception('La IA devolvió una carta inválida');
+    if (s.isEmpty || b.isEmpty)
+      throw Exception('La IA devolvió una carta inválida');
     return (subject: s, body: b);
   }
 

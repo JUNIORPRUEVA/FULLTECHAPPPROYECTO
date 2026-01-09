@@ -9,13 +9,14 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'auth_session.dart';
 import 'local_db_interface.dart';
 import 'sync_queue_item.dart';
+import 'db_write_queue.dart';
 import '../../offline/local_db/migrations/offline_schema_migrator.dart';
 import '../services/sync_signals.dart';
 
 class LocalDbIo implements LocalDb {
   sqflite.Database? _db;
 
-  static const _schemaVersion = 9;
+  static const _schemaVersion = 11;
 
   @override
   Future<void> init() async {
@@ -30,6 +31,10 @@ class LocalDbIo implements LocalDb {
       dbPath,
       version: _schemaVersion,
       onConfigure: (db) async {
+        // Enable WAL mode for better concurrency
+        await db.execute('PRAGMA journal_mode=WAL;');
+        // Set busy timeout to 5 seconds
+        await db.execute('PRAGMA busy_timeout=5000;');
         await db.execute('PRAGMA foreign_keys = ON;');
       },
       onCreate: (db, version) async {
@@ -63,7 +68,9 @@ class LocalDbIo implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_store_entities_store ON store_entities(store);');
+        await db.execute(
+          'CREATE INDEX idx_store_entities_store ON store_entities(store);',
+        );
 
         await db.execute('''
           CREATE TABLE cotizaciones(
@@ -88,9 +95,15 @@ class LocalDbIo implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_cotizaciones_empresa_created_at ON cotizaciones(empresa_id, created_at);');
-        await db.execute('CREATE INDEX idx_cotizaciones_empresa_status ON cotizaciones(empresa_id, status);');
-        await db.execute('CREATE INDEX idx_cotizaciones_empresa_customer ON cotizaciones(empresa_id, customer_name);');
+        await db.execute(
+          'CREATE INDEX idx_cotizaciones_empresa_created_at ON cotizaciones(empresa_id, created_at);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_cotizaciones_empresa_status ON cotizaciones(empresa_id, status);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_cotizaciones_empresa_customer ON cotizaciones(empresa_id, customer_name);',
+        );
 
         await db.execute('''
           CREATE TABLE cotizacion_items(
@@ -109,7 +122,9 @@ class LocalDbIo implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_cotizacion_items_quotation ON cotizacion_items(quotation_id);');
+        await db.execute(
+          'CREATE INDEX idx_cotizacion_items_quotation ON cotizacion_items(quotation_id);',
+        );
 
         await db.execute('''
           CREATE TABLE presupuesto_draft(
@@ -203,7 +218,9 @@ class LocalDbIo implements LocalDb {
           );
         ''');
 
-        await db.execute('CREATE INDEX idx_sale_evidence_sale_id ON sale_evidence(sale_id);');
+        await db.execute(
+          'CREATE INDEX idx_sale_evidence_sale_id ON sale_evidence(sale_id);',
+        );
 
         // === Operaciones (Operations) ===
         await db.execute('''
@@ -356,6 +373,173 @@ class LocalDbIo implements LocalDb {
           'CREATE INDEX idx_operations_warranty_tickets_status ON operations_warranty_tickets(status);',
         );
 
+        // === CRM Status-Related Tables ===
+        
+        // CRM Reservations (status: reserva)
+        await db.execute('''
+          CREATE TABLE crm_reservations(
+            id TEXT PRIMARY KEY,
+            empresa_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            fecha_reserva TEXT NOT NULL,
+            hora_reserva TEXT NOT NULL,
+            descripcion_producto TEXT NOT NULL,
+            monto_reserva REAL,
+            notas_adicionales TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sync_status TEXT NOT NULL,
+            last_error TEXT
+          );
+        ''');
+
+        await db.execute(
+          'CREATE INDEX idx_crm_reservations_empresa_thread ON crm_reservations(empresa_id, thread_id);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_crm_reservations_fecha ON crm_reservations(fecha_reserva);',
+        );
+
+        // CRM Service Agenda (status: servicio_reservado)
+        await db.execute('''
+          CREATE TABLE crm_service_agenda(
+            id TEXT PRIMARY KEY,
+            empresa_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            fecha_servicio TEXT NOT NULL,
+            hora_servicio TEXT NOT NULL,
+            tipo_servicio TEXT NOT NULL,
+            ubicacion TEXT,
+            tecnico_asignado TEXT,
+            notas_adicionales TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sync_status TEXT NOT NULL,
+            last_error TEXT
+          );
+        ''');
+
+        await db.execute(
+          'CREATE INDEX idx_crm_service_agenda_empresa_thread ON crm_service_agenda(empresa_id, thread_id);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_crm_service_agenda_fecha ON crm_service_agenda(fecha_servicio);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_crm_service_agenda_status ON crm_service_agenda(status);',
+        );
+
+        // CRM Warranty Cases (status: en_garantia)
+        await db.execute('''
+          CREATE TABLE crm_warranty_cases(
+            id TEXT PRIMARY KEY,
+            empresa_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            fecha_compra TEXT NOT NULL,
+            producto_afectado TEXT NOT NULL,
+            descripcion_problema TEXT NOT NULL,
+            numero_factura TEXT,
+            notas_adicionales TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sync_status TEXT NOT NULL,
+            last_error TEXT
+          );
+        ''');
+
+        await db.execute(
+          'CREATE INDEX idx_crm_warranty_cases_empresa_thread ON crm_warranty_cases(empresa_id, thread_id);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_crm_warranty_cases_status ON crm_warranty_cases(status);',
+        );
+
+        // CRM Warranty Solutions (status: solucion_garantia)
+        await db.execute('''
+          CREATE TABLE crm_warranty_solutions(
+            id TEXT PRIMARY KEY,
+            empresa_id TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            warranty_case_id TEXT,
+            fecha_solucion TEXT NOT NULL,
+            solucion_aplicada TEXT NOT NULL,
+            tecnico_responsable TEXT,
+            piezas_reemplazadas TEXT,
+            cliente_satisfecho INTEGER NOT NULL,
+            notas_adicionales TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sync_status TEXT NOT NULL,
+            last_error TEXT
+          );
+        ''');
+
+        await db.execute(
+          'CREATE INDEX idx_crm_warranty_solutions_empresa_thread ON crm_warranty_solutions(empresa_id, thread_id);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_crm_warranty_solutions_case ON crm_warranty_solutions(warranty_case_id);',
+        );
+
+        // === Services Catalog ===
+        await db.execute('''
+          CREATE TABLE services(
+            id TEXT PRIMARY KEY,
+            empresa_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            default_price REAL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sync_status TEXT NOT NULL,
+            last_error TEXT
+          );
+        ''');
+
+        await db.execute(
+          'CREATE INDEX idx_services_empresa_active ON services(empresa_id, is_active);',
+        );
+
+        // === Agenda Items ===
+        await db.execute('''
+          CREATE TABLE agenda_items(
+            id TEXT PRIMARY KEY,
+            empresa_id TEXT NOT NULL,
+            service_id TEXT,
+            assigned_tech_id TEXT NOT NULL,
+            thread_id TEXT,
+            type TEXT NOT NULL,
+            scheduled_date TEXT NOT NULL,
+            scheduled_time TEXT,
+            duration_minutes INTEGER,
+            location TEXT,
+            customer_name TEXT,
+            customer_phone TEXT,
+            notes TEXT,
+            status TEXT NOT NULL DEFAULT 'pendiente',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            sync_status TEXT NOT NULL,
+            last_error TEXT
+          );
+        ''');
+
+        await db.execute(
+          'CREATE INDEX idx_agenda_items_empresa_date ON agenda_items(empresa_id, scheduled_date);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_agenda_items_tech_date ON agenda_items(assigned_tech_id, scheduled_date);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_agenda_items_type ON agenda_items(type);',
+        );
+        await db.execute(
+          'CREATE INDEX idx_agenda_items_status ON agenda_items(status);',
+        );
+
         // Additive + safe: ensure ALL backend tables exist locally, plus outbox tables.
         await OfflineSchemaMigrator.migrateToLatest(db);
       },
@@ -370,7 +554,9 @@ class LocalDbIo implements LocalDb {
               PRIMARY KEY (store, id)
             );
           ''');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_store_entities_store ON store_entities(store);');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_store_entities_store ON store_entities(store);',
+          );
         }
 
         if (oldVersion < 3) {
@@ -532,7 +718,9 @@ class LocalDbIo implements LocalDb {
 
         if (oldVersion < 7) {
           try {
-            await db.execute('ALTER TABLE sales_records ADD COLUMN details_json TEXT;');
+            await db.execute(
+              'ALTER TABLE sales_records ADD COLUMN details_json TEXT;',
+            );
           } catch (_) {
             // ignore (column may already exist)
           }
@@ -689,6 +877,173 @@ class LocalDbIo implements LocalDb {
           // Additive + safe: ensure ALL backend tables exist locally, plus outbox tables.
           await OfflineSchemaMigrator.migrateToLatest(db);
         }
+
+        if (oldVersion < 10) {
+          // CRM Status-Related Tables
+          
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS crm_reservations(
+              id TEXT PRIMARY KEY,
+              empresa_id TEXT NOT NULL,
+              thread_id TEXT NOT NULL,
+              fecha_reserva TEXT NOT NULL,
+              hora_reserva TEXT NOT NULL,
+              descripcion_producto TEXT NOT NULL,
+              monto_reserva REAL,
+              notas_adicionales TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL,
+              last_error TEXT
+            );
+          ''');
+
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_reservations_empresa_thread ON crm_reservations(empresa_id, thread_id);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_reservations_fecha ON crm_reservations(fecha_reserva);',
+          );
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS crm_service_agenda(
+              id TEXT PRIMARY KEY,
+              empresa_id TEXT NOT NULL,
+              thread_id TEXT NOT NULL,
+              fecha_servicio TEXT NOT NULL,
+              hora_servicio TEXT NOT NULL,
+              tipo_servicio TEXT NOT NULL,
+              ubicacion TEXT,
+              tecnico_asignado TEXT,
+              notas_adicionales TEXT,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL,
+              last_error TEXT
+            );
+          ''');
+
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_service_agenda_empresa_thread ON crm_service_agenda(empresa_id, thread_id);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_service_agenda_fecha ON crm_service_agenda(fecha_servicio);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_service_agenda_status ON crm_service_agenda(status);',
+          );
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS crm_warranty_cases(
+              id TEXT PRIMARY KEY,
+              empresa_id TEXT NOT NULL,
+              thread_id TEXT NOT NULL,
+              fecha_compra TEXT NOT NULL,
+              producto_afectado TEXT NOT NULL,
+              descripcion_problema TEXT NOT NULL,
+              numero_factura TEXT,
+              notas_adicionales TEXT,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL,
+              last_error TEXT
+            );
+          ''');
+
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_warranty_cases_empresa_thread ON crm_warranty_cases(empresa_id, thread_id);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_warranty_cases_status ON crm_warranty_cases(status);',
+          );
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS crm_warranty_solutions(
+              id TEXT PRIMARY KEY,
+              empresa_id TEXT NOT NULL,
+              thread_id TEXT NOT NULL,
+              warranty_case_id TEXT,
+              fecha_solucion TEXT NOT NULL,
+              solucion_aplicada TEXT NOT NULL,
+              tecnico_responsable TEXT,
+              piezas_reemplazadas TEXT,
+              cliente_satisfecho INTEGER NOT NULL,
+              notas_adicionales TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL,
+              last_error TEXT
+            );
+          ''');
+
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_warranty_solutions_empresa_thread ON crm_warranty_solutions(empresa_id, thread_id);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_crm_warranty_solutions_case ON crm_warranty_solutions(warranty_case_id);',
+          );
+        }
+
+        if (oldVersion < 11) {
+          // Services Catalog
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS services(
+              id TEXT PRIMARY KEY,
+              empresa_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              description TEXT,
+              default_price REAL,
+              is_active INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL,
+              last_error TEXT
+            );
+          ''');
+
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_services_empresa_active ON services(empresa_id, is_active);',
+          );
+
+          // Agenda Items
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS agenda_items(
+              id TEXT PRIMARY KEY,
+              empresa_id TEXT NOT NULL,
+              service_id TEXT,
+              assigned_tech_id TEXT NOT NULL,
+              thread_id TEXT,
+              type TEXT NOT NULL,
+              scheduled_date TEXT NOT NULL,
+              scheduled_time TEXT,
+              duration_minutes INTEGER,
+              location TEXT,
+              customer_name TEXT,
+              customer_phone TEXT,
+              notes TEXT,
+              status TEXT NOT NULL DEFAULT 'pendiente',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sync_status TEXT NOT NULL,
+              last_error TEXT
+            );
+          ''');
+
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_agenda_items_empresa_date ON agenda_items(empresa_id, scheduled_date);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_agenda_items_tech_date ON agenda_items(assigned_tech_id, scheduled_date);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_agenda_items_type ON agenda_items(type);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_agenda_items_status ON agenda_items(status);',
+          );
+        }
       },
     );
   }
@@ -711,15 +1066,11 @@ class LocalDbIo implements LocalDb {
 
   @override
   Future<void> saveSession(AuthSession session) async {
-    await _database.insert(
-      'auth_session',
-      {
-        'id': 1,
-        'token': session.token,
-        'user_json': jsonEncode(session.user.toJson()),
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await _database.insert('auth_session', {
+      'id': 1,
+      'token': session.token,
+      'user_json': jsonEncode(session.user.toJson()),
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
   }
 
   @override
@@ -746,19 +1097,15 @@ class LocalDbIo implements LocalDb {
     required String payloadJson,
   }) async {
     final id = '${DateTime.now().millisecondsSinceEpoch}-$module-$entityId';
-    await _database.insert(
-      'sync_queue',
-      {
-        'id': id,
-        'module': module,
-        'op': op,
-        'entity_id': entityId,
-        'payload_json': payloadJson,
-        'created_at_ms': DateTime.now().millisecondsSinceEpoch,
-        'status': 0,
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await _database.insert('sync_queue', {
+      'id': id,
+      'module': module,
+      'op': op,
+      'entity_id': entityId,
+      'payload_json': payloadJson,
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+      'status': 0,
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
 
     SyncSignals.instance.notifyQueueChanged();
   }
@@ -845,7 +1192,7 @@ class LocalDbIo implements LocalDb {
     int limit = 50,
     int offset = 0,
   }) async {
-    final where = <String>['empresa_id = ?','deleted_at IS NULL'];
+    final where = <String>['empresa_id = ?', 'deleted_at IS NULL'];
     final args = <Object?>[empresaId];
 
     if (status != null && status.trim().isNotEmpty) {
@@ -870,7 +1217,9 @@ class LocalDbIo implements LocalDb {
 
     if (q != null && q.trim().isNotEmpty) {
       final qq = '%${q.trim()}%';
-      where.add('(customer_name LIKE ? OR customer_phone LIKE ? OR subject LIKE ?)');
+      where.add(
+        '(customer_name LIKE ? OR customer_phone LIKE ? OR subject LIKE ?)',
+      );
       args.addAll([qq, qq, qq]);
     }
 
@@ -888,19 +1237,23 @@ class LocalDbIo implements LocalDb {
 
   @override
   Future<Map<String, Object?>?> getCarta({required String id}) async {
-    final rows = await _database.query('cartas', where: 'id = ?', whereArgs: [id]);
+    final rows = await _database.query(
+      'cartas',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     if (rows.isEmpty) return null;
     return rows.first;
   }
 
   @override
-  Future<void> markCartaDeleted({required String id, required String deletedAtIso}) async {
+  Future<void> markCartaDeleted({
+    required String id,
+    required String deletedAtIso,
+  }) async {
     await _database.update(
       'cartas',
-      {
-        'deleted_at': deletedAtIso,
-        'sync_status': 'pending',
-      },
+      {'deleted_at': deletedAtIso, 'sync_status': 'pending'},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -985,14 +1338,13 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<void> markSalesRecordDeleted({required String id, required String deletedAtIso}) async {
+  Future<void> markSalesRecordDeleted({
+    required String id,
+    required String deletedAtIso,
+  }) async {
     await _database.update(
       'sales_records',
-      {
-        'deleted': 1,
-        'deleted_at': deletedAtIso,
-        'sync_status': 'pending',
-      },
+      {'deleted': 1, 'deleted_at': deletedAtIso, 'sync_status': 'pending'},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -1008,7 +1360,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listSalesEvidence({required String saleId}) async {
+  Future<List<Map<String, Object?>>> listSalesEvidence({
+    required String saleId,
+  }) async {
     final rows = await _database.query(
       'sale_evidence',
       where: 'sale_id = ?',
@@ -1099,21 +1453,22 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<void> markOperationsJobDeleted({required String id, required String deletedAtIso}) async {
+  Future<void> markOperationsJobDeleted({
+    required String id,
+    required String deletedAtIso,
+  }) async {
     await _database.update(
       'operations_jobs',
-      {
-        'deleted': 1,
-        'deleted_at': deletedAtIso,
-        'sync_status': 'pending',
-      },
+      {'deleted': 1, 'deleted_at': deletedAtIso, 'sync_status': 'pending'},
       where: 'id = ?',
       whereArgs: [id],
     );
   }
 
   @override
-  Future<void> upsertOperationsSurvey({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsSurvey({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_surveys',
       row,
@@ -1122,7 +1477,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<Map<String, Object?>?> getOperationsSurveyByJob({required String jobId}) async {
+  Future<Map<String, Object?>?> getOperationsSurveyByJob({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_surveys',
       where: 'job_id = ?',
@@ -1155,7 +1512,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listOperationsSurveyMedia({required String surveyId}) async {
+  Future<List<Map<String, Object?>>> listOperationsSurveyMedia({
+    required String surveyId,
+  }) async {
     final rows = await _database.query(
       'operations_survey_media',
       where: 'survey_id = ?',
@@ -1166,7 +1525,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<void> upsertOperationsSchedule({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsSchedule({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_schedule',
       row,
@@ -1175,7 +1536,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<Map<String, Object?>?> getOperationsScheduleByJob({required String jobId}) async {
+  Future<Map<String, Object?>?> getOperationsScheduleByJob({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_schedule',
       where: 'job_id = ?',
@@ -1187,7 +1550,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<void> upsertOperationsInstallationReport({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsInstallationReport({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_installation_reports',
       row,
@@ -1196,7 +1561,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listOperationsInstallationReports({required String jobId}) async {
+  Future<List<Map<String, Object?>>> listOperationsInstallationReports({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_installation_reports',
       where: 'job_id = ?',
@@ -1207,7 +1574,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<void> upsertOperationsWarrantyTicket({required Map<String, Object?> row}) async {
+  Future<void> upsertOperationsWarrantyTicket({
+    required Map<String, Object?> row,
+  }) async {
     await _database.insert(
       'operations_warranty_tickets',
       row,
@@ -1216,7 +1585,9 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<List<Map<String, Object?>>> listOperationsWarrantyTickets({required String jobId}) async {
+  Future<List<Map<String, Object?>>> listOperationsWarrantyTickets({
+    required String jobId,
+  }) async {
     final rows = await _database.query(
       'operations_warranty_tickets',
       where: 'job_id = ?',
@@ -1275,16 +1646,23 @@ class LocalDbIo implements LocalDb {
     required String id,
     required String json,
   }) async {
-    await _database.insert(
-      'store_entities',
-      {
-        'store': store,
-        'id': id,
-        'json': json,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await dbWriteQueue.enqueue(() async {
+      await upsertEntityDirect(store: store, id: id, json: json);
+    });
+  }
+
+  @override
+  Future<void> upsertEntityDirect({
+    required String store,
+    required String id,
+    required String json,
+  }) async {
+    await _database.insert('store_entities', {
+      'store': store,
+      'id': id,
+      'json': json,
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
   }
 
   @override
@@ -1301,7 +1679,10 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<String?> getEntityJson({required String store, required String id}) async {
+  Future<String?> getEntityJson({
+    required String store,
+    required String id,
+  }) async {
     final rows = await _database.query(
       'store_entities',
       columns: ['json'],
@@ -1315,15 +1696,24 @@ class LocalDbIo implements LocalDb {
 
   @override
   Future<void> deleteEntity({required String store, required String id}) async {
-    await _database.delete(
-      'store_entities',
-      where: 'store = ? AND id = ?',
-      whereArgs: [store, id],
-    );
+    await dbWriteQueue.enqueue(() async {
+      await _database.delete(
+        'store_entities',
+        where: 'store = ? AND id = ?',
+        whereArgs: [store, id],
+      );
+    });
   }
 
   @override
   Future<void> clearStore({required String store}) async {
+    await dbWriteQueue.enqueue(() async {
+      await clearStoreDirect(store: store);
+    });
+  }
+
+  @override
+  Future<void> clearStoreDirect({required String store}) async {
     await _database.delete(
       'store_entities',
       where: 'store = ?',
@@ -1378,7 +1768,9 @@ class LocalDbIo implements LocalDb {
 
     final qq = q?.trim();
     if (qq != null && qq.isNotEmpty) {
-      whereParts.add('(numero LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)');
+      whereParts.add(
+        '(numero LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ?)',
+      );
       final like = '%$qq%';
       whereArgs.add(like);
       whereArgs.add(like);
@@ -1446,11 +1838,7 @@ class LocalDbIo implements LocalDb {
         where: 'quotation_id = ?',
         whereArgs: [id],
       );
-      await txn.delete(
-        'cotizaciones',
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      await txn.delete('cotizaciones', where: 'id = ?', whereArgs: [id]);
     });
   }
 
@@ -1459,21 +1847,15 @@ class LocalDbIo implements LocalDb {
     required String draftKey,
     required String draftJson,
   }) async {
-    await _database.insert(
-      'presupuesto_draft',
-      {
-        'draft_key': draftKey,
-        'draft_json': draftJson,
-        'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
-    );
+    await _database.insert('presupuesto_draft', {
+      'draft_key': draftKey,
+      'draft_json': draftJson,
+      'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
   }
 
   @override
-  Future<String?> loadPresupuestoDraftJson({
-    required String draftKey,
-  }) async {
+  Future<String?> loadPresupuestoDraftJson({required String draftKey}) async {
     final rows = await _database.query(
       'presupuesto_draft',
       columns: ['draft_json'],
@@ -1486,9 +1868,7 @@ class LocalDbIo implements LocalDb {
   }
 
   @override
-  Future<void> clearPresupuestoDraft({
-    required String draftKey,
-  }) async {
+  Future<void> clearPresupuestoDraft({required String draftKey}) async {
     await _database.delete(
       'presupuesto_draft',
       where: 'draft_key = ?',

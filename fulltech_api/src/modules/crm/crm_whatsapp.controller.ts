@@ -743,8 +743,8 @@ export async function listChats(req: Request, res: Response) {
     prisma.crmChat.count({ where }),
   ]);
 
-  const metaByChatId = await fetchChatMeta(items.map((c) => c.id));
-  const merged = items.map((c) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
+  const metaByChatId = await fetchChatMeta(items.map((c: any) => c.id));
+  const merged = items.map((c: any) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
   const mapped = merged.map(toChatApiItem);
   res.json({ items: mapped, total, page, limit });
 }
@@ -816,6 +816,9 @@ export async function convertChatToCustomer(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
   const chatId = req.params.chatId;
 
+  // Extract status from query to set appropriate tags
+  const crmStatus = (req.query.status as string) || 'activo';
+
   const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
   if (!chat) throw new ApiError(404, 'Chat not found');
 
@@ -825,29 +828,55 @@ export async function convertChatToCustomer(req: Request, res: Response) {
     throw new ApiError(400, 'Chat has no valid phone; cannot create customer');
   }
 
+  const name =
+    chat.display_name && chat.display_name.trim().length > 0
+      ? chat.display_name.trim()
+      : `Cliente WhatsApp ${telefono}`;
+
+  // Map CRM status to customer tags for proper filtering
+  let tags: string[] = [];
+  if (crmStatus === 'compro' || crmStatus === 'compra_finalizada') {
+    tags = ['compro'];
+    if (crmStatus === 'compra_finalizada') tags.push('finalizado');
+  } else if (crmStatus === 'activo') {
+    tags = ['activo'];
+  } else {
+    // Default fallback
+    tags = ['activo'];
+  }
+
+  console.log(`[CRM] Converting chat ${chatId} to customer with status=${crmStatus}, tags=${tags.join(',')}`);
+
   const existing = await prisma.customer.findFirst({
     where: { empresa_id, telefono, deleted_at: null },
   });
 
   if (existing) {
-    res.json({ customer: existing, created: false });
+    // Update existing customer with new tags (merge, not replace)
+    const mergedTags = Array.from(new Set([...existing.tags, ...tags]));
+    const updated = await prisma.customer.update({
+      where: { id: existing.id },
+      data: {
+        tags: mergedTags,
+        updated_at: new Date(),
+      },
+    });
+    console.log(`[CRM] Updated existing customer ${existing.id} with merged tags: ${mergedTags.join(',')}`);
+    res.json({ customer: updated, created: false, updated: true });
     return;
   }
-
-  const name =
-    chat.display_name && chat.display_name.trim().length > 0
-      ? chat.display_name.trim()
-      : `Cliente WhatsApp ${telefono}`;
 
   const created = await prisma.customer.create({
     data: {
       empresa_id,
       nombre: name,
       telefono,
+      tags,
       origen: 'whatsapp',
     },
   });
 
+  console.log(`[CRM] Created new customer ${created.id} with tags: ${tags.join(',')}`);
   res.json({ customer: created, created: true });
 }
 

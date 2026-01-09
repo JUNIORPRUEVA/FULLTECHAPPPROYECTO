@@ -1137,14 +1137,23 @@ class CrmRemoteDataSource {
     );
   }
 
-  Future<Customer> convertChatToCustomer(String chatId) async {
+  Future<Customer> convertChatToCustomer(
+    String chatId, {
+    String? status,
+  }) async {
     if (kDebugMode) {
-      debugPrint('[CRM][HTTP] POST /crm/chats/$chatId/convert-to-customer');
+      debugPrint(
+        '[CRM][HTTP] POST /crm/chats/$chatId/convert-to-customer?status=$status',
+      );
     }
 
     try {
+      final queryParams = status != null
+          ? {'status': status}
+          : <String, dynamic>{};
       final res = await _dio.post(
         '/crm/chats/$chatId/convert-to-customer',
+        queryParameters: queryParams,
         options: _jsonOptions,
       );
       final data = res.data as Map<String, dynamic>;

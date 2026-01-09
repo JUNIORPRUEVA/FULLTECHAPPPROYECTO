@@ -11,6 +11,7 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
   final Debouncer _debouncer = Debouncer(
     delay: const Duration(milliseconds: 400),
   );
+  bool _isRefreshing = false;
 
   CrmThreadsController({required CrmRepository repo})
     : _repo = repo,
@@ -23,23 +24,35 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
   }
 
   Future<void> refresh() async {
+    // Prevent multiple simultaneous refreshes
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+
+    try {
+      await _refreshInternal();
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  Future<void> _refreshInternal() async {
     // Offline-first: show cached threads immediately (if any), then refresh.
     try {
       final cached = await _repo.readCachedThreads();
       if (cached.isNotEmpty) {
         state = state.copyWith(
           loading: false,
-          error: null,
+          clearError: true,
           offset: 0,
           items: cached,
           total: cached.length,
         );
       } else {
-        state = state.copyWith(loading: true, error: null, offset: 0);
+        state = state.copyWith(loading: true, clearError: true, offset: 0);
       }
     } catch (_) {
       // If cache fails, fall back to online behavior.
-      state = state.copyWith(loading: true, error: null, offset: 0);
+      state = state.copyWith(loading: true, clearError: true, offset: 0);
     }
 
     try {
@@ -73,7 +86,7 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
     final nextOffset = state.offset + state.items.length;
     if (state.items.isNotEmpty && nextOffset >= state.total) return;
 
-    state = state.copyWith(loading: true, error: null);
+    state = state.copyWith(loading: true, clearError: true);
     try {
       final page = await _repo.listThreads(
         search: state.search.isEmpty ? null : state.search,
@@ -108,7 +121,11 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
   }
 
   void setProductId(String? value) {
-    state = state.copyWith(productId: value);
+    if (value == null) {
+      state = state.copyWith(clearProductId: true);
+    } else {
+      state = state.copyWith(productId: value);
+    }
   }
 
   Future<void> upsertLocalThread(CrmThread thread) async {

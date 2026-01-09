@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/crm_thread.dart';
 import '../../state/crm_providers.dart';
+import '../../constants/crm_statuses.dart';
+import '../../../auth/state/auth_providers.dart';
+import '../../../auth/state/auth_state.dart';
 import '../../../catalogo/models/producto.dart';
 import '../../../catalogo/models/categoria_producto.dart';
 import '../../../catalogo/state/catalog_providers.dart';
 import '../../../../core/services/app_config.dart';
+import 'status_dialogs/reserva_dialog.dart';
+import 'status_dialogs/servicio_reservado_dialog.dart';
+import 'status_dialogs/garantia_dialog.dart';
+import 'status_dialogs/solucion_garantia_dialog.dart';
 
 String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
@@ -321,90 +328,236 @@ class _ActionsSection extends ConsumerWidget {
         ],
 
         // Cambiar Estado
-        DropdownButtonFormField<String>(
-          value: thread.status,
-          items: const [
-            DropdownMenuItem(
-              value: 'primer_contacto',
-              child: Text('Primer contacto'),
-            ),
-            DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
-            DropdownMenuItem(value: 'interesado', child: Text('Interesado')),
-            DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
-            DropdownMenuItem(value: 'compro', child: Text('Compró')),
-            DropdownMenuItem(
-              value: 'no_interesado',
-              child: Text('No interesado'),
-            ),
-            DropdownMenuItem(value: 'activo', child: Text('Activo')),
-          ],
-          onChanged: (v) async {
-            if (v == null) return;
+        Builder(
+          builder: (context) {
+            // Capture providers before async callbacks
+            final statusDataRepo = ref.read(crmStatusDataRepositoryProvider);
+            final auth = ref.read(authControllerProvider);
 
-            final nextStatus = v.trim();
-            final needsConfirm =
-                nextStatus == 'activo' || nextStatus == 'compro';
+            return DropdownButtonFormField<String>(
+              value: thread.status,
+              items: const [
+                DropdownMenuItem(
+                  value: 'primer_contacto',
+                  child: Text('Primer contacto'),
+                ),
+                DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
+                DropdownMenuItem(
+                  value: 'interesado',
+                  child: Text('Interesado'),
+                ),
+                DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
+                DropdownMenuItem(value: 'compro', child: Text('Compró')),
+                DropdownMenuItem(
+                  value: 'compra_finalizada',
+                  child: Text('Compra finalizada'),
+                ),
+                DropdownMenuItem(
+                  value: 'servicio_reservado',
+                  child: Text('Servicio reservado'),
+                ),
+                DropdownMenuItem(
+                  value: 'no_interesado',
+                  child: Text('No interesado'),
+                ),
+                DropdownMenuItem(value: 'activo', child: Text('Activo')),
+                DropdownMenuItem(
+                  value: 'en_garantia',
+                  child: Text('En garantía'),
+                ),
+                DropdownMenuItem(
+                  value: 'solucion_garantia',
+                  child: Text('Solución de garantía'),
+                ),
+              ],
+              onChanged: (v) async {
+                if (v == null) return;
 
-            if (needsConfirm) {
-              final label = nextStatus == 'activo' ? 'Activo' : 'Compró';
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (_) {
-                  return AlertDialog(
-                    title: const Text('Confirmación'),
-                    content: Text(
-                      '¿Está seguro que quiere marcar la conversación como "$label"?\n\nEsto agregará el cliente a la tabla de clientes.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancelar'),
+                final nextStatus = v.trim();
+
+                // Handle dialog-required statuses first
+                if (CrmStatuses.needsDialog(nextStatus)) {
+                  Map<String, dynamic>? dialogData;
+
+                  switch (nextStatus) {
+                    case CrmStatuses.reserva:
+                      final result = await showDialog<ReservaDialogResult>(
+                        context: context,
+                        builder: (_) => const ReservaDialog(),
+                      );
+                      if (result == null) return; // User cancelled
+                      dialogData = result.toJson();
+                      break;
+
+                    case CrmStatuses.servicioReservado:
+                      final result =
+                          await showDialog<ServicioReservadoDialogResult>(
+                            context: context,
+                            builder: (_) => const ServicioReservadoDialog(),
+                          );
+                      if (result == null) return;
+                      dialogData = result.toJson();
+                      break;
+
+                    case CrmStatuses.enGarantia:
+                      final result = await showDialog<GarantiaDialogResult>(
+                        context: context,
+                        builder: (_) => const GarantiaDialog(),
+                      );
+                      if (result == null) return;
+                      dialogData = result.toJson();
+                      break;
+
+                    case CrmStatuses.solucionGarantia:
+                      final result =
+                          await showDialog<SolucionGarantiaDialogResult>(
+                            context: context,
+                            builder: (_) => const SolucionGarantiaDialog(),
+                          );
+                      if (result == null) return;
+                      dialogData = result.toJson();
+                      break;
+                  }
+
+                  // Save status first
+                  try {
+                    await onSave({'status': nextStatus});
+
+                    // Then save dialog data to appropriate table
+                    if (auth is! AuthAuthenticated) {
+                      throw Exception('Usuario no autenticado');
+                    }
+
+                    final empresaId = auth.user.empresaId;
+
+                    switch (nextStatus) {
+                      case CrmStatuses.reserva:
+                        await statusDataRepo.saveReservation(
+                          empresaId: empresaId,
+                          threadId: thread.id,
+                          reservationData: dialogData!,
+                        );
+                        break;
+
+                      case CrmStatuses.servicioReservado:
+                        await statusDataRepo.saveServiceAgenda(
+                          empresaId: empresaId,
+                          threadId: thread.id,
+                          serviceData: dialogData!,
+                        );
+                        break;
+
+                      case CrmStatuses.enGarantia:
+                        await statusDataRepo.saveWarrantyCase(
+                          empresaId: empresaId,
+                          threadId: thread.id,
+                          warrantyData: dialogData!,
+                        );
+                        break;
+
+                      case CrmStatuses.solucionGarantia:
+                        await statusDataRepo.saveWarrantySolution(
+                          empresaId: empresaId,
+                          threadId: thread.id,
+                          solutionData: dialogData!,
+                        );
+                        break;
+                    }
+
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Estado actualizado a "${CrmStatuses.getLabel(nextStatus)}"',
+                        ),
                       ),
-                      FilledButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Sí, confirmar'),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error al guardar: $e'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
                       ),
-                    ],
+                    );
+                  }
+                  return;
+                }
+
+                // Handle statuses that create/update customers
+                final needsCustomerConversion = CrmStatuses.shouldCreateClient(
+                  nextStatus,
+                );
+
+                if (needsCustomerConversion) {
+                  final label = CrmStatuses.getLabel(nextStatus);
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) {
+                      return AlertDialog(
+                        title: const Text('Confirmación'),
+                        content: Text(
+                          '¿Está seguro que quiere marcar la conversación como "$label"?\n\nEsto agregará el cliente a la tabla de clientes activos.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancelar'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('Sí, confirmar'),
+                          ),
+                        ],
+                      );
+                    },
                   );
-                },
-              );
-              if (ok != true) return;
-            }
+                  if (ok != true) return;
+                }
 
-            await onSave({'status': nextStatus});
+                await onSave({'status': nextStatus});
 
-            // Only for Activo/Compró, ensure the customer exists.
-            if (needsConfirm) {
-              try {
-                await ref
-                    .read(crmRepositoryProvider)
-                    .convertChatToCustomer(thread.id);
+                // Convert to customer for applicable statuses
+                if (needsCustomerConversion) {
+                  try {
+                    print(
+                      '[CRM] Converting chat to customer with status: $nextStatus',
+                    );
+                    await ref
+                        .read(crmRepositoryProvider)
+                        .convertChatToCustomer(thread.id, status: nextStatus);
 
-                // Refresh CRM customers list so it shows up immediately.
-                // ignore: unawaited_futures
-                ref.read(customersControllerProvider.notifier).refresh();
+                    // Refresh CRM customers list so it shows up immediately.
+                    // ignore: unawaited_futures
+                    ref
+                        .read(customersControllerProvider.notifier)
+                        .refresh();
 
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Cliente agregado a la tabla de clientes'),
-                  ),
-                );
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('No se pudo crear el cliente: $e'),
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                );
-              }
-            }
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Cliente agregado a la tabla de clientes activos',
+                        ),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('No se pudo crear el cliente: $e'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
+                }
+              },
+              decoration: const InputDecoration(
+                labelText: 'Cambiar estado',
+                isDense: true,
+              ),
+            );
           },
-          decoration: const InputDecoration(
-            labelText: 'Cambiar estado',
-            isDense: true,
-          ),
         ),
         const SizedBox(height: 10),
 

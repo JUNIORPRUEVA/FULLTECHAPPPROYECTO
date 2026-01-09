@@ -169,6 +169,10 @@ model Empresa {
   payroll_movements PayrollMovement[]
   statutory_configs StatutoryConfig[]
   audit_logs        AuditLog[]
+  
+  // Services and Agenda
+  services     Service[]
+  agenda_items AgendaItem[]
 }
 
 model Usuario {
@@ -264,6 +268,9 @@ model Usuario {
   operations_warranty_tickets_assigned OperationsWarrantyTicket[] @relation("OperationsWarrantyAssignedTech")
 
   sales_records_created SalesRecord[] @relation("SalesRecordCreator")
+  
+  // Agenda items assigned to this technician
+  agenda_items_assigned AgendaItem[]
 }
 
 model RulesContent {
@@ -807,6 +814,77 @@ model Customer {
 }
 
 // =====================
+// SERVICES
+// =====================
+
+model Service {
+  id            String   @id @default(uuid()) @db.Uuid
+  empresa_id    String   @db.Uuid
+  name          String
+  description   String?
+  default_price Decimal? @db.Decimal(10, 2)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  empresa       Empresa       @relation(fields: [empresa_id], references: [id])
+  agenda_items  AgendaItem[]
+
+  @@index([empresa_id])
+  @@index([empresa_id, is_active])
+  @@map("services")
+}
+
+// =====================
+// AGENDA ITEMS (Unified)
+// =====================
+
+enum AgendaItemType {
+  RESERVA
+  SERVICIO_RESERVADO
+  GARANTIA
+  SOLUCION_GARANTIA
+}
+
+model AgendaItem {
+  id              String         @id @default(uuid()) @db.Uuid
+  empresa_id      String         @db.Uuid
+  thread_id       String?        @db.Uuid
+  client_id       String?        @db.Uuid
+  client_phone    String?
+  client_name     String?
+  type            AgendaItemType
+  scheduled_at    DateTime?
+  service_id      String?        @db.Uuid
+  service_name    String?
+  product_name    String?
+  technician_id   String?        @db.Uuid
+  technician_name String?
+  note            String?
+  details         String?
+  serial_number   String?
+  warranty_months Int?
+  warranty_time   String?
+  is_completed    Boolean        @default(false)
+  completed_at    DateTime?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  empresa    Empresa    @relation(fields: [empresa_id], references: [id])
+  thread     CrmThread? @relation(fields: [thread_id], references: [id])
+  service    Service?   @relation(fields: [service_id], references: [id])
+  technician Usuario?   @relation(fields: [technician_id], references: [id])
+
+  @@index([empresa_id])
+  @@index([empresa_id, type])
+  @@index([empresa_id, scheduled_at])
+  @@index([technician_id])
+  @@index([thread_id])
+  @@index([is_completed])
+  @@map("agenda_items")
+}
+
+// =====================
 // OPERATIONS (Work Orders)
 // =====================
 
@@ -1014,6 +1092,7 @@ model CrmThread {
   messages      CrmMessage[]
   tasks         CrmTask[]
   sales         Sale[]
+  agenda_items  AgendaItem[]
 
   @@unique([empresa_id, phone_number])
   @@index([empresa_id, phone_number])

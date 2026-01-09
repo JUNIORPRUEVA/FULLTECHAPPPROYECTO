@@ -26,6 +26,8 @@ import { posRouter } from '../modules/pos/pos.routes';
 import { inventoryRouter } from '../modules/inventory/inventory.routes';
 import { settingsRouter } from '../modules/settings/settings.routes';
 import { printRouter } from '../modules/print/print.routes';
+import { servicesRouter } from '../modules/services/services.routes';
+import { agendaRouter } from '../modules/agenda/agenda.routes';
 
 export const apiRouter = Router();
 
@@ -60,5 +62,7 @@ apiRouter.use('/pos', posRouter);
 apiRouter.use('/inventory', inventoryRouter);
 apiRouter.use('/settings', settingsRouter);
 apiRouter.use('/print', printRouter);
+apiRouter.use('/services', servicesRouter);
+apiRouter.use('/operations/agenda', agendaRouter);
 
 // TODO: Montar módulos restantes (operaciones, nómina, rrhh, guagua, etc.)

@@ -29,12 +29,14 @@ class MaintenanceRepository {
         return true;
       }
       final msg = e.error?.toString() ?? '';
-      if (msg.contains('SocketException') || msg.contains('Failed host lookup')) {
+      if (msg.contains('SocketException') ||
+          msg.contains('Failed host lookup')) {
         return true;
       }
     }
     final msg = e.toString();
-    return msg.contains('SocketException') || msg.contains('Failed host lookup');
+    return msg.contains('SocketException') ||
+        msg.contains('Failed host lookup');
   }
 
   String _newLocalId() {
@@ -166,7 +168,9 @@ class MaintenanceRepository {
     final filtered =
         items
             .where((r) => _dateInRange(r.createdAt, from: from, to: to))
-            .where((r) => productoId == null ? true : r.productoId == productoId)
+            .where(
+              (r) => productoId == null ? true : r.productoId == productoId,
+            )
             .where((r) => status == null ? true : r.statusAfter == status)
             .where((r) => search == null ? true : _matchesSearch(r, search))
             .toList()
@@ -199,7 +203,9 @@ class MaintenanceRepository {
     final filtered =
         items
             .where((r) => _dateInRange(r.createdAt, from: from, to: to))
-            .where((r) => productoId == null ? true : r.productoId == productoId)
+            .where(
+              (r) => productoId == null ? true : r.productoId == productoId,
+            )
             .where((r) => status == null ? true : r.statusAfter == status)
             .where((r) => search == null ? true : _matchesSearch(r, search))
             .toList()
@@ -272,6 +278,10 @@ class MaintenanceRepository {
 
   /// Best-effort sync for queued maintenance ops.
   Future<void> syncPending() async {
+    // CRITICAL: Verify session exists before attempting any sync
+    final session = await db.readSession();
+    if (session == null) return;
+
     final items = await db.getPendingSyncItems();
     for (final item in items) {
       if (item.module != _syncModule) continue;
@@ -283,7 +293,8 @@ class MaintenanceRepository {
           if (localJson != null) {
             final attempts = (localJson['_syncAttempts'] as int? ?? 0) + 1;
             localJson['_syncAttempts'] = attempts;
-            localJson['_lastSyncAttemptMs'] = DateTime.now().millisecondsSinceEpoch;
+            localJson['_lastSyncAttemptMs'] =
+                DateTime.now().millisecondsSinceEpoch;
             await db.upsertEntity(
               store: _storeMaintenance,
               id: item.entityId,
@@ -339,7 +350,13 @@ class MaintenanceRepository {
 
         // Unknown op: mark as sent to avoid blocking the queue.
         await db.markSyncItemSent(item.id);
-      } catch (_) {
+      } catch (e) {
+        // CRITICAL: Stop retry loop on 401
+        if (e is DioException && e.response?.statusCode == 401) {
+          await db.markSyncItemSent(item.id);
+          return;
+        }
+
         await db.markSyncItemError(item.id);
 
         // Mark local record as FAILED (best-effort)
@@ -417,10 +434,7 @@ class MaintenanceRepository {
   }
 
   Future<MaintenanceRecord> getMaintenance(String id) async {
-    return await remoteDataSource.getMaintenance(
-      id,
-      cancelToken: _cancelToken,
-    );
+    return await remoteDataSource.getMaintenance(id, cancelToken: _cancelToken);
   }
 
   Future<MaintenanceRecord> updateMaintenance(
@@ -459,7 +473,9 @@ class MaintenanceRepository {
             module: _syncModule,
             op: 'create',
             entityId: id,
-            payloadJson: jsonEncode(_buildCreateDtoPayloadFromLocalJson(localJson)),
+            payloadJson: jsonEncode(
+              _buildCreateDtoPayloadFromLocalJson(localJson),
+            ),
           );
         } else {
           await db.enqueueSync(
@@ -493,10 +509,7 @@ class MaintenanceRepository {
 
   Future<void> deleteMaintenance(String id) async {
     try {
-      await remoteDataSource.deleteMaintenance(
-        id,
-        cancelToken: _cancelToken,
-      );
+      await remoteDataSource.deleteMaintenance(id, cancelToken: _cancelToken);
       // Best-effort: remove locally
       try {
         await db.deleteEntity(store: _storeMaintenance, id: id);
@@ -532,10 +545,7 @@ class MaintenanceRepository {
     }
   }
 
-  Future<MaintenanceSummary> getSummary({
-    String? from,
-    String? to,
-  }) async {
+  Future<MaintenanceSummary> getSummary({String? from, String? to}) async {
     return await remoteDataSource.getSummary(
       from: from,
       to: to,
@@ -574,10 +584,7 @@ class MaintenanceRepository {
   }
 
   Future<WarrantyCase> getWarranty(String id) async {
-    return await remoteDataSource.getWarranty(
-      id,
-      cancelToken: _cancelToken,
-    );
+    return await remoteDataSource.getWarranty(id, cancelToken: _cancelToken);
   }
 
   Future<WarrantyCase> updateWarranty(
@@ -592,19 +599,13 @@ class MaintenanceRepository {
   }
 
   Future<void> deleteWarranty(String id) async {
-    return await remoteDataSource.deleteWarranty(
-      id,
-      cancelToken: _cancelToken,
-    );
+    return await remoteDataSource.deleteWarranty(id, cancelToken: _cancelToken);
   }
 
   // === INVENTORY AUDITS ===
 
   Future<InventoryAudit> createAudit(CreateAuditDto dto) async {
-    return await remoteDataSource.createAudit(
-      dto,
-      cancelToken: _cancelToken,
-    );
+    return await remoteDataSource.createAudit(dto, cancelToken: _cancelToken);
   }
 
   Future<AuditListResponse> listAudits({
@@ -625,10 +626,7 @@ class MaintenanceRepository {
   }
 
   Future<InventoryAudit> getAudit(String id) async {
-    return await remoteDataSource.getAudit(
-      id,
-      cancelToken: _cancelToken,
-    );
+    return await remoteDataSource.getAudit(id, cancelToken: _cancelToken);
   }
 
   Future<InventoryAudit> updateAudit(

@@ -25,7 +25,7 @@
     "clear-crm-chats": "tsx scripts/clear_crm_chats.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.20.0",
+    "@prisma/client": "^5.22.0",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

@@ -132,6 +132,14 @@ class PunchRepository {
 
   /// Best-effort sync for queued attendance ops.
   Future<void> syncPending() async {
+    // CRITICAL: Verify session exists before attempting any sync
+    // This prevents 401 spam when not authenticated
+    final session = await db.readSession();
+    if (session == null) {
+      // No session - stop all sync attempts immediately
+      return;
+    }
+
     final items = await db.getPendingSyncItems();
     for (final item in items) {
       if (item.module != _syncModule) continue;
@@ -139,12 +147,16 @@ class PunchRepository {
 
       try {
         // Update local attempt counters (if present)
-        final localRaw = await db.getEntityJson(store: _store, id: item.entityId);
+        final localRaw = await db.getEntityJson(
+          store: _store,
+          id: item.entityId,
+        );
         if (localRaw != null) {
           final localJson = jsonDecode(localRaw) as Map<String, dynamic>;
           final attempts = (localJson['_syncAttempts'] as int? ?? 0) + 1;
           localJson['_syncAttempts'] = attempts;
-          localJson['_lastSyncAttemptMs'] = DateTime.now().millisecondsSinceEpoch;
+          localJson['_lastSyncAttemptMs'] =
+              DateTime.now().millisecondsSinceEpoch;
           await db.upsertEntity(
             store: _store,
             id: item.entityId,
@@ -171,11 +183,43 @@ class PunchRepository {
 
         await db.markSyncItemSent(item.id);
       } catch (e) {
+        // CRITICAL: Stop retry loop on 401 (authentication failure)
+        if (e is DioException && e.response?.statusCode == 401) {
+          // Mark as permanently failed - don't retry 401s
+          await db.markSyncItemSent(item.id); // Remove from queue
+
+          // Mark local record as permanently FAILED
+          try {
+            final localRaw = await db.getEntityJson(
+              store: _store,
+              id: item.entityId,
+            );
+            if (localRaw != null) {
+              final local = jsonDecode(localRaw) as Map<String, dynamic>;
+              local['syncStatus'] = 'FAILED';
+              local['_lastSyncAttemptMs'] =
+                  DateTime.now().millisecondsSinceEpoch;
+              local['_failureReason'] = '401 Unauthorized';
+              await db.upsertEntity(
+                store: _store,
+                id: item.entityId,
+                json: jsonEncode(local),
+              );
+            }
+          } catch (_) {}
+
+          // Stop processing remaining items - session is invalid
+          return;
+        }
+
         await db.markSyncItemError(item.id);
 
         // Mark local record as FAILED (best-effort)
         try {
-          final localRaw = await db.getEntityJson(store: _store, id: item.entityId);
+          final localRaw = await db.getEntityJson(
+            store: _store,
+            id: item.entityId,
+          );
           if (localRaw != null) {
             final local = jsonDecode(localRaw) as Map<String, dynamic>;
             local['syncStatus'] = 'FAILED';
