@@ -26,17 +26,17 @@ double computeGlobalDiscountAmount({
   required double value,
 }) {
   final safeBase = _clamp0(baseAfterLineDiscounts);
-  final safeValue = value.isNaN || value.isInfinite ? 0 : value;
+  final safeValue = value.isNaN || value.isInfinite ? 0.0 : value;
 
-  if (safeBase <= 0) return 0;
+  if (safeBase <= 0) return 0.0;
 
   if (type == PosDiscountType.percent) {
-    final p = safeValue.clamp(0, 100);
+    final p = safeValue.clamp(0, 100).toDouble();
     final amt = safeBase * (p / 100.0);
     return amt > safeBase ? safeBase : amt;
   }
 
-  final amt = safeValue < 0 ? 0 : safeValue;
+  final amt = safeValue < 0 ? 0.0 : safeValue;
   return amt > safeBase ? safeBase : amt;
 }
 
@@ -59,8 +59,10 @@ PosPricingSummary computeTicketPricing({
   );
 
   final base = _clamp0(baseAfterLine - globalDiscount);
-  final rate = itbisEnabled ? (itbisRate.isNaN || itbisRate.isInfinite ? 0 : itbisRate) : 0;
-  final itbis = rate <= 0 ? 0 : base * rate;
+  final rate = itbisEnabled
+      ? (itbisRate.isNaN || itbisRate.isInfinite ? 0.0 : itbisRate)
+      : 0.0;
+  final itbis = rate <= 0 ? 0.0 : base * rate;
   final total = base + itbis;
 
   return PosPricingSummary(

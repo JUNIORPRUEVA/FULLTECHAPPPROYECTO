@@ -51,6 +51,34 @@ class PosTicket {
     required this.items,
   });
 
+  double get subtotal =>
+      items.fold<double>(0, (acc, it) => acc + (it.qty * it.unitPrice));
+
+  double get lineDiscounts =>
+      items.fold<double>(0, (acc, it) => acc + it.discountAmount);
+
+  /// Computed global discount amount (not the raw [discountValue]).
+  ///
+  /// For percent discounts, it's applied over the base after line discounts.
+  double get globalDiscount {
+    double clamp0(double v) => v < 0 ? 0 : v;
+
+    final baseAfterLine = clamp0(subtotal - lineDiscounts);
+    if (baseAfterLine <= 0) return 0.0;
+
+    final v = discountValue.isNaN || discountValue.isInfinite ? 0.0 : discountValue;
+    if (discountType == PosDiscountType.percent) {
+      final p = v.clamp(0, 100).toDouble();
+      final amt = baseAfterLine * (p / 100.0);
+      return amt > baseAfterLine ? baseAfterLine : amt;
+    }
+
+    final amt = v < 0 ? 0.0 : v;
+    return amt > baseAfterLine ? baseAfterLine : amt;
+  }
+
+  String get invoiceType => ncfEnabled ? 'FISCAL' : 'NORMAL';
+
   PosTicket copyWith({
     String? name,
     bool? isCustomName,
