@@ -78,7 +78,7 @@ class _CrmCustomersPageEnhancedState
                   return SizedBox(
                     width: 240,
                     child: DropdownButtonFormField<String?>(
-                      value: state.productId,
+                      initialValue: state.productId,
                       decoration: const InputDecoration(
                         labelText: 'Producto',
                         isDense: true,
@@ -113,7 +113,7 @@ class _CrmCustomersPageEnhancedState
               SizedBox(
                 width: 160,
                 child: DropdownButtonFormField<String?>(
-                  value: state.status,
+                  initialValue: state.status,
                   decoration: const InputDecoration(
                     labelText: 'Estado',
                     isDense: true,

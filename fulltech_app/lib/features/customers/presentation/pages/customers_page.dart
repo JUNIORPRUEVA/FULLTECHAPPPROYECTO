@@ -5,14 +5,11 @@ import 'package:fulltech_app/core/widgets/compact_error_widget.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:fulltech_app/core/routing/app_routes.dart';
-import 'package:fulltech_app/features/customers/presentation/widgets/customers_filter_bar.dart';
-import 'package:fulltech_app/features/customers/presentation/widgets/customers_list.dart';
-import 'package:fulltech_app/features/customers/presentation/widgets/customers_stats_panel.dart';
-import 'package:fulltech_app/features/customers/providers/customers_provider.dart';
-import 'package:fulltech_app/features/customers/data/models/customer_response.dart';
+import 'package:fulltech_app/features/crm/providers/purchased_clients_provider.dart';
+import 'package:fulltech_app/features/crm/data/models/purchased_client.dart';
 
 class CustomersPage extends ConsumerStatefulWidget {
-  final bool onlyActiveCustomers;
+  final bool onlyActiveCustomers; // Kept for backward compatibility, but now shows purchased clients
 
   const CustomersPage({super.key, this.onlyActiveCustomers = false});
 
@@ -21,90 +18,270 @@ class CustomersPage extends ConsumerStatefulWidget {
 }
 
 class _CustomersPageState extends ConsumerState<CustomersPage> {
-  String? _selectedCustomerId;
+  String? _selectedClientId;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // Load customers on init
+    // Load purchased clients on init
     Future.microtask(() {
-      ref.read(customersControllerProvider.notifier).loadCustomers();
+      ref.read(purchasedClientsControllerProvider.notifier).loadClients(refresh: true);
     });
   }
 
   @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(customersControllerProvider);
-    final customers = widget.onlyActiveCustomers
-      ? state.customers.where(_isActiveCustomer).toList()
-      : state.customers;
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
-    final isDesktop = MediaQuery.of(context).size.width >= 1100;
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(purchasedClientsControllerProvider);
+    final controller = ref.read(purchasedClientsControllerProvider.notifier);
 
     return ModulePage(
-      title: widget.onlyActiveCustomers ? 'Clientes Activos' : 'Clientes',
+      title: 'Clientes Comprados', // Changed title to be more specific
       child: Column(
         children: [
-          // Stats Panel at top
-          CustomersStatsPanel(stats: state.stats),
+          // Search and Filter Bar
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Buscar cliente comprado',
+                      hintText: 'Nombre, teléfono o WhatsApp ID...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      // Debounce search
+                      Future.delayed(const Duration(milliseconds: 400), () {
+                        if (_searchController.text == value) {
+                          controller.search(value);
+                        }
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => controller.refresh(),
+                  tooltip: 'Actualizar lista',
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.go(AppRoutes.crm);
+                  },
+                  icon: const Icon(Icons.chat, size: 18),
+                  label: const Text('Ir a CRM'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-          // Filter Bar
-          const CustomersFilterBar(),
+          // Stats Panel
+          if (state.totalClients > 0)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.shopping_bag, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Total Clientes Comprados: ${state.totalClients}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (state.searchQuery.isNotEmpty) ...[
+                    const Icon(Icons.filter_list, color: Colors.grey, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Filtrado: "${state.searchQuery}"',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
 
           // Main Content
           Expanded(
+            child: _buildMainContent(state, controller),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainContent(PurchasedClientsState state, PurchasedClientsController controller) {
+    if (state.isLoading && state.clients.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Cargando clientes comprados...'),
+          ],
+        ),
+      );
+    }
+
+    if (state.error != null && state.clients.isEmpty) {
+      return Center(
+        child: CompactErrorWidget(
+          error: state.error!,
+          onRetry: () => controller.refresh(),
+        ),
+      );
+    }
+
+    if (state.clients.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.shopping_cart_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              state.searchQuery.isEmpty
+                  ? 'No hay clientes comprados'
+                  : 'No se encontraron clientes',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              state.searchQuery.isEmpty
+                  ? 'Los clientes aparecerán aquí cuando marquen un chat como "Compró" en el CRM'
+                  : 'Intenta con una búsqueda diferente',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => context.go(AppRoutes.crm),
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Ir al CRM'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        // Clients List (left side)
+        Expanded(
+          flex: 2,
+          child: _buildClientsList(state, controller),
+        ),
+
+        // Client Detail Panel (right side)
+        if (_selectedClientId != null)
+          Expanded(
+            flex: 1,
+            child: _buildDetailPanel(_selectedClientId!),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildClientsList(PurchasedClientsState state, PurchasedClientsController controller) {
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          // List Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+            ),
             child: Row(
               children: [
-                // Customer List (left side)
-                Expanded(
-                  flex: 1,
-                  child: CustomersList(
-                    customers: customers,
-                    isLoading: state.isLoading,
-                    error: state.error,
-                    selectedCustomerId: _selectedCustomerId,
-                    onCustomerSelected: (id) {
-                      setState(() {
-                        _selectedCustomerId = id;
-                      });
-                    },
-                    onRefresh: () {
-                      ref
-                          .read(customersControllerProvider.notifier)
-                          .loadCustomers();
-                    },
-                    emptyTitle: widget.onlyActiveCustomers
-                        ? 'No hay clientes activos'
-                        : 'No hay clientes',
-                    emptySubtitle: widget.onlyActiveCustomers
-                        ? "Solo se muestran clientes marcados como activos (por ejemplo tag/estado 'compro')."
-                        : 'Intenta cambiar los filtros',
+                const Icon(Icons.people, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Lista de Clientes (${state.clients.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
-
-                // Customer Detail Panel (right side)
-                if (_selectedCustomerId != null)
-                  Expanded(
-                    flex: 1,
-                    child: _buildDetailPanel(_selectedCustomerId!),
+                const Spacer(),
+                if (state.isLoading)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-
-                if (isDesktop) ...[
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 380,
-                    child: _CustomersTrackingPanel(
-                      customers: customers,
-                      selectedCustomerId: _selectedCustomerId,
-                      onSelectCustomer: (id) {
-                        setState(() {
-                          _selectedCustomerId = id;
-                        });
-                      },
-                    ),
-                  ),
-                ],
               ],
+            ),
+          ),
+
+          // Clients List
+          Expanded(
+            child: ListView.builder(
+              itemCount: state.clients.length + (state.hasMorePages ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= state.clients.length) {
+                  // Load more indicator
+                  if (!state.isLoading) {
+                    // Auto-trigger load more when user scrolls to end
+                    Future.microtask(() => controller.loadMore());
+                  }
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final client = state.clients[index];
+                final isSelected = client.id == _selectedClientId;
+
+                return _buildClientTile(client, isSelected, controller);
+              },
             ),
           ),
         ],
@@ -112,317 +289,353 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
     );
   }
 
-  bool _isActiveCustomer(CustomerItem c) {
-    // En este módulo, "cliente activo" intenta representar "ya compró".
-    // Hoy el backend expone:
-    // - status/tags (ej. 'compro')
-    // - isActiveCustomer (actualmente true para tags 'compro' o 'activo')
-    // - totalPurchasesCount (placeholder 0)
-    // Usamos 'compro' y compras>0 como señal fuerte; y como fallback, isActiveCustomer.
-    final status = (c.status).toLowerCase().trim();
-    final tagsLower = c.tags.map((t) => t.toLowerCase().trim()).toList();
-    final hasPurchases = c.totalPurchasesCount > 0;
-    final isBought = status == 'compro' || tagsLower.contains('compro');
-    return isBought || hasPurchases || c.isActiveCustomer;
-  }
-
-  Widget _buildDetailPanel(String customerId) {
-    final detailAsync = ref.watch(customerDetailProvider(customerId));
-
+  Widget _buildClientTile(PurchasedClient client, bool isSelected, PurchasedClientsController controller) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(left: BorderSide(color: Colors.grey[300]!)),
+        color: isSelected ? Colors.blue[50] : null,
+        border: Border(
+          left: BorderSide(
+            color: isSelected ? Colors.blue : Colors.transparent,
+            width: 4,
+          ),
+        ),
       ),
-      child: detailAsync.when(
-        data: (detail) {
-          final customer = detail.customer;
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header with close button
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        customer.fullName,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () {
-                        setState(() {
-                          _selectedCustomerId = null;
-                        });
-                      },
-                    ),
-                  ],
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: client.isImportant ? Colors.red[100] : Colors.blue[100],
+          child: client.isImportant
+              ? const Icon(Icons.star, color: Colors.red, size: 20)
+              : Text(
+                  client.initials,
+                  style: TextStyle(
+                    color: Colors.blue[700],
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
+        ),
+        title: Text(
+          client.displayNameOrPhone,
+          style: TextStyle(
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (client.phoneE164 != null && client.displayName != null)
+              Text(
+                client.phoneE164!,
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+            if (client.lastMessageText != null)
+              Text(
+                client.lastMessageText!,
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (client.lastMessageAt != null)
+              Text(
+                _formatDateTime(client.lastMessageAt!),
+                style: TextStyle(color: Colors.grey[400], fontSize: 11),
+              ),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) => _handleClientAction(value, client, controller),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'view',
+              child: ListTile(
+                leading: Icon(Icons.visibility),
+                title: Text('Ver Detalles'),
+                dense: true,
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'edit',
+              child: ListTile(
+                leading: Icon(Icons.edit),
+                title: Text('Editar'),
+                dense: true,
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'chat',
+              child: ListTile(
+                leading: Icon(Icons.chat),
+                title: Text('Ir a Chat'),
+                dense: true,
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'delete',
+              child: ListTile(
+                leading: Icon(Icons.delete, color: Colors.red),
+                title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                dense: true,
+              ),
+            ),
+          ],
+        ),
+        onTap: () {
+          setState(() {
+            _selectedClientId = client.id;
+          });
+        },
+      ),
+    );
+  }
 
-                const SizedBox(height: 16),
+  void _handleClientAction(String action, PurchasedClient client, PurchasedClientsController controller) {
+    switch (action) {
+      case 'view':
+        setState(() {
+          _selectedClientId = client.id;
+        });
+        break;
+      case 'edit':
+        _showEditClientDialog(client, controller);
+        break;
+      case 'chat':
+        // Navigate to CRM and open this specific chat
+        context.go('${AppRoutes.crm}/chats/${client.id}');
+        break;
+      case 'delete':
+        _showDeleteConfirmation(client, controller);
+        break;
+    }
+  }
 
-                // Profile Info
-                _buildInfoCard('Información de Contacto', [
-                  _buildInfoRow('Teléfono', customer.phone),
-                  if (customer.whatsappId != null)
-                    _buildInfoRow('WhatsApp ID', customer.whatsappId!),
-                  if (customer.email != null)
-                    _buildInfoRow('Email', customer.email!),
-                  if (customer.address != null)
-                    _buildInfoRow('Dirección', customer.address!),
-                ]),
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
 
-                const SizedBox(height: 16),
+    if (difference.inDays == 0) {
+      return 'Hoy ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      return 'Ayer';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} días';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
 
-                // Status & Tags
-                _buildInfoCard('Estado y Etiquetas', [
-                  _buildInfoRow('Estado', customer.status),
-                  if (customer.tags.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: customer.tags
-                            .map(
-                              (tag) => Chip(
-                                label: Text(tag),
-                                backgroundColor: Colors.blue[100],
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                ]),
+  Widget _buildDetailPanel(String clientId) {
+    final clientDetailAsync = ref.watch(purchasedClientDetailProvider(clientId));
 
-                const SizedBox(height: 16),
+    return Container(
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: clientDetailAsync.when(
+        data: (client) => _buildClientDetails(client),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => Center(
+          child: CompactErrorWidget(
+            error: error.toString(),
+            onRetry: () => ref.invalidate(purchasedClientDetailProvider(clientId)),
+          ),
+        ),
+      ),
+    );
+  }
 
-                // Purchase Summary
-                _buildInfoCard('Resumen de Compras', [
-                  _buildInfoRow(
-                    'Total Compras',
-                    '${detail.stats.totalPurchases} compras',
+  Widget _buildClientDetails(PurchasedClient client) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with close button
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  client.displayNameOrPhone,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
-                  _buildInfoRow(
-                    'Monto Total',
-                    '\$${detail.stats.totalSpent.toStringAsFixed(2)}',
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  setState(() {
+                    _selectedClientId = null;
+                  });
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Status Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.green[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle, color: Colors.green[700], size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  'Cliente Comprado',
+                  style: TextStyle(
+                    color: Colors.green[700],
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
                   ),
-                  if (detail.stats.lastPurchaseAt != null)
-                    _buildInfoRow(
-                      'Última Compra',
-                      detail.stats.lastPurchaseAt!,
-                    ),
-                ]),
-
-                const SizedBox(height: 16),
-
-                // Last Product
-                if (customer.assignedProduct != null)
-                  _buildInfoCard('Producto Asignado', [
-                    Row(
-                      children: [
-                        if (customer.assignedProduct!.imageUrl != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              customer.assignedProduct!.imageUrl!,
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 60,
-                                height: 60,
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.image_not_supported),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                customer.assignedProduct!.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                '\$${customer.assignedProduct!.price.toStringAsFixed(2)}',
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ]),
-
-                const SizedBox(height: 16),
-
-                // Purchases Section
-                if (detail.purchases.isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Historial de Compras',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...detail.purchases.map(
-                        (purchase) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            title: Text(
-                              purchase.product?.name ?? 'Producto Desconocido',
-                            ),
-                            subtitle: Text(
-                              '${purchase.date} | Cant: ${purchase.quantity}',
-                            ),
-                            trailing: Text(
-                              '\$${purchase.total.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                const SizedBox(height: 16),
-
-                // Chats Section
-                if (detail.chats.isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Conversaciones',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...detail.chats.map(
-                        (chat) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: const Icon(Icons.chat),
-                            title: Text(chat.displayName ?? 'Chat'),
-                            subtitle: chat.lastMessagePreview != null
-                                ? Text(chat.lastMessagePreview!)
-                                : const Text('Sin mensajes'),
-                            trailing: chat.unreadCount > 0
-                                ? CircleAvatar(
-                                    radius: 12,
-                                    backgroundColor: Colors.red,
-                                    child: Text(
-                                      '${chat.unreadCount}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                const SizedBox(height: 16),
-
-                // Notes
-                if (customer.internalNote != null &&
-                    customer.internalNote!.isNotEmpty)
-                  _buildInfoCard('Notas', [Text(customer.internalNote!)]),
-
-                const SizedBox(height: 16),
-
-                // Audit Info
-                _buildInfoCard('Información de Auditoría', [
-                  _buildInfoRow('Creado', customer.createdAt),
-                  _buildInfoRow('Actualizado', customer.updatedAt),
-                ]),
-
-                const SizedBox(height: 24),
-
-                // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          context.go(AppRoutes.crm);
-                        },
-                        icon: const Icon(Icons.chat),
-                        label: const Text('Ir a Chats'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.all(16),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          _confirmDelete(customer.id, customer.fullName);
-                        },
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        label: const Text(
-                          'Eliminar',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.all(16),
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => CompactErrorWidget(
-          error: error.toString(),
-          onRetry: () => ref.invalidate(customerDetailProvider(customerId)),
-        ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Contact Information
+          _buildInfoCard('Información de Contacto', [
+            if (client.phoneE164 != null) _buildInfoRow('Teléfono', client.phoneE164!),
+            _buildInfoRow('WhatsApp ID', client.waId),
+            if (client.displayName != null) _buildInfoRow('Nombre', client.displayName!),
+          ]),
+
+          const SizedBox(height: 16),
+
+          // CRM Information
+          _buildInfoCard('Información CRM', [
+            _buildInfoRow('Estado', client.status),
+            if (client.isImportant) 
+              const Chip(
+                label: Text('Importante'),
+                backgroundColor: Colors.red,
+                labelStyle: TextStyle(color: Colors.white),
+              ),
+            if (client.followUp)
+              const Chip(
+                label: Text('Seguimiento'),
+                backgroundColor: Colors.orange,
+                labelStyle: TextStyle(color: Colors.white),
+              ),
+            if (client.productId != null) _buildInfoRow('Producto ID', client.productId!),
+            if (client.assignedToUserId != null) _buildInfoRow('Asignado a', client.assignedToUserId!),
+          ]),
+
+          const SizedBox(height: 16),
+
+          // Last Message
+          if (client.lastMessageText != null)
+            _buildInfoCard('Último Mensaje', [
+              Text(client.lastMessageText!),
+              if (client.lastMessageAt != null)
+                Text(
+                  'Recibido: ${_formatDateTime(client.lastMessageAt!)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+            ]),
+
+          const SizedBox(height: 16),
+
+          // Notes
+          if (client.note != null && client.note!.isNotEmpty)
+            _buildInfoCard('Notas', [
+              Text(client.note!),
+            ]),
+
+          const SizedBox(height: 16),
+
+          // Audit Info
+          _buildInfoCard('Información de Auditoría', [
+            if (client.createdAt != null) _buildInfoRow('Creado', _formatDateTime(client.createdAt!)),
+            if (client.updatedAt != null) _buildInfoRow('Actualizado', _formatDateTime(client.updatedAt!)),
+          ]),
+
+          const SizedBox(height: 24),
+
+          // Action Buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    context.go('${AppRoutes.crm}/chats/${client.id}');
+                  },
+                  icon: const Icon(Icons.chat),
+                  label: const Text('Ir a Chat'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    final controller = ref.read(purchasedClientsControllerProvider.notifier);
+                    _showEditClientDialog(client, controller);
+                  },
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Editar'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Delete Button
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                final controller = ref.read(purchasedClientsControllerProvider.notifier);
+                _showDeleteConfirmation(client, controller);
+              },
+              icon: const Icon(Icons.delete, color: Colors.red),
+              label: const Text('Eliminar Cliente', style: TextStyle(color: Colors.red)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.red),
+                padding: const EdgeInsets.all(16),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildInfoCard(String title, List<Widget> children) {
     return Card(
+      elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               title,
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey,
               ),
             ),
             const SizedBox(height: 12),
@@ -435,372 +648,183 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 100,
             child: Text(
-              label,
-              style: const TextStyle(
+              '$label:',
+              style: TextStyle(
+                color: Colors.grey[700],
                 fontWeight: FontWeight.w500,
-                color: Colors.grey,
               ),
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+            child: Text(value),
           ),
         ],
       ),
     );
   }
 
-  void _confirmDelete(String id, String name) {
+  void _showEditClientDialog(PurchasedClient client, PurchasedClientsController controller) {
+    final nameController = TextEditingController(text: client.displayName ?? '');
+    final phoneController = TextEditingController(text: client.phoneE164 ?? '');
+    final noteController = TextEditingController(text: client.note ?? '');
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirmar Eliminación'),
-        content: Text('¿Estás seguro de eliminar al cliente "$name"?'),
+        title: const Text('Editar Cliente'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: phoneController,
+                decoration: const InputDecoration(
+                  labelText: 'Teléfono',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: noteController,
+                decoration: const InputDecoration(
+                  labelText: 'Notas',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
-              await ref
-                  .read(customersControllerProvider.notifier)
-                  .deleteCustomer(id);
-              setState(() {
-                _selectedCustomerId = null;
-              });
+              try {
+                await controller.updateClient(
+                  client.id,
+                  displayName: nameController.text.trim().isEmpty ? null : nameController.text.trim(),
+                  phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
+                  note: noteController.text.trim().isEmpty ? null : noteController.text.trim(),
+                );
+                
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cliente actualizado correctamente')),
+                  );
+                  // Refresh details panel
+                  ref.invalidate(purchasedClientDetailProvider(client.id));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error al actualizar: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(PurchasedClient client, PurchasedClientsController controller) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar Eliminación'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('¿Estás seguro de que quieres eliminar a ${client.displayNameOrPhone}?'),
+            const SizedBox(height: 16),
+            const Text(
+              'Opciones de eliminación:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('• Eliminación suave: Cambia el estado a "eliminado"'),
+            const Text('• Eliminación permanente: Elimina completamente el registro'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          OutlinedButton(
+            onPressed: () async {
+              try {
+                final message = await controller.deleteClient(client.id, hardDelete: false);
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  setState(() {
+                    _selectedClientId = null;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(message)),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Eliminación Suave'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                final message = await controller.deleteClient(client.id, hardDelete: true);
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  setState(() {
+                    _selectedClientId = null;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(message)),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Eliminar'),
+            child: const Text('Eliminar Permanente'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CustomersTrackingPanel extends ConsumerWidget {
-  final List<CustomerItem> customers;
-  final String? selectedCustomerId;
-  final ValueChanged<String?> onSelectCustomer;
-
-  const _CustomersTrackingPanel({
-    required this.customers,
-    required this.selectedCustomerId,
-    required this.onSelectCustomer,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
-    final total = customers.length;
-    final totalSpent = customers.fold<double>(
-      0,
-      (sum, c) => sum + c.totalSpent,
-    );
-    final totalPurchases = customers.fold<int>(
-      0,
-      (sum, c) => sum + c.totalPurchasesCount,
-    );
-
-    final top = customers.toList()
-      ..sort((a, b) => b.totalSpent.compareTo(a.totalSpent));
-
-    return Column(
-      children: [
-        if (selectedCustomerId != null) ...[
-          _SelectedCustomerTrackingCard(customerId: selectedCustomerId!),
-          const SizedBox(height: 12),
-        ],
-        Expanded(
-          child: Card(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(12),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.track_changes, color: theme.colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Seguimiento',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _MiniStat(
-                          icon: Icons.people,
-                          title: 'Clientes en lista',
-                          value: '$total',
-                        ),
-                        const SizedBox(height: 10),
-                        _MiniStat(
-                          icon: Icons.shopping_bag,
-                          title: 'Compras (conteo)',
-                          value: '$totalPurchases',
-                        ),
-                        const SizedBox(height: 10),
-                        _MiniStat(
-                          icon: Icons.attach_money,
-                          title: 'Ingresos (estimado)',
-                          value: '\$${totalSpent.toStringAsFixed(2)}',
-                        ),
-                        const Divider(height: 28),
-                        Text(
-                          'Top Clientes',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ...top.take(8).map(
-                          (c) => Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              dense: true,
-                              leading: CircleAvatar(
-                                radius: 16,
-                                child: Text(
-                                  c.fullName.isNotEmpty
-                                      ? c.fullName[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              title: Text(
-                                c.fullName,
-                                style: const TextStyle(fontSize: 13),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                '\$${c.totalSpent.toStringAsFixed(2)} • ${c.totalPurchasesCount} compras',
-                                style: const TextStyle(fontSize: 11),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: selectedCustomerId == c.id
-                                  ? const Icon(Icons.check, size: 16)
-                                  : null,
-                              onTap: () => onSelectCustomer(c.id),
-                            ),
-                          ),
-                        ),
-                        if (customers.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text(
-                              'No hay datos para seguimiento.',
-                              style: TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-
-  const _MiniStat({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SelectedCustomerTrackingCard extends ConsumerStatefulWidget {
-  final String customerId;
-
-  const _SelectedCustomerTrackingCard({required this.customerId});
-
-  @override
-  ConsumerState<_SelectedCustomerTrackingCard> createState() =>
-      _SelectedCustomerTrackingCardState();
-}
-
-class _SelectedCustomerTrackingCardState
-    extends ConsumerState<_SelectedCustomerTrackingCard> {
-  final _noteCtrl = TextEditingController();
-  bool _saving = false;
-  String? _lastLoadedNote;
-
-  @override
-  void dispose() {
-    _noteCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final detailAsync = ref.watch(customerDetailProvider(widget.customerId));
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: detailAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Text('Error: ${e.toString()}'),
-          data: (detail) {
-            final c = detail.customer;
-            final incoming = c.internalNote ?? '';
-            if (_lastLoadedNote != incoming) {
-              _lastLoadedNote = incoming;
-              _noteCtrl.text = incoming;
-            }
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      child: Text(
-                        c.fullName.isNotEmpty
-                            ? c.fullName[0].toUpperCase()
-                            : '?',
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            c.fullName,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            c.phone,
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Abrir CRM',
-                      onPressed: () => context.go(AppRoutes.crm),
-                      icon: const Icon(Icons.open_in_new, size: 18),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Nota de seguimiento',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _noteCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: 'Escribe una nota para dar seguimiento…',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: _saving
-                      ? null
-                      : () async {
-                          setState(() => _saving = true);
-                          try {
-                            await ref
-                                .read(customersRepositoryProvider)
-                                .patchCustomer(widget.customerId, {
-                              'notas': _noteCtrl.text.trim(),
-                            });
-                            ref.invalidate(
-                              customerDetailProvider(widget.customerId),
-                            );
-                            ref
-                                .read(customersControllerProvider.notifier)
-                                .loadCustomers();
-                          } finally {
-                            if (mounted) setState(() => _saving = false);
-                          }
-                        },
-                  icon: const Icon(Icons.save, size: 18),
-                  label: Text(_saving ? 'Guardando…' : 'Guardar'),
-                ),
-              ],
-            );
-          },
-        ),
       ),
     );
   }

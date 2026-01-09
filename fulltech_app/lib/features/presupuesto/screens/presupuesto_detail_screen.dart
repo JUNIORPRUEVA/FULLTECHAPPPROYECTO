@@ -628,7 +628,7 @@ class _QuotePane extends ConsumerWidget {
                           imageUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
-                            color: cs.surfaceVariant,
+                            color: cs.surfaceContainerHighest,
                             child: Icon(
                               Icons.image_not_supported_outlined,
                               size: 18,
@@ -637,7 +637,7 @@ class _QuotePane extends ConsumerWidget {
                           ),
                         )
                       : Container(
-                          color: cs.surfaceVariant,
+                          color: cs.surfaceContainerHighest,
                           child: Icon(
                             Icons.photo_outlined,
                             size: 18,

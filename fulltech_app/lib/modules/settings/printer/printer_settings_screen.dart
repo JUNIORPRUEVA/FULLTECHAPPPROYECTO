@@ -146,7 +146,7 @@ class _PrinterSettingsScreenState extends ConsumerState<PrinterSettingsScreen> {
                       ),
                     ),
                   DropdownButtonFormField<String>(
-                    value: _strategy,
+                    initialValue: _strategy,
                     decoration: const InputDecoration(
                       labelText: 'Estrategia',
                       border: OutlineInputBorder(),

@@ -49,8 +49,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     if (url == null) return null;
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
+    }
     if (trimmed.startsWith('/')) return '${_publicBase()}$trimmed';
     return '${_publicBase()}/$trimmed';
   }
@@ -104,8 +105,9 @@ class _PerfilScreenState extends ConsumerState<PerfilScreen> {
     );
     final f = res?.files.single;
     if (f == null) return null;
-    if (f.bytes == null && (f.path == null || f.path!.trim().isEmpty))
+    if (f.bytes == null && (f.path == null || f.path!.trim().isEmpty)) {
       return null;
+    }
     return _PickedDoc(path: f.path, bytes: f.bytes);
   }
 

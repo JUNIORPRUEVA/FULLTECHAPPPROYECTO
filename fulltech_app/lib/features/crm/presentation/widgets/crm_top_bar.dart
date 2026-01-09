@@ -94,7 +94,7 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
           );
 
           final statusField = DropdownButtonFormField<String>(
-            value: filters.status,
+            initialValue: filters.status,
             isExpanded: true,
             items: const [
               DropdownMenuItem(
@@ -275,7 +275,7 @@ class _ProductDropdown extends StatelessWidget {
     final active = items.where((p) => p.isActive).toList();
 
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       isDense: true,
       items: [

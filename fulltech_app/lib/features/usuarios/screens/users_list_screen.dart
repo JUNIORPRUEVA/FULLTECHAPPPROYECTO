@@ -119,7 +119,7 @@ class _UsersListScreenState extends ConsumerState<UsersListScreen> {
                   SizedBox(
                     width: 220,
                     child: DropdownButtonFormField<String>(
-                      value: state.rol,
+                      initialValue: state.rol,
                       decoration: const InputDecoration(labelText: 'Rol'),
                       items: const [
                         DropdownMenuItem(value: null, child: Text('Todos')),
@@ -137,7 +137,7 @@ class _UsersListScreenState extends ConsumerState<UsersListScreen> {
                   SizedBox(
                     width: 180,
                     child: DropdownButtonFormField<String>(
-                      value: state.estado,
+                      initialValue: state.estado,
                       decoration: const InputDecoration(labelText: 'Estado'),
                       items: const [
                         DropdownMenuItem(value: null, child: Text('Todos')),
@@ -404,7 +404,7 @@ class _UserCreateDialogState extends ConsumerState<_UserCreateDialog> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: _rol,
+                  initialValue: _rol,
                   decoration: const InputDecoration(labelText: 'Rol'),
                   items: const [
                     DropdownMenuItem(value: 'vendedor', child: Text('vendedor')),

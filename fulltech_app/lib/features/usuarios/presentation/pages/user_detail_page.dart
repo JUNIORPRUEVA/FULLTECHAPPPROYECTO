@@ -33,8 +33,9 @@ class _UserDetailPageState extends ConsumerState<UserDetailPage> {
     if (url == null) return null;
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
+    }
     if (trimmed.startsWith('/')) return '${_publicBase()}$trimmed';
     return '${_publicBase()}/$trimmed';
   }

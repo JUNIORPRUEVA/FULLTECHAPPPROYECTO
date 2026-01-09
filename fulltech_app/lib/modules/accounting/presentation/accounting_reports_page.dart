@@ -29,7 +29,7 @@ class AccountingReportsPage extends StatelessWidget {
                   SizedBox(
                     width: 240,
                     child: DropdownButtonFormField<String>(
-                      value: 'summary',
+                      initialValue: 'summary',
                       items: const [
                         DropdownMenuItem(
                           value: 'summary',

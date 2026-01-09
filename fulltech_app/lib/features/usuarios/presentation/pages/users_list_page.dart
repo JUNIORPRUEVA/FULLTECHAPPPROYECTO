@@ -191,7 +191,7 @@ class _UsersListPageState extends ConsumerState<UsersListPage> {
                   SizedBox(
                     width: 220,
                     child: DropdownButtonFormField<String>(
-                      value: state.rol,
+                      initialValue: state.rol,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Rol'),
                       items: const [
@@ -242,7 +242,7 @@ class _UsersListPageState extends ConsumerState<UsersListPage> {
                   SizedBox(
                     width: 180,
                     child: DropdownButtonFormField<String>(
-                      value: state.estado,
+                      initialValue: state.estado,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Estado'),
                       items: const [

@@ -9,6 +9,9 @@ import '../../../../core/services/app_config.dart';
 import '../../../../core/widgets/module_page.dart';
 import '../../../../features/auth/state/auth_providers.dart';
 import '../../../../features/auth/state/auth_state.dart';
+import '../../../../features/catalogo/models/producto.dart';
+import '../../../../features/presupuesto/state/presupuesto_catalog_controller.dart';
+import '../../../../features/presupuesto/state/presupuesto_catalog_state.dart';
 import '../../models/pos_models.dart';
 import '../../state/pos_providers.dart';
 import '../../state/pos_tpv_controller.dart';
@@ -31,6 +34,44 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
   void initState() {
     super.initState();
     _productsScroll = ScrollController();
+
+    // Initialize catalog data
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(presupuestoCatalogControllerProvider.notifier).bootstrap();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Sync search controller with catalog state
+    final catalogState = ref.read(presupuestoCatalogControllerProvider);
+    if (_searchCtrl.text != catalogState.query) {
+      _searchCtrl.text = catalogState.query;
+    }
+  }
+
+  // Convert Producto (catalog) to PosProduct for TPV compatibility
+  PosProduct _convertToTPVProduct(Producto producto) {
+    return PosProduct(
+      id: producto.id,
+      nombre: producto.nombre,
+      precioVenta: producto.precioVenta,
+      costPrice: producto.precioCompra,
+      stockQty: 0, // Default values since catalog doesn't have stock info
+      minStock: 0,
+      maxStock: 0,
+      allowNegativeStock: true,
+      lowStock: false,
+      suggestedReorderQty: 0,
+      categoria: producto.categoria != null
+          ? PosCategory(
+              id: producto.categoria!.id,
+              nombre: producto.categoria!.nombre,
+            )
+          : null,
+      imagenUrl: producto.imagenUrl.isEmpty ? null : producto.imagenUrl,
+    );
   }
 
   @override
@@ -75,7 +116,8 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
                         const SnackBar(content: Text('Filtros: pendiente')),
                       );
                     },
-                    onAddProduct: ctrl.addProduct,
+                    onAddProduct: (producto) =>
+                        ctrl.addProduct(_convertToTPVProduct(producto)),
                     canSeeCost: canSeeCost,
                     onOpenVentas: () => context.go(AppRoutes.ventas),
                     onOpenDevoluciones: () {
@@ -144,7 +186,8 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
                       const SnackBar(content: Text('Filtros: pendiente')),
                     );
                   },
-                  onAddProduct: ctrl.addProduct,
+                  onAddProduct: (producto) =>
+                      ctrl.addProduct(_convertToTPVProduct(producto)),
                   canSeeCost: canSeeCost,
                   onOpenVentas: () => context.go(AppRoutes.ventas),
                   onOpenDevoluciones: () {
@@ -381,7 +424,7 @@ class _PosCatalogPane extends ConsumerWidget {
   final TextEditingController searchCtrl;
   final VoidCallback onBarcode;
   final VoidCallback onFilters;
-  final ValueChanged<PosProduct> onAddProduct;
+  final ValueChanged<Producto> onAddProduct;
   final bool canSeeCost;
   final VoidCallback onOpenVentas;
   final VoidCallback onOpenDevoluciones;
@@ -402,22 +445,16 @@ class _PosCatalogPane extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(posTpvControllerProvider);
-    final ctrl = ref.read(posTpvControllerProvider.notifier);
+    final catalogSt = ref.watch(presupuestoCatalogControllerProvider);
+    final catalogCtrl = ref.read(presupuestoCatalogControllerProvider.notifier);
 
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final money0 = NumberFormat('#,##0', 'en_US');
 
-    final allSelected = st.categoryId == null || st.categoryId!.trim().isEmpty;
-
-    final categoriesById = <String, PosCategory>{};
-    for (final p in st.products) {
-      final c = p.categoria;
-      if (c == null) continue;
-      categoriesById.putIfAbsent(c.id, () => c);
-    }
-    final categorias = categoriesById.values.toList()
-      ..sort((a, b) => a.nombre.compareTo(b.nombre));
+    final allSelected =
+        catalogSt.selectedCategoriaId == null ||
+        catalogSt.selectedCategoriaId!.trim().isEmpty;
+    final categorias = catalogSt.categorias;
 
     final width = MediaQuery.sizeOf(context).width;
     final crossAxisCount = width >= 1400
@@ -444,7 +481,7 @@ class _PosCatalogPane extends ConsumerWidget {
                     labelText: 'Buscar producto',
                     isDense: true,
                   ),
-                  onChanged: ctrl.setSearch,
+                  onChanged: catalogCtrl.setQuery,
                 ),
               ),
               const SizedBox(width: 8),
@@ -482,7 +519,7 @@ class _PosCatalogPane extends ConsumerWidget {
                     color: allSelected ? cs.onPrimary : cs.onPrimaryContainer,
                     fontWeight: FontWeight.w700,
                   ),
-                  onSelected: (_) => ctrl.setCategory(null),
+                  onSelected: (_) => catalogCtrl.setCategoria(null),
                 ),
               ),
               for (final c in categorias)
@@ -490,24 +527,24 @@ class _PosCatalogPane extends ConsumerWidget {
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
                     label: Text(c.nombre.toUpperCase()),
-                    selected: st.categoryId == c.id,
+                    selected: catalogSt.selectedCategoriaId == c.id,
                     backgroundColor: cs.primaryContainer,
                     selectedColor: cs.primary,
                     side: BorderSide(
                       color:
-                          (st.categoryId == c.id
+                          (catalogSt.selectedCategoriaId == c.id
                                   ? cs.onPrimary
                                   : cs.onPrimaryContainer)
                               .withValues(alpha: 0.35),
                     ),
                     showCheckmark: false,
                     labelStyle: TextStyle(
-                      color: st.categoryId == c.id
+                      color: catalogSt.selectedCategoriaId == c.id
                           ? cs.onPrimary
                           : cs.onPrimaryContainer,
                       fontWeight: FontWeight.w700,
                     ),
-                    onSelected: (_) => ctrl.setCategory(c.id),
+                    onSelected: (_) => catalogCtrl.setCategoria(c.id),
                   ),
                 ),
             ],
@@ -515,29 +552,14 @@ class _PosCatalogPane extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: GridView.builder(
-            controller: productsScroll,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              childAspectRatio: 0.95,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemCount: st.products.length,
-            itemBuilder: (context, i) {
-              final p = st.products[i];
-              final priceText = money0.format(p.precioVenta.round());
-              final costText = money0.format(p.costPrice.round());
-
-              return CatalogProductGridCard(
-                nombre: p.nombre,
-                priceText: priceText,
-                costText: costText,
-                canSeeCost: canSeeCost,
-                imageRaw: (p.imagenUrl ?? ''),
-                onTap: () => onAddProduct(p),
-              );
-            },
+          child: _buildProductsContent(
+            context,
+            catalogSt,
+            crossAxisCount,
+            canSeeCost,
+            onAddProduct,
+            catalogCtrl,
+            productsScroll,
           ),
         ),
         const SizedBox(height: 12),
@@ -568,6 +590,146 @@ class _PosCatalogPane extends ConsumerWidget {
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildProductsContent(
+    BuildContext context,
+    PresupuestoCatalogState st,
+    int crossAxisCount,
+    bool canSeeCost,
+    ValueChanged<Producto> onAddProduct,
+    PresupuestoCatalogController ctrl,
+    ScrollController productsScroll,
+  ) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final money0 = NumberFormat('#,##0', 'en_US');
+
+    // Show loading state
+    if (st.isLoading && st.productos.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Cargando productos...'),
+          ],
+        ),
+      );
+    }
+
+    // Show error state
+    if (st.error != null && st.productos.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: cs.error),
+            const SizedBox(height: 16),
+            Text(
+              'Error cargando productos',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              st.error!,
+              style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => ctrl.refreshProductos(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show empty state
+    if (st.productos.isEmpty) {
+      final hasFilters =
+          st.query.trim().isNotEmpty ||
+          (st.selectedCategoriaId != null &&
+              st.selectedCategoriaId!.trim().isNotEmpty);
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              hasFilters ? Icons.search_off : Icons.inventory_2_outlined,
+              size: 48,
+              color: cs.onSurfaceVariant,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              hasFilters
+                  ? 'No se encontraron productos'
+                  : 'No hay productos disponibles',
+              style: theme.textTheme.titleMedium,
+            ),
+            if (hasFilters) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Intenta modificar los filtros de búsqueda',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  ctrl.setQuery('');
+                  ctrl.setCategoria(null);
+                },
+                icon: const Icon(Icons.clear_all),
+                label: const Text('Limpiar filtros'),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // Show products grid with loading overlay if refreshing
+    return Stack(
+      children: [
+        GridView.builder(
+          controller: productsScroll,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 0.95,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: st.productos.length,
+          itemBuilder: (context, i) {
+            final p = st.productos[i];
+            final priceText = money0.format(p.precioVenta.round());
+            final costText = money0.format(p.precioCompra.round());
+
+            return CatalogProductGridCard(
+              nombre: p.nombre,
+              priceText: priceText,
+              costText: costText,
+              canSeeCost: canSeeCost,
+              imageRaw: p.imagenUrl,
+              onTap: () => onAddProduct(p),
+            );
+          },
+        ),
+        // Loading overlay when refreshing with existing products
+        if (st.isLoading && st.productos.isNotEmpty)
+          Positioned.fill(
+            child: Container(
+              color: cs.surface.withValues(alpha: 0.7),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          ),
       ],
     );
   }
@@ -673,7 +835,7 @@ class _PosSalePane extends ConsumerWidget {
                           imageUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
-                            color: cs.surfaceVariant,
+                            color: cs.surfaceContainerHighest,
                             child: Icon(
                               Icons.image_not_supported_outlined,
                               size: 18,
@@ -682,7 +844,7 @@ class _PosSalePane extends ConsumerWidget {
                           ),
                         )
                       : Container(
-                          color: cs.surfaceVariant,
+                          color: cs.surfaceContainerHighest,
                           child: Icon(
                             Icons.photo_outlined,
                             size: 18,
@@ -805,20 +967,6 @@ class _PosSalePane extends ConsumerWidget {
       letterSpacing: 0.2,
     );
 
-    Future<void> sendWhatsApp() async {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('WhatsApp: pendiente')));
-    }
-
-    Future<void> sendEmail() async {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Email: pendiente')));
-    }
-
     return LayoutBuilder(
       builder: (context, pane) {
         final paneH = pane.maxHeight;
@@ -827,243 +975,260 @@ class _PosSalePane extends ConsumerWidget {
 
         final content = Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'TPV',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    cs.surface.withValues(alpha: 0.9),
+                    cs.surface.withValues(alpha: 0.7),
+                  ],
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'TPV',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
+                        IconButton(
+                          tooltip: 'Agregar ticket',
+                          onPressed: () => ref
+                              .read(posTpvControllerProvider.notifier)
+                              .addTicket(),
+                          icon: const Icon(Icons.add),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: paneUltraTightH ? 6 : 8),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: state.tickets.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, i) {
+                          final t = state.tickets[i];
+                          final selected = t.id == state.activeTicketId;
+                          return GestureDetector(
+                            onLongPress: () => _renameTicket(context, ref, t),
+                            child: InputChip(
+                              label: Text(
+                                t.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              showCheckmark: false,
+                              selected: selected,
+                              backgroundColor: cs.surfaceContainerHighest,
+                              selectedColor: cs.primary,
+                              side: BorderSide(
+                                color:
+                                    (selected ? cs.primary : cs.outlineVariant)
+                                        .withValues(alpha: 0.5),
+                              ),
+                              labelStyle: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: selected ? cs.onPrimary : cs.onSurface,
+                              ),
+                              onPressed: () => ref
+                                  .read(posTpvControllerProvider.notifier)
+                                  .selectTicket(t.id),
+                            ),
+                          );
+                        },
                       ),
-                      IconButton(
-                        tooltip: 'Agregar ticket',
-                        onPressed: () => ref
-                            .read(posTpvControllerProvider.notifier)
-                            .addTicket(),
-                        icon: const Icon(Icons.add),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: paneUltraTightH ? 6 : 8),
-                  SizedBox(
-                    height: 40,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: state.tickets.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) {
-                        final t = state.tickets[i];
-                        final selected = t.id == state.activeTicketId;
-                        return GestureDetector(
-                          onLongPress: () => _renameTicket(context, ref, t),
-                          child: InputChip(
-                            label: Text(
-                              t.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: paneUltraTightH ? 6 : 10),
+                    LayoutBuilder(
+                      builder: (context, c) {
+                        final isCompact = c.maxWidth < 420;
+                        final tightH = paneTightH;
+                        final ultraTightH = paneUltraTightH;
+
+                        final minH = ultraTightH
+                            ? 52.0
+                            : (isCompact ? 60.0 : 68.0);
+                        final padV = ultraTightH ? 6.0 : (tightH ? 8.0 : 10.0);
+                        final avatarSize = ultraTightH
+                            ? 28.0
+                            : (tightH ? 30.0 : 34.0);
+                        final labelFontSize = ultraTightH ? 11.0 : 12.0;
+                        final nameFontSize = ultraTightH ? 14.0 : 16.0;
+
+                        final customerName = (ticket.customerName ?? '').trim();
+                        final hasCustomer = customerName.isNotEmpty;
+
+                        final maxNameLines =
+                            (!isCompact && !ultraTightH && c.maxWidth >= 520)
+                            ? 2
+                            : 1;
+                        final showItemsText = !isCompact && c.maxWidth >= 460;
+
+                        return ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: minH),
+                          child: Material(
+                            color: cs.primary,
+                            elevation: 4,
+                            shadowColor: cs.shadow.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: onPickCustomer,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: padV,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: avatarSize,
+                                      height: avatarSize,
+                                      decoration: BoxDecoration(
+                                        color: cs.onPrimary.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Icon(
+                                        Icons.person,
+                                        size: ultraTightH ? 18 : 20,
+                                        color: cs.onPrimary.withValues(
+                                          alpha: 0.95,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Cliente',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                  fontSize: labelFontSize,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: cs.onPrimary
+                                                      .withValues(alpha: 0.85),
+                                                ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            hasCustomer
+                                                ? customerName
+                                                : 'Seleccionar cliente',
+                                            maxLines: maxNameLines,
+                                            overflow: TextOverflow.ellipsis,
+                                            softWrap: false,
+                                            style: theme.textTheme.bodyLarge
+                                                ?.copyWith(
+                                                  fontSize: nameFontSize,
+                                                  fontWeight: FontWeight.w700,
+                                                  height: 1.1,
+                                                  color: cs.onPrimary,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: showItemsText ? 130 : 44,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          if (showItemsText) ...[
+                                            Flexible(
+                                              child: Text(
+                                                'Items: ${ticket.items.length}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.right,
+                                                style: theme
+                                                    .textTheme
+                                                    .labelMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                      color: cs.onPrimary
+                                                          .withValues(
+                                                            alpha: 0.95,
+                                                          ),
+                                                    ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                          ],
+                                          IconButton(
+                                            tooltip: hasCustomer
+                                                ? 'Cambiar cliente'
+                                                : 'Seleccionar cliente',
+                                            onPressed: onPickCustomer,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            constraints:
+                                                const BoxConstraints.tightFor(
+                                                  width: 36,
+                                                  height: 36,
+                                                ),
+                                            icon: Icon(
+                                              Icons.person_add_alt_1,
+                                              size: ultraTightH ? 18 : 20,
+                                              color: cs.onPrimary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                            showCheckmark: false,
-                            selected: selected,
-                            backgroundColor: cs.surfaceContainerHighest,
-                            selectedColor: cs.primary,
-                            side: BorderSide(
-                              color: (selected ? cs.primary : cs.outlineVariant)
-                                  .withValues(alpha: 0.5),
-                            ),
-                            labelStyle: theme.textTheme.labelLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: selected ? cs.onPrimary : cs.onSurface,
-                            ),
-                            onPressed: () => ref
-                                .read(posTpvControllerProvider.notifier)
-                                .selectTicket(t.id),
                           ),
                         );
                       },
                     ),
-                  ),
-                  SizedBox(height: paneUltraTightH ? 6 : 10),
-                  LayoutBuilder(
-                    builder: (context, c) {
-                      final isCompact = c.maxWidth < 420;
-                      final tightH = paneTightH;
-                      final ultraTightH = paneUltraTightH;
-
-                      final minH = ultraTightH
-                          ? 52.0
-                          : (isCompact ? 60.0 : 68.0);
-                      final padV = ultraTightH ? 6.0 : (tightH ? 8.0 : 10.0);
-                      final avatarSize = ultraTightH
-                          ? 28.0
-                          : (tightH ? 30.0 : 34.0);
-                      final labelFontSize = ultraTightH ? 11.0 : 12.0;
-                      final nameFontSize = ultraTightH ? 14.0 : 16.0;
-
-                      final customerName = (ticket.customerName ?? '').trim();
-                      final hasCustomer = customerName.isNotEmpty;
-
-                      final maxNameLines =
-                          (!isCompact && !ultraTightH && c.maxWidth >= 520)
-                          ? 2
-                          : 1;
-                      final showItemsText = !isCompact && c.maxWidth >= 460;
-
-                      return ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: minH),
-                        child: Material(
-                          color: cs.primary,
-                          elevation: 4,
-                          shadowColor: cs.shadow.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(14),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: onPickCustomer,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: padV,
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Container(
-                                    width: avatarSize,
-                                    height: avatarSize,
-                                    decoration: BoxDecoration(
-                                      color: cs.onPrimary.withValues(
-                                        alpha: 0.18,
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Icon(
-                                      Icons.person,
-                                      size: ultraTightH ? 18 : 20,
-                                      color: cs.onPrimary.withValues(
-                                        alpha: 0.95,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Cliente',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.labelSmall
-                                              ?.copyWith(
-                                                fontSize: labelFontSize,
-                                                fontWeight: FontWeight.w600,
-                                                color: cs.onPrimary.withValues(
-                                                  alpha: 0.85,
-                                                ),
-                                              ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          hasCustomer
-                                              ? customerName
-                                              : 'Seleccionar cliente',
-                                          maxLines: maxNameLines,
-                                          overflow: TextOverflow.ellipsis,
-                                          softWrap: false,
-                                          style: theme.textTheme.bodyLarge
-                                              ?.copyWith(
-                                                fontSize: nameFontSize,
-                                                fontWeight: FontWeight.w700,
-                                                height: 1.1,
-                                                color: cs.onPrimary,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      maxWidth: showItemsText ? 130 : 44,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        if (showItemsText) ...[
-                                          Flexible(
-                                            child: Text(
-                                              'Items: ${ticket.items.length}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              textAlign: TextAlign.right,
-                                              style: theme.textTheme.labelMedium
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w800,
-                                                    color: cs.onPrimary
-                                                        .withValues(
-                                                          alpha: 0.95,
-                                                        ),
-                                                  ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                        ],
-                                        IconButton(
-                                          tooltip: hasCustomer
-                                              ? 'Cambiar cliente'
-                                              : 'Seleccionar cliente',
-                                          onPressed: onPickCustomer,
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          constraints:
-                                              const BoxConstraints.tightFor(
-                                                width: 36,
-                                                height: 36,
-                                              ),
-                                          icon: Icon(
-                                            Icons.person_add_alt_1,
-                                            size: ultraTightH ? 18 : 20,
-                                            color: cs.onPrimary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                    SizedBox(height: paneUltraTightH ? 6 : 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onAddManual,
+                            icon: const Icon(Icons.playlist_add),
+                            label: const Text('Agregar manual'),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                  SizedBox(height: paneUltraTightH ? 6 : 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onAddManual,
-                          icon: const Icon(Icons.playlist_add),
-                          label: const Text('Agregar manual'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-            const Divider(height: 1),
+            const Divider(),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -1182,84 +1347,56 @@ class _PosSalePane extends ConsumerWidget {
                         style: theme.textTheme.bodySmall,
                       ),
                     ),
-                  SizedBox(height: paneUltraTightH ? 6 : 10),
-                  const Divider(height: 1),
-                  SizedBox(height: paneUltraTightH ? 6 : 10),
-                  LayoutBuilder(
-                    builder: (context, c) {
-                      final disabled = ticket.items.isEmpty;
-                      final buttonWidth = ((c.maxWidth - 24) / 4).clamp(
-                        96.0,
-                        220.0,
-                      );
-
-                      Widget btn(Widget child) => SizedBox(
-                        width: buttonWidth,
-                        height: paneUltraTightH ? 40 : 46,
-                        child: child,
-                      );
-
-                      final cobrarBtn = btn(
-                        FilledButton.icon(
-                          onPressed: disabled ? null : onCheckout,
-                          icon: const Icon(Icons.point_of_sale_outlined),
-                          label: const Text('Cobrar'),
+                  SizedBox(height: paneUltraTightH ? 12 : 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: cs.outline.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Divider(),
+                  ),
+                  SizedBox(height: paneUltraTightH ? 12 : 16),
+                  Container(
+                    width: double.infinity,
+                    height: paneUltraTightH ? 52 : 58,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: cs.primary.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                      );
-
-                      final waBtn = btn(
-                        FilledButton.tonalIcon(
-                          onPressed: disabled ? null : sendWhatsApp,
-                          icon: const Icon(Icons.chat_outlined),
-                          label: const Text(
-                            'WhatsApp',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                      ],
+                    ),
+                    child: FilledButton.icon(
+                      onPressed: ticket.items.isEmpty ? null : onCheckout,
+                      icon: const Icon(Icons.point_of_sale_outlined, size: 24),
+                      label: Text(
+                        'COBRAR',
+                        style: TextStyle(
+                          fontSize: paneUltraTightH ? 16 : 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
                         ),
-                      );
-
-                      final pdfBtn = btn(
-                        FilledButton.tonalIcon(
-                          onPressed: state.lastPaidSale == null
-                              ? null
-                              : onOpenInvoice,
-                          icon: const Icon(Icons.picture_as_pdf_outlined),
-                          label: const Text(
-                            'Ver PDF',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: cs.primary,
+                        foregroundColor: cs.onPrimary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      );
-
-                      final mailBtn = btn(
-                        FilledButton.tonalIcon(
-                          onPressed: disabled ? null : sendEmail,
-                          icon: const Icon(Icons.email_outlined),
-                          label: const Text(
-                            'Email',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      );
-
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            cobrarBtn,
-                            const SizedBox(width: 8),
-                            waBtn,
-                            const SizedBox(width: 8),
-                            pdfBtn,
-                            const SizedBox(width: 8),
-                            mailBtn,
-                          ],
-                        ),
-                      );
-                    },
+                        elevation: 4,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1267,7 +1404,27 @@ class _PosSalePane extends ConsumerWidget {
           ],
         );
 
-        return Card(child: content);
+        return Container(
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: cs.outline.withValues(alpha: 0.3),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: cs.shadow.withValues(alpha: 0.1),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: content,
+          ),
+        );
       },
     );
   }
@@ -1425,6 +1582,8 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
 
   double _parse(String s) => double.tryParse(s.replaceAll(',', '.')) ?? 0;
 
+  String money(double value) => NumberFormat('#,##0.00', 'en_US').format(value);
+
   @override
   Widget build(BuildContext context) {
     final isCredit = _payment == 'CREDIT';
@@ -1445,7 +1604,7 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _payment,
+              initialValue: _payment,
               items: const [
                 DropdownMenuItem(value: 'CASH', child: Text('Efectivo')),
                 DropdownMenuItem(value: 'CARD', child: Text('Tarjeta')),

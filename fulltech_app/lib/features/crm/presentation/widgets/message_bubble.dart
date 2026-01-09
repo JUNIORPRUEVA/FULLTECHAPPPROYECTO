@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -33,7 +35,7 @@ class MessageBubble extends StatelessWidget {
 
     final bg = isMe
         ? theme.colorScheme.primaryContainer
-        : theme.colorScheme.surfaceVariant;
+        : theme.colorScheme.surfaceContainerHighest;
     final fg = isMe
         ? theme.colorScheme.onPrimaryContainer
         : theme.colorScheme.onSurface;
@@ -492,8 +494,9 @@ String _mediaLabel(String type, String url, {required String fallback}) {
   final name = _lastPathSegment(url);
   if (t == 'video') return name.isEmpty ? 'Video' : 'Video · $name';
   if (t == 'document') return name.isEmpty ? 'Documento' : 'Documento · $name';
-  if (t == 'audio' || t == 'ptt')
+  if (t == 'audio' || t == 'ptt') {
     return name.isEmpty ? 'Audio' : 'Audio · $name';
+  }
   if (t == 'image') return name.isEmpty ? 'Imagen' : 'Imagen · $name';
   return name.isEmpty ? url : name;
 }
@@ -681,39 +684,50 @@ class _AudioPlayerBubble extends StatefulWidget {
 }
 
 class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
-  late final AudioPlayer _player;
+  AudioPlayer? _player;
   Duration _duration = Duration.zero;
   bool _supported = true;
 
   @override
   void initState() {
     super.initState();
+    
+    // Temporary fix: Disable audio player on Windows to prevent freezing
+    if (kIsWeb || Platform.isWindows) {
+      setState(() => _supported = false);
+      return;
+    }
+    
     _player = AudioPlayer();
     Future.microtask(() async {
       try {
-        final d = await _player.setUrl(widget.url);
+        final d = await _player?.setUrl(widget.url);
         if (!mounted) return;
         setState(() => _duration = d ?? Duration.zero);
       } on MissingPluginException {
         if (!mounted) return;
         setState(() => _supported = false);
-      } catch (_) {
-        // Leave as-is; UI will still show URL.
+      } catch (e) {
+        // If setUrl fails, disable audio player to prevent freezing
+        if (!mounted) return;
+        setState(() => _supported = false);
       }
     });
   }
 
   @override
   void dispose() {
-    Future.microtask(() async {
-      try {
-        await _player.dispose();
-      } on MissingPluginException {
-        // Desktop plugin not available; ignore.
-      } catch (_) {
-        // Ignore dispose errors.
-      }
-    });
+    if (_player != null) {
+      Future.microtask(() async {
+        try {
+          await _player!.dispose();
+        } on MissingPluginException {
+          // Desktop plugin not available; ignore.
+        } catch (_) {
+          // Ignore dispose errors.
+        }
+      });
+    }
     super.dispose();
   }
 
@@ -722,7 +736,7 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
     final theme = Theme.of(context);
 
     // If just_audio plugin isn't available, fall back to a safe stub UI.
-    if (!_supported) {
+    if (!_supported || _player == null) {
       return _AudioStub(labelStyle: widget.labelStyle);
     }
 
@@ -733,7 +747,7 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: StreamBuilder<PlayerState>(
-        stream: _player.playerStateStream,
+        stream: _player!.playerStateStream,
         builder: (context, snapState) {
           final playing = snapState.data?.playing ?? false;
           return Column(
@@ -752,17 +766,17 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
                     onPressed: () async {
                       try {
                         if (playing) {
-                          await _player.pause();
+                          await _player!.pause();
                         } else {
-                          await _player.play();
+                          await _player!.play();
                         }
                       } catch (_) {}
                     },
-                    icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                    icon: Icon(playing ? Icons.play_arrow : Icons.pause),
                   ),
                   const SizedBox(width: 8),
                   StreamBuilder<Duration>(
-                    stream: _player.positionStream,
+                    stream: _player!.positionStream,
                     builder: (context, snapPos) {
                       final pos = snapPos.data ?? Duration.zero;
                       final maxMs = _duration.inMilliseconds;
@@ -783,7 +797,7 @@ class _AudioPlayerBubbleState extends State<_AudioPlayerBubble> {
                                 final target = Duration(
                                   milliseconds: (v * maxMs).round(),
                                 );
-                                _player.seek(target);
+                                _player?.seek(target);
                               },
                             ),
                           ),

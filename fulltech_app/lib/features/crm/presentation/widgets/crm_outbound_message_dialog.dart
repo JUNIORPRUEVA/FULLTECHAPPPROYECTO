@@ -209,7 +209,7 @@ class _CrmOutboundMessageDialogState
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _status,
+              initialValue: _status,
               items: _statusItems
                   .map(
                     (s) => DropdownMenuItem<String>(
@@ -226,7 +226,7 @@ class _CrmOutboundMessageDialogState
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _productId,
+              initialValue: _productId,
               items: <DropdownMenuItem<String>>[
                 const DropdownMenuItem<String>(
                   value: null,

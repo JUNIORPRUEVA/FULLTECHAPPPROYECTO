@@ -53,6 +53,6 @@ class OfflineLocalDatabase {
   String _quoteIdent(String name) {
     final safe = RegExp(r'^[a-z_][a-z0-9_]*$');
     if (safe.hasMatch(name)) return name;
-    return '"' + name.replaceAll('"', '""') + '"';
+    return '"${name.replaceAll('"', '""')}"';
   }
 }

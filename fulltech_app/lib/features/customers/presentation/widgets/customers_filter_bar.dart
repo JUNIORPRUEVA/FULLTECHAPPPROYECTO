@@ -66,7 +66,7 @@ class _CustomersFilterBarState extends ConsumerState<CustomersFilterBar> {
           SizedBox(
             width: 180,
             child: DropdownButtonFormField<String>(
-              value: state.selectedStatus,
+              initialValue: state.selectedStatus,
               decoration: InputDecoration(
                 labelText: 'Estado',
                 border: OutlineInputBorder(

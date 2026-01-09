@@ -111,7 +111,7 @@ class _RuleEditorDialogState extends State<RuleEditorDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<RulesCategory>(
-                  value: _category,
+                  initialValue: _category,
                   items: widget.allowedCategories
                       .map(
                         (c) => DropdownMenuItem(

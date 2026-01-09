@@ -227,7 +227,7 @@ class _PermissionsSettingsScreenState extends ConsumerState<PermissionsSettingsS
                                       SizedBox(
                                         width: 160,
                                         child: DropdownButtonFormField<String>(
-                                          value: _overrideByCode[p.code] ?? 'none',
+                                          initialValue: _overrideByCode[p.code] ?? 'none',
                                           decoration: const InputDecoration(
                                             isDense: true,
                                             border: OutlineInputBorder(),

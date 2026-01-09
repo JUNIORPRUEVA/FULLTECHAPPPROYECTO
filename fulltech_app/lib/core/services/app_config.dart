@@ -30,8 +30,9 @@ class AppConfig {
     if (runtime != null && runtime.isNotEmpty) return runtime;
 
     final v = _apiBaseUrlEnv.trim();
-    if (v.isEmpty)
+    if (v.isEmpty) {
       return 'https://fulltechapp-fulltechapp.gcdndd.easypanel.host/api';
+    }
     return _normalizeApiBaseUrl(v);
   }
 

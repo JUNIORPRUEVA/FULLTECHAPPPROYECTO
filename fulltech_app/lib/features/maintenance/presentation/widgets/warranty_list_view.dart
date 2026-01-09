@@ -88,7 +88,7 @@ class _WarrantyListViewState extends ConsumerState<WarrantyListView> {
               final productDropdown = productsAsync.when<Widget>(
                 data: (items) {
                   return DropdownButtonFormField<String?>(
-                    value: controller.productoIdFilter,
+                    initialValue: controller.productoIdFilter,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Producto',
@@ -152,7 +152,7 @@ class _WarrantyListViewState extends ConsumerState<WarrantyListView> {
                 },
                 error: (_, __) {
                   return DropdownButtonFormField<String?>(
-                    value: controller.productoIdFilter,
+                    initialValue: controller.productoIdFilter,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Producto',

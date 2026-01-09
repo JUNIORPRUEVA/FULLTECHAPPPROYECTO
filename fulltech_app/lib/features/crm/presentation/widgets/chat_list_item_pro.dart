@@ -66,7 +66,7 @@ class ChatListItemPro extends StatelessWidget {
                         ? CircleAvatar(
                             radius: 22,
                             backgroundImage: NetworkImage(profilePhotoUrl),
-                            backgroundColor: theme.colorScheme.surfaceVariant,
+                            backgroundColor: theme.colorScheme.surfaceContainerHighest,
                           )
                         : CircleAvatar(
                             radius: 22,

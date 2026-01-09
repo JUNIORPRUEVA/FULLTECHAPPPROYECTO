@@ -123,10 +123,12 @@ pw.Widget _companyHeader({
   if (company.direccion.trim().isNotEmpty) lines.add(company.direccion.trim());
 
   final contact = <String>[];
-  if (company.telefono.trim().isNotEmpty)
+  if (company.telefono.trim().isNotEmpty) {
     contact.add('Tel: ${company.telefono.trim()}');
-  if (company.rnc != null && company.rnc!.trim().isNotEmpty)
+  }
+  if (company.rnc != null && company.rnc!.trim().isNotEmpty) {
     contact.add('RNC: ${company.rnc!.trim()}');
+  }
   if (contact.isNotEmpty) lines.add(contact.join('  |  '));
 
   if (company.email != null && company.email!.trim().isNotEmpty) {

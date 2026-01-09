@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/app_routes.dart';
 
 class AccessRevokedScreen extends ConsumerWidget {
-  const AccessRevokedScreen({Key? key}) : super(key: key);
+  const AccessRevokedScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

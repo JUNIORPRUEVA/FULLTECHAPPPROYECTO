@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import '../lib/offline/local_db/migrations/offline_schema_migrator.dart';
+import 'package:fulltech_app/offline/local_db/migrations/offline_schema_migrator.dart';
 
 Future<void> main() async {
   sqfliteFfiInit();

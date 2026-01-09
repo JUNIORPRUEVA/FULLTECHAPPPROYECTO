@@ -103,7 +103,7 @@ class _EditMaintenanceDialogState extends ConsumerState<EditMaintenanceDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<MaintenanceType>(
-                value: _maintenanceType,
+                initialValue: _maintenanceType,
                 decoration: const InputDecoration(
                   labelText: 'Tipo',
                   border: OutlineInputBorder(),
@@ -126,7 +126,7 @@ class _EditMaintenanceDialogState extends ConsumerState<EditMaintenanceDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<ProductHealthStatus>(
-                value: _statusAfter,
+                initialValue: _statusAfter,
                 decoration: const InputDecoration(
                   labelText: 'Estado después',
                   border: OutlineInputBorder(),
@@ -149,7 +149,7 @@ class _EditMaintenanceDialogState extends ConsumerState<EditMaintenanceDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<IssueCategory?>(
-                value: _issueCategory,
+                initialValue: _issueCategory,
                 decoration: const InputDecoration(
                   labelText: 'Categoría (opcional)',
                   border: OutlineInputBorder(),

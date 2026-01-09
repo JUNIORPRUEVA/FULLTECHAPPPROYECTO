@@ -100,7 +100,7 @@ class _PresupuestoFiltersDialogState extends State<PresupuestoFiltersDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _order,
+              initialValue: _order,
               decoration: const InputDecoration(labelText: 'Ordenar'),
               items: const [
                 DropdownMenuItem(value: 'most_used', child: Text('Más usados')),
@@ -118,7 +118,7 @@ class _PresupuestoFiltersDialogState extends State<PresupuestoFiltersDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String?>(
-              value: _productType,
+              initialValue: _productType,
               decoration: const InputDecoration(labelText: 'Tipo'),
               items: const [
                 DropdownMenuItem(value: null, child: Text('Todos')),

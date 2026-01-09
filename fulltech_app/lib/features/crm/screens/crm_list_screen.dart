@@ -76,7 +76,7 @@ class _CrmListScreenState extends State<CrmListScreen> {
               SizedBox(
                 width: 220,
                 child: DropdownButtonFormField<String>(
-                  value: _estado,
+                  initialValue: _estado,
                   items: const [
                     DropdownMenuItem(value: 'todos', child: Text('Todos')),
                     DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),

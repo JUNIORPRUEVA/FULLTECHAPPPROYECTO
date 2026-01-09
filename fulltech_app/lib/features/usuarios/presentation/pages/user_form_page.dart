@@ -226,8 +226,9 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
     if (url == null) return null;
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       return trimmed;
+    }
     if (trimmed.startsWith('/')) return '${_publicBase()}$trimmed';
     return '${_publicBase()}/$trimmed';
   }
@@ -240,8 +241,9 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
     );
     final f = res?.files.single;
     if (f == null) return null;
-    if (f.bytes == null && (f.path == null || f.path!.trim().isEmpty))
+    if (f.bytes == null && (f.path == null || f.path!.trim().isEmpty)) {
       return null;
+    }
     return _PickedDoc(path: f.path, bytes: f.bytes);
   }
 
@@ -334,12 +336,15 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
       final fecha = _tryParseDateOnly(fechaStr);
 
       setState(() {
-        if (nombre != null && nombre.trim().isNotEmpty)
+        if (nombre != null && nombre.trim().isNotEmpty) {
           _nombreCtrl.text = nombre.trim();
-        if (cedula != null && cedula.trim().isNotEmpty)
+        }
+        if (cedula != null && cedula.trim().isNotEmpty) {
           _cedulaCtrl.text = cedula.trim();
-        if (lugar != null && lugar.trim().isNotEmpty)
+        }
+        if (lugar != null && lugar.trim().isNotEmpty) {
           _lugarNacimientoCtrl.text = lugar.trim();
+        }
         if (fecha != null) _fechaNacimiento = fecha;
       });
 
@@ -389,8 +394,9 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
       final fecha = _tryParseDateOnly(fechaStr);
 
       setState(() {
-        if (numero != null && numero.trim().isNotEmpty)
+        if (numero != null && numero.trim().isNotEmpty) {
           _licenciaConducirNumeroCtrl.text = numero.trim();
+        }
         if (fecha != null) _licenciaVencimiento = fecha;
       });
 
@@ -711,7 +717,7 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _rol,
+                      initialValue: _rol,
                       decoration: const InputDecoration(labelText: 'Rol'),
                       items: const [
                         DropdownMenuItem(
@@ -940,8 +946,9 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
                   keyboardType: TextInputType.number,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Requerido';
-                    if (num.tryParse(v.trim()) == null)
+                    if (num.tryParse(v.trim()) == null) {
                       return 'Número inválido';
+                    }
                     return null;
                   },
                 ),
@@ -976,8 +983,9 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
                     keyboardType: TextInputType.number,
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) return 'Requerido';
-                      if (num.tryParse(v.trim()) == null)
+                      if (num.tryParse(v.trim()) == null) {
                         return 'Número inválido';
+                      }
                       return null;
                     },
                   ),
@@ -1325,7 +1333,7 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
                             Expanded(
                               flex: 2,
                               child: DropdownButtonFormField<String>(
-                                value: _tipoBeneficio,
+                                initialValue: _tipoBeneficio,
                                 decoration: const InputDecoration(
                                   labelText: 'Tipo',
                                   contentPadding: EdgeInsets.symmetric(
@@ -1579,8 +1587,9 @@ class _UserFormPageState extends ConsumerState<UserFormPage> {
                                     for (final f in files) {
                                       if (f.bytes == null &&
                                           (f.path == null ||
-                                              f.path!.trim().isEmpty))
+                                              f.path!.trim().isEmpty)) {
                                         continue;
+                                      }
                                       _otrosDocumentos.add(
                                         _PickedDoc(
                                           path: f.path,

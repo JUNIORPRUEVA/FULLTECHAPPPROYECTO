@@ -36,7 +36,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'chat_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'final_text', type: 'TEXT', nullable: false, defaultSql: null),
@@ -70,7 +70,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'business_data', type: 'TEXT', nullable: false, defaultSql: '\'{}\''),
     OfflineColumnDef(name: 'enabled', type: 'INTEGER', nullable: false, defaultSql: '1'),
     OfflineColumnDef(name: 'id', type: 'INTEGER', nullable: false, defaultSql: null),
@@ -103,7 +103,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'chat_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'customer_text', type: 'TEXT', nullable: false, defaultSql: null),
@@ -137,7 +137,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (actor_user_id) REFERENCES "Usuario"(id),
   FOREIGN KEY (company_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'action', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'actor_user_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'company_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -165,7 +165,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: '_sync_status', type: 'TEXT', nullable: false, defaultSql: '\'synced\''),
@@ -187,7 +187,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: '_sync_status', type: 'TEXT', nullable: false, defaultSql: '\'synced\''),
@@ -209,7 +209,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: '_sync_status', type: 'TEXT', nullable: false, defaultSql: '\'synced\''),
@@ -236,7 +236,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (chat_id) REFERENCES crm_chats(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'chat_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -270,7 +270,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'display_name', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -325,7 +325,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (thread_id) REFERENCES crm_threads(id),
   FOREIGN KEY (chat_id) REFERENCES crm_chats(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'body', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'chat_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -371,7 +371,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (thread_id) REFERENCES "CrmThread"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'thread_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -406,7 +406,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (thread_id) REFERENCES crm_threads(id),
   FOREIGN KEY (assigned_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_user_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'deleted_at', type: 'TEXT', nullable: true, defaultSql: null),
@@ -442,7 +442,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (thread_id) REFERENCES "CrmThread"(id),
   FOREIGN KEY (assigned_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_user_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -482,7 +482,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (customer_id) REFERENCES customers(id),
   FOREIGN KEY (assigned_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'canal', type: 'TEXT', nullable: false, defaultSql: '\'whatsapp\''),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -522,7 +522,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (customer_id) REFERENCES "Customer"(id),
   FOREIGN KEY (assigned_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'customer_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -556,7 +556,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'event_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'event_type', type: 'TEXT', nullable: true, defaultSql: null),
@@ -601,7 +601,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'deleted_at', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'direccion', type: 'TEXT', nullable: true, defaultSql: null),
@@ -647,7 +647,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'deleted_at', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'direccion', type: 'TEXT', nullable: true, defaultSql: null),
@@ -679,7 +679,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: '_sync_status', type: 'TEXT', nullable: false, defaultSql: '\'synced\''),
     OfflineColumnDef(name: '_sync_last_error', type: 'TEXT', nullable: true, defaultSql: null),
@@ -710,7 +710,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (producto_id) REFERENCES "Producto"(id),
   FOREIGN KEY (audit_id) REFERENCES inventory_audits(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'action_taken', type: 'TEXT', nullable: false, defaultSql: '\'PENDIENTE\''),
     OfflineColumnDef(name: 'audit_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'counted_qty', type: 'INTEGER', nullable: false, defaultSql: null),
@@ -749,7 +749,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (created_by_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'audit_from_date', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'audit_to_date', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -783,7 +783,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (letter_id) REFERENCES "Letter"(id),
   FOREIGN KEY (letter_id) REFERENCES letters(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'file_url', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'format', type: 'TEXT', nullable: false, defaultSql: '\'PDF\''),
@@ -822,7 +822,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (company_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (quotation_id) REFERENCES quotations(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'body', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'company_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -859,7 +859,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (job_id) REFERENCES "OperationsJob"(id),
   FOREIGN KEY (created_by_tech_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_by_tech_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'job_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -891,7 +891,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (assigned_tech_id) REFERENCES "Usuario"(id),
   FOREIGN KEY (crm_customer_id) REFERENCES "Customer"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_tech_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_by_user_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'crm_customer_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -921,7 +921,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (job_id) REFERENCES "OperationsJob"(id),
   FOREIGN KEY (assigned_tech_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_tech_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'customer_availability_notes', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -946,7 +946,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (survey_id) REFERENCES "OperationsSurvey"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'survey_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: '_sync_status', type: 'TEXT', nullable: false, defaultSql: '\'synced\''),
@@ -973,7 +973,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (job_id) REFERENCES "OperationsJob"(id),
   FOREIGN KEY (created_by_tech_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'address_confirmed', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_by_tech_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'future_opportunities', type: 'TEXT', nullable: true, defaultSql: null),
@@ -1003,7 +1003,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (job_id) REFERENCES "OperationsJob"(id),
   FOREIGN KEY (assigned_tech_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'assigned_tech_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'job_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1042,7 +1042,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (employee_user_id) REFERENCES "Usuario"(id),
   FOREIGN KEY (run_id) REFERENCES payroll_runs(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'base_salary_amount', type: 'REAL', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'commissions_amount', type: 'REAL', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1083,7 +1083,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (employee_summary_id) REFERENCES "PayrollEmployeeSummary"(id),
   FOREIGN KEY (employee_summary_id) REFERENCES payroll_employee_summaries(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'amount', type: 'REAL', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'concept_code', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'concept_name', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1130,7 +1130,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (company_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (period_id) REFERENCES payroll_periods(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'amount', type: 'REAL', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'approved_by_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'company_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1172,7 +1172,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (employee_user_id) REFERENCES "Usuario"(id),
   FOREIGN KEY (run_id) REFERENCES payroll_runs(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'employee_user_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1206,7 +1206,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (company_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'company_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'date_from', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1250,7 +1250,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (company_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (period_id) REFERENCES payroll_periods(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'approved_by_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'company_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1292,7 +1292,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (customer_id) REFERENCES customers_legacy(id),
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'balance', type: 'REAL', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'customer_id', type: 'TEXT', nullable: true, defaultSql: null),
@@ -1330,7 +1330,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'active', type: 'INTEGER', nullable: false, defaultSql: '1'),
     OfflineColumnDef(name: 'current_number', type: 'TEXT', nullable: false, defaultSql: '0'),
     OfflineColumnDef(name: 'doc_type', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1368,7 +1368,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (product_id) REFERENCES "Producto"(id),
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'line_total', type: 'REAL', nullable: false, defaultSql: null),
@@ -1409,7 +1409,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (supplier_id) REFERENCES pos_suppliers(id),
   FOREIGN KEY (created_by_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'created_by_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1453,7 +1453,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (product_id) REFERENCES "Producto"(id),
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'discount_amount', type: 'REAL', nullable: false, defaultSql: '0'),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1503,7 +1503,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (customer_id) REFERENCES customers_legacy(id),
   FOREIGN KEY (created_by_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'change_amount', type: 'REAL', nullable: false, defaultSql: '0'),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'created_by_user_id', type: 'TEXT', nullable: true, defaultSql: null),
@@ -1553,7 +1553,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (product_id) REFERENCES "Producto"(id),
   FOREIGN KEY (created_by_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'created_by_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1589,7 +1589,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'address', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'email', type: 'TEXT', nullable: true, defaultSql: null),
@@ -1625,7 +1625,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'copies', type: 'INTEGER', nullable: false, defaultSql: '1'),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1672,7 +1672,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (warranty_case_id) REFERENCES "WarrantyCase"(id),
   FOREIGN KEY (warranty_case_id) REFERENCES warranty_cases(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'attachment_urls', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'cost', type: 'REAL', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -1722,7 +1722,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (supplier_id) REFERENCES "PosSupplier"(id),
   FOREIGN KEY (supplier_id) REFERENCES pos_suppliers(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'allow_negative_stock', type: 'INTEGER', nullable: false, defaultSql: '0'),
     OfflineColumnDef(name: 'brand', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'categoria_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1760,7 +1760,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (parent_producto_id) REFERENCES "Producto"(id),
   FOREIGN KEY (child_producto_id) REFERENCES "Producto"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'cantidad', type: 'REAL', nullable: false, defaultSql: '1'),
     OfflineColumnDef(name: 'child_producto_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'costo_unitario', type: 'REAL', nullable: false, defaultSql: null),
@@ -1807,7 +1807,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'address_text', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'datetime_local', type: 'TEXT', nullable: true, defaultSql: null),
@@ -1855,7 +1855,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'allow_comment', type: 'INTEGER', nullable: false, defaultSql: '1'),
     OfflineColumnDef(name: 'category', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'content', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1893,7 +1893,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (quotation_id) REFERENCES "Quotation"(id),
   FOREIGN KEY (product_id) REFERENCES "Producto"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'cantidad', type: 'REAL', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'discount_amount', type: 'REAL', nullable: false, defaultSql: '0'),
     OfflineColumnDef(name: 'discount_pct', type: 'REAL', nullable: false, defaultSql: '0'),
@@ -1931,7 +1931,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (customer_id) REFERENCES "Customer"(id),
   FOREIGN KEY (created_by_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_by_user_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'customer_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -1958,7 +1958,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _server_updated_at INTEGER,
   _deleted INTEGER NOT NULL DEFAULT 0
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'code', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'description', type: 'TEXT', nullable: false, defaultSql: '\'\''),
     OfflineColumnDef(name: '_sync_status', type: 'TEXT', nullable: false, defaultSql: '\'synced\''),
@@ -1983,7 +1983,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (role_id) REFERENCES rbac_roles(id),
   FOREIGN KEY (permission_code) REFERENCES rbac_permissions(code)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'permission_code', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'role_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2010,7 +2010,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2041,7 +2041,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (user_id) REFERENCES "Usuario"(id),
   FOREIGN KEY (permission_code) REFERENCES rbac_permissions(code)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'effect', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'permission_code', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2069,7 +2069,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (user_id) REFERENCES "Usuario"(id),
   FOREIGN KEY (role_id) REFERENCES rbac_roles(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'role_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'user_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2103,7 +2103,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (created_by_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'category', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'content', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -2140,7 +2140,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (sale_id) REFERENCES "SalesRecord"(id),
   FOREIGN KEY (sale_id) REFERENCES sales(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'caption', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2193,7 +2193,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (thread_id) REFERENCES crm_threads(id),
   FOREIGN KEY (customer_id) REFERENCES customers(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'amount', type: 'REAL', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'channel', type: 'TEXT', nullable: false, defaultSql: '\'other\''),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -2251,7 +2251,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (thread_id) REFERENCES crm_threads_legacy(id),
   FOREIGN KEY (customer_id) REFERENCES customers_legacy(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'created_by_user_id', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'customer_id', type: 'TEXT', nullable: true, defaultSql: null),
@@ -2287,7 +2287,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (company_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'active', type: 'INTEGER', nullable: false, defaultSql: '1'),
     OfflineColumnDef(name: 'company_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'config', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2321,7 +2321,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'hide_sidebar', type: 'INTEGER', nullable: false, defaultSql: '0'),
@@ -2354,7 +2354,7 @@ const offlineTableDefs = <OfflineTableDef>[
   _deleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'fecha_ingreso_empresa', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'fecha_nacimiento', type: 'TEXT', nullable: true, defaultSql: null),
@@ -2384,7 +2384,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (empresa_id) REFERENCES "Empresa"(id),
   FOREIGN KEY (cliente_id) REFERENCES "Cliente"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'cliente_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'empresa_id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2424,7 +2424,7 @@ const offlineTableDefs = <OfflineTableDef>[
   FOREIGN KEY (producto_id) REFERENCES "Producto"(id),
   FOREIGN KEY (created_by_user_id) REFERENCES "Usuario"(id)
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'attachment_urls', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'closed_at', type: 'TEXT', nullable: true, defaultSql: null),
     OfflineColumnDef(name: 'created_at', type: 'TEXT', nullable: false, defaultSql: '(strftime(\'%Y-%m-%dT%H:%M:%fZ\',\'now\'))'),
@@ -2461,7 +2461,7 @@ const offlineTableDefs = <OfflineTableDef>[
   last_error TEXT,
   next_retry_at INTEGER
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'entity_table', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'entity_id', type: 'TEXT', nullable: false, defaultSql: null),
@@ -2479,7 +2479,7 @@ const offlineTableDefs = <OfflineTableDef>[
   table_name TEXT PRIMARY KEY,
   last_pulled_at INTEGER
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'table_name', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'last_pulled_at', type: 'INTEGER', nullable: true, defaultSql: null),
     ],
@@ -2495,7 +2495,7 @@ const offlineTableDefs = <OfflineTableDef>[
   server_payload TEXT NOT NULL,
   note TEXT
 );''',
-    columns: const <OfflineColumnDef>[
+    columns: <OfflineColumnDef>[
     OfflineColumnDef(name: 'id', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'entity_table', type: 'TEXT', nullable: false, defaultSql: null),
     OfflineColumnDef(name: 'entity_id', type: 'TEXT', nullable: false, defaultSql: null),

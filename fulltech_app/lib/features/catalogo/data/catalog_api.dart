@@ -32,7 +32,7 @@ class CatalogApi {
             if (firstKey != null) {
               final v = fieldErrors[firstKey];
               if (v is List && v.isNotEmpty) {
-                message = '${message} (${firstKey}: ${v.first})';
+                message = '$message ($firstKey: ${v.first})';
               }
             }
           }

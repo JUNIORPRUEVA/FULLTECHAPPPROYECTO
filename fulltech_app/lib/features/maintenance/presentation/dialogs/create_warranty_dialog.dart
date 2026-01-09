@@ -90,7 +90,7 @@ class _CreateWarrantyDialogState extends ConsumerState<CreateWarrantyDialog> {
                 productsAsync.when(
                   data: (items) {
                     return DropdownButtonFormField<String>(
-                      value: _productoId,
+                      initialValue: _productoId,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Producto',

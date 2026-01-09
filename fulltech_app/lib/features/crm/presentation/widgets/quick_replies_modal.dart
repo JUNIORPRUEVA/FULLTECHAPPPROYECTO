@@ -113,7 +113,7 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(
                 labelText: 'Categoría',
                 isDense: true,
@@ -314,7 +314,7 @@ class _QuickRepliesModalState extends ConsumerState<QuickRepliesModal> {
                     ],
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      value: category,
+                      initialValue: category,
                       decoration: const InputDecoration(
                         labelText: 'Categoría',
                         isDense: true,

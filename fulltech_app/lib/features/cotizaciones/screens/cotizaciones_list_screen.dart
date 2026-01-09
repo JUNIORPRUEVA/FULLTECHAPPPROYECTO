@@ -119,7 +119,7 @@ class _CotizacionesListScreenState extends ConsumerState<CotizacionesListScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: channel,
+                initialValue: channel,
                 items: const [
                   DropdownMenuItem(value: 'whatsapp', child: Text('WhatsApp')),
                   DropdownMenuItem(value: 'email', child: Text('Email')),

@@ -58,7 +58,7 @@ class _PosInvoiceViewerScreenState extends ConsumerState<PosInvoiceViewerScreen>
     final invoice = widget.sale.invoiceNo.trim().isEmpty
         ? widget.sale.id
         : widget.sale.invoiceNo.trim();
-    return 'Factura_${invoice}.pdf';
+    return 'Factura_$invoice.pdf';
   }
 
   Future<Uint8List> _generate() async {

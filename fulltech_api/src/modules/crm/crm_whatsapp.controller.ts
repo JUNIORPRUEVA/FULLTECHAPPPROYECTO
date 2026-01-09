@@ -749,6 +749,218 @@ export async function listChats(req: Request, res: Response) {
   res.json({ items: mapped, total, page, limit });
 }
 
+/**
+ * NEW ENDPOINT: List purchased clients (CRM chats with status = "compro")
+ * This replaces the old "customers" logic - now "Clients" screen shows only CRM chats with "compro" status
+ */
+export async function listPurchasedClients(req: Request, res: Response) {
+  const parsed = crmChatsListQuerySchema.safeParse(req.query);
+  if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
+
+  const { search, page, limit } = parsed.data;
+  const skip = (page - 1) * limit;
+
+  // STRICT FILTER: Only chats with status = "compro"
+  const where: any = {
+    status: 'compro'
+  };
+
+  if (search && search.trim().length > 0) {
+    const q = search.trim();
+    where.OR = [
+      { wa_id: { contains: q, mode: 'insensitive' } },
+      { phone: { contains: q, mode: 'insensitive' } },
+      { display_name: { contains: q, mode: 'insensitive' } },
+      { last_message_preview: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.crmChat.findMany({
+      where,
+      orderBy: [{ last_message_at: 'desc' }, { updated_at: 'desc' }],
+      take: limit,
+      skip,
+    }),
+    prisma.crmChat.count({ where }),
+  ]);
+
+  // Enrich with meta if available
+  const metaByChatId = await fetchChatMeta(items.map((c: any) => c.id));
+  const merged = items.map((c: any) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
+  
+  // Map to client format (same as chat format but clearly for "purchased clients")
+  const mapped = merged.map(toChatApiItem);
+  
+  res.json({ 
+    items: mapped, 
+    total, 
+    page, 
+    limit,
+    message: total === 0 ? "No purchased clients yet. Mark a CRM chat as 'Compró' to see it here." : null
+  });
+}
+
+/**
+ * Get single purchased client details (CRM chat with status = "compro")
+ */
+export async function getPurchasedClient(req: Request, res: Response) {
+  const clientId = req.params.clientId;
+
+  const chat = await prisma.crmChat.findFirst({ 
+    where: { 
+      id: clientId,
+      status: 'compro'  // STRICT: Only purchased clients
+    } 
+  });
+  
+  if (!chat) {
+    throw new ApiError(404, 'Purchased client not found or not marked as "compro"');
+  }
+
+  // Enrich with meta if available
+  let merged: any = chat;
+  try {
+    const metaMap = await fetchChatMeta([clientId]);
+    const meta = metaMap.get(clientId);
+    if (meta) merged = { ...chat, ...meta };
+  } catch {
+    // ignore meta errors
+  }
+
+  res.json({ item: toChatApiItem(merged) });
+}
+
+/**
+ * Update purchased client (CRM chat with status = "compro")
+ * Allows editing: display_name, phone, internal_note, assigned_user_id, product_id
+ */
+export async function updatePurchasedClient(req: Request, res: Response) {
+  const clientId = req.params.clientId;
+  
+  // Verify it's a purchased client
+  const existing = await prisma.crmChat.findFirst({
+    where: { 
+      id: clientId,
+      status: 'compro'  // STRICT: Only purchased clients
+    }
+  });
+
+  if (!existing) {
+    throw new ApiError(404, 'Purchased client not found or not marked as "compro"');
+  }
+
+  const updates: any = {};
+  const metaUpdates: any = {};
+
+  // Extract editable fields from request body
+  if (req.body.displayName !== undefined) {
+    updates.display_name = String(req.body.displayName || '').trim() || null;
+  }
+  if (req.body.display_name !== undefined) {
+    updates.display_name = String(req.body.display_name || '').trim() || null;
+  }
+  if (req.body.phone !== undefined) {
+    updates.phone = String(req.body.phone || '').trim() || null;
+  }
+  if (req.body.note !== undefined || req.body.internal_note !== undefined) {
+    metaUpdates.internal_note = String(req.body.note || req.body.internal_note || '').trim() || null;
+  }
+  if (req.body.assignedUserId !== undefined || req.body.assigned_user_id !== undefined) {
+    metaUpdates.assigned_user_id = String(req.body.assignedUserId || req.body.assigned_user_id || '').trim() || null;
+  }
+  if (req.body.productId !== undefined || req.body.product_id !== undefined) {
+    metaUpdates.product_id = String(req.body.productId || req.body.product_id || '').trim() || null;
+  }
+
+  // Update main chat record
+  if (Object.keys(updates).length > 0) {
+    await prisma.crmChat.update({
+      where: { id: clientId },
+      data: updates
+    });
+  }
+
+  // Update meta if needed
+  if (Object.keys(metaUpdates).length > 0) {
+    await upsertChatMeta(clientId, metaUpdates);
+  }
+
+  // Return updated record
+  const updated = await prisma.crmChat.findUnique({ where: { id: clientId } });
+  let merged: any = updated;
+  try {
+    const metaMap = await fetchChatMeta([clientId]);
+    const meta = metaMap.get(clientId);
+    if (meta) merged = { ...updated, ...meta };
+  } catch {
+    // ignore meta errors
+  }
+
+  emitCrmEvent({ type: 'chat.updated', chatId: clientId });
+
+  res.json({ item: toChatApiItem(merged) });
+}
+
+/**
+ * Delete purchased client (soft delete or hard delete)
+ * This changes status from "compro" to "eliminado" (soft delete)
+ * Or actually deletes the record if hardDelete=true
+ */
+export async function deletePurchasedClient(req: Request, res: Response) {
+  const clientId = req.params.clientId;
+  const hardDelete = req.query.hardDelete === 'true';
+
+  // Verify it's a purchased client
+  const existing = await prisma.crmChat.findFirst({
+    where: { 
+      id: clientId,
+      status: 'compro'  // STRICT: Only purchased clients
+    }
+  });
+
+  if (!existing) {
+    throw new ApiError(404, 'Purchased client not found or not marked as "compro"');
+  }
+
+  if (hardDelete) {
+    // HARD DELETE: Actually remove the record and all messages
+    // Warning: This will break foreign key relationships with messages
+    await prisma.crmChatMessage.deleteMany({ where: { chat_id: clientId } });
+    
+    // Also delete meta if exists
+    try {
+      if (await crmChatMetaExists()) {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM crm_chat_meta WHERE chat_id = $1::uuid`,
+          clientId
+        );
+      }
+    } catch {
+      // ignore meta errors
+    }
+
+    await prisma.crmChat.delete({ where: { id: clientId } });
+    
+    emitCrmEvent({ type: 'chat.deleted', chatId: clientId });
+    
+    res.json({ message: 'Client permanently deleted' });
+  } else {
+    // SOFT DELETE: Change status to "eliminado" 
+    const updated = await prisma.crmChat.update({
+      where: { id: clientId },
+      data: { status: 'eliminado' }
+    });
+
+    emitCrmEvent({ type: 'chat.updated', chatId: clientId });
+
+    res.json({ 
+      item: toChatApiItem(updated),
+      message: 'Client marked as deleted (soft delete). It will no longer appear in purchased clients list.'
+    });
+  }
+}
+
 export async function patchChat(req: Request, res: Response) {
   const chatId = req.params.chatId;
 

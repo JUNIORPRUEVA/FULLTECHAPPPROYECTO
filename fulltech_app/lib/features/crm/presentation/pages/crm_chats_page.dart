@@ -128,7 +128,7 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
             left: 8,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outlineVariant,
@@ -236,7 +236,7 @@ class _ThreadsList extends ConsumerWidget {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant,
+                  color: colorScheme.surfaceContainerHighest,
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(12),
                   ),

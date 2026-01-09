@@ -159,7 +159,7 @@ class _QuotationPreviewDialogState
                     title: Text(it.nombre),
                     subtitle: Text(
                       '${it.cantidad.toStringAsFixed(0)} × ${it.unitPrice.toStringAsFixed(2)}'
-                      '${it.lineDiscount > 0 ? '  •  Desc ' + (it.discountMode == QuotationDiscountMode.amount ? it.discountAmount.toStringAsFixed(2) : it.discountPct.toStringAsFixed(0) + '%') : ''}',
+                      '${it.lineDiscount > 0 ? '  •  Desc ${it.discountMode == QuotationDiscountMode.amount ? it.discountAmount.toStringAsFixed(2) : it.discountPct.toStringAsFixed(0) + '%'}' : ''}',
                     ),
                     trailing: Text(lineTotal.toStringAsFixed(2)),
                   );
@@ -254,8 +254,9 @@ class _QuotationPreviewDialogState
               ? null
               : () async {
                   await _ensureSaved();
-                  if (_saved != null)
+                  if (_saved != null) {
                     _toast('Enviado por WhatsApp (pendiente integración)');
+                  }
                 },
           child: const Text('WhatsApp'),
         ),
@@ -264,8 +265,9 @@ class _QuotationPreviewDialogState
               ? null
               : () async {
                   await _ensureSaved();
-                  if (_saved != null)
+                  if (_saved != null) {
                     _toast('Enviado por Email (pendiente integración)');
+                  }
                 },
           child: const Text('Email'),
         ),

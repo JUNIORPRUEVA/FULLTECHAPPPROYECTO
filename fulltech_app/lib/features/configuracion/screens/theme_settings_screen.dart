@@ -29,7 +29,7 @@ class ThemeSettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<ThemeMode>(
-                    value: mode,
+                    initialValue: mode,
                     decoration: const InputDecoration(labelText: 'Modo'),
                     items: const [
                       DropdownMenuItem(

@@ -181,7 +181,7 @@ class _AdminManageRulesScreenState
                   SizedBox(
                     width: 260,
                     child: DropdownButtonFormField<RulesCategory?>(
-                      value: _category,
+                      initialValue: _category,
                       decoration: const InputDecoration(
                         labelText: 'Categoría',
                         border: OutlineInputBorder(),
@@ -220,7 +220,7 @@ class _AdminManageRulesScreenState
                   SizedBox(
                     width: 220,
                     child: DropdownButtonFormField<bool?>(
-                      value: _activeFilter,
+                      initialValue: _activeFilter,
                       decoration: const InputDecoration(
                         labelText: 'Activo',
                         border: OutlineInputBorder(),
@@ -239,7 +239,7 @@ class _AdminManageRulesScreenState
                   SizedBox(
                     width: 280,
                     child: DropdownButtonFormField<String?>(
-                      value: _roleFilter,
+                      initialValue: _roleFilter,
                       decoration: const InputDecoration(
                         labelText: 'Visibilidad por rol',
                         border: OutlineInputBorder(),
@@ -266,7 +266,7 @@ class _AdminManageRulesScreenState
                   SizedBox(
                     width: 140,
                     child: DropdownButtonFormField<int>(
-                      value: _limit,
+                      initialValue: _limit,
                       decoration: const InputDecoration(
                         labelText: 'Tamaño de página',
                         border: OutlineInputBorder(),

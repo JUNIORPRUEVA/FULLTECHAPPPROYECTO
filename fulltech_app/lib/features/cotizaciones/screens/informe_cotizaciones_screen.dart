@@ -294,7 +294,7 @@ class _InformeCotizacionesScreenState
                 SizedBox(
                   width: 240,
                   child: DropdownButtonFormField<String>(
-                    value: _letterType,
+                    initialValue: _letterType,
                     decoration: const InputDecoration(
                       labelText: 'Tipo',
                       isDense: true,
@@ -316,7 +316,7 @@ class _InformeCotizacionesScreenState
                 SizedBox(
                   width: 200,
                   child: DropdownButtonFormField<String>(
-                    value: _status,
+                    initialValue: _status,
                     decoration: const InputDecoration(
                       labelText: 'Estado',
                       isDense: true,

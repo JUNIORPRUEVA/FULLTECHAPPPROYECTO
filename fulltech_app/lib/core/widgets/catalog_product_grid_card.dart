@@ -48,7 +48,7 @@ class CatalogProductGridCard extends StatelessWidget {
                 _publicUrlFromMaybeRelative(normalizedImageRaw),
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
-                  color: cs.surfaceVariant,
+                  color: cs.surfaceContainerHighest,
                   child: Icon(
                     Icons.image_not_supported_outlined,
                     color: cs.onSurfaceVariant,
@@ -57,7 +57,7 @@ class CatalogProductGridCard extends StatelessWidget {
               )
             else
               Container(
-                color: cs.surfaceVariant,
+                color: cs.surfaceContainerHighest,
                 child: Icon(
                   Icons.photo_outlined,
                   color: cs.onSurfaceVariant,

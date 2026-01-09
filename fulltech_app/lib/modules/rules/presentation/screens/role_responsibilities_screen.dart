@@ -154,7 +154,7 @@ class _RoleResponsibilitiesScreenState
                     SizedBox(
                       width: 280,
                       child: DropdownButtonFormField<String?>(
-                        value: _roleFilter,
+                        initialValue: _roleFilter,
                         decoration: const InputDecoration(
                           labelText: 'Rol',
                           border: OutlineInputBorder(),
@@ -194,7 +194,7 @@ class _RoleResponsibilitiesScreenState
                   SizedBox(
                     width: 220,
                     child: DropdownButtonFormField<bool?>(
-                      value: isAdmin ? _activeFilter : null,
+                      initialValue: isAdmin ? _activeFilter : null,
                       decoration: const InputDecoration(
                         labelText: 'Activo',
                         border: OutlineInputBorder(),

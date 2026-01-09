@@ -23,8 +23,9 @@ String? resolveCatalogPublicUrl(String? url) {
   if (trimmed.isEmpty) return null;
   // Local file paths are handled separately via Image.file.
   if (_isLikelyLocalPath(trimmed)) return null;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
+  }
   if (trimmed.startsWith('/')) return '${_catalogPublicBase()}$trimmed';
   return '${_catalogPublicBase()}/$trimmed';
 }
@@ -496,8 +497,9 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                                   final costo = parseMoney(costoCtrl.text) ?? 0;
                                   final precio =
                                       parseMoney(precioCtrl.text) ?? 0;
-                                  if (precio < costo)
+                                  if (precio < costo) {
                                     return 'Precio debe ser >= costo';
+                                  }
                                   return null;
                                 },
                               ),
@@ -509,7 +511,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: categoriaId,
+                                initialValue: categoriaId,
                                 items: [
                                   for (final c in categorias.where(
                                     (c) => c.isActive,
@@ -1019,7 +1021,7 @@ class _FiltersBar extends StatelessWidget {
             SizedBox(
               width: 260,
               child: DropdownButtonFormField<String>(
-                value: selectedCategoriaId,
+                initialValue: selectedCategoriaId,
                 items: [
                   const DropdownMenuItem<String>(
                     value: null,
@@ -1676,7 +1678,7 @@ class _ProductListItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: cs.surfaceVariant.withOpacity(0.4),
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withOpacity(0.2), width: 1),
       ),

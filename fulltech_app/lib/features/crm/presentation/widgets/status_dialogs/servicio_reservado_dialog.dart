@@ -197,7 +197,7 @@ class _ServicioReservadoDialogState
                     return servicesAsync.when(
                       data: (services) {
                         return DropdownButtonFormField<String>(
-                          value: _selectedServiceId,
+                          initialValue: _selectedServiceId,
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
                             hintText: 'Seleccione un servicio',
@@ -278,7 +278,7 @@ class _ServicioReservadoDialogState
                   builder: (context, ref, child) {
                     // TODO: Implement techniciansListProvider
                     return DropdownButtonFormField<String>(
-                      value: null,
+                      initialValue: null,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         hintText: 'Técnicos no disponibles',

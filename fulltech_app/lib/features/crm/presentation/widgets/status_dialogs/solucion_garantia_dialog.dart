@@ -245,7 +245,7 @@ class _SolucionGarantiaDialogState
                   builder: (context, ref, child) {
                     // TODO: Implement techniciansListProvider
                     return DropdownButtonFormField<String>(
-                      value: null,
+                      initialValue: null,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         hintText: 'Técnicos no disponibles',

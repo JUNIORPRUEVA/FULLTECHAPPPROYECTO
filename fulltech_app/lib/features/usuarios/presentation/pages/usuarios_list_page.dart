@@ -10,7 +10,7 @@ import '../../state/users_providers.dart';
 import '../../state/users_state.dart';
 
 class UsuariosListPage extends ConsumerStatefulWidget {
-  const UsuariosListPage({Key? key}) : super(key: key);
+  const UsuariosListPage({super.key});
 
   @override
   ConsumerState<UsuariosListPage> createState() => _UsuariosListPageState();

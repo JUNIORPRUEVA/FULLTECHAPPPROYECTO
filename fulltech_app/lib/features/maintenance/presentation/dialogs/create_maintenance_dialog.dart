@@ -177,7 +177,7 @@ class _CreateMaintenanceDialogState
                 productsAsync.when(
                   data: (items) {
                     return DropdownButtonFormField<String>(
-                      value: _productoId,
+                      initialValue: _productoId,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Producto',
@@ -253,7 +253,7 @@ class _CreateMaintenanceDialogState
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<MaintenanceType>(
-                        value: _maintenanceType,
+                        initialValue: _maintenanceType,
                         decoration: const InputDecoration(
                           labelText: 'Tipo',
                           border: OutlineInputBorder(),
@@ -274,7 +274,7 @@ class _CreateMaintenanceDialogState
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<ProductHealthStatus>(
-                        value: _statusAfter,
+                        initialValue: _statusAfter,
                         decoration: const InputDecoration(
                           labelText: 'Estado después',
                           border: OutlineInputBorder(),
@@ -299,7 +299,7 @@ class _CreateMaintenanceDialogState
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return DropdownButtonFormField<String?>(
-                        value: _categoriaId,
+                        initialValue: _categoriaId,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Categoría (opcional)',
@@ -321,7 +321,7 @@ class _CreateMaintenanceDialogState
 
                     if (snapshot.hasError || cats.isEmpty) {
                       return DropdownButtonFormField<String?>(
-                        value: _categoriaId,
+                        initialValue: _categoriaId,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Categoría (opcional)',
@@ -343,7 +343,7 @@ class _CreateMaintenanceDialogState
                     }
 
                     return DropdownButtonFormField<String?>(
-                      value: _categoriaId,
+                      initialValue: _categoriaId,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Categoría (opcional)',

@@ -18,8 +18,9 @@ String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
   final trimmed = url.trim();
   if (trimmed.isEmpty) return null;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
+  }
   final base = AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
   if (trimmed.startsWith('/')) return '$base$trimmed';
   return '$base/$trimmed';
@@ -335,7 +336,7 @@ class _ActionsSection extends ConsumerWidget {
             final auth = ref.read(authControllerProvider);
 
             return DropdownButtonFormField<String>(
-              value: thread.status,
+              initialValue: thread.status,
               items: const [
                 DropdownMenuItem(
                   value: 'primer_contacto',
@@ -566,7 +567,7 @@ class _ActionsSection extends ConsumerWidget {
           data: (items) {
             final active = items.where((p) => p.isActive).toList();
             return DropdownButtonFormField<String?>(
-              value: thread.productId,
+              initialValue: thread.productId,
               isExpanded: true,
               items: [
                 const DropdownMenuItem<String?>(
@@ -811,7 +812,7 @@ class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: _selectedCategoryId,
+                  initialValue: _selectedCategoryId,
                   isExpanded: true,
                   items: categories
                       .where((c) => c.isActive)

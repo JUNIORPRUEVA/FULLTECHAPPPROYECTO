@@ -556,7 +556,7 @@ class _UserEditDialogState extends ConsumerState<_UserEditDialog> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _rol,
+                    initialValue: _rol,
                     decoration: const InputDecoration(labelText: 'Rol'),
                     items: const [
                       DropdownMenuItem(value: 'vendedor', child: Text('vendedor')),
@@ -571,7 +571,7 @@ class _UserEditDialogState extends ConsumerState<_UserEditDialog> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _estado,
+                    initialValue: _estado,
                     decoration: const InputDecoration(labelText: 'Estado'),
                     items: const [
                       DropdownMenuItem(value: 'activo', child: Text('activo')),

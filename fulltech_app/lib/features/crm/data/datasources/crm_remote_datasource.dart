@@ -349,8 +349,9 @@ class CrmRemoteDataSource {
     String? mediaUrl,
   }) async {
     // New API distinguishes text vs media. Keep minimal support here.
-    if (!fromMe)
+    if (!fromMe) {
       throw UnsupportedError('Inbound messages are created via webhook only');
+    }
 
     if (type == 'text') {
       final res = await _dio.post(
@@ -1112,10 +1113,12 @@ class CrmRemoteDataSource {
     final ext = (f.extension ?? '').toLowerCase();
     if (ext.trim().isEmpty) return null;
     if ({'jpg', 'jpeg', 'png', 'gif', 'webp'}.contains(ext)) return 'image';
-    if ({'mp4', 'mov', 'avi', 'mkv', 'webm', '3gp'}.contains(ext))
+    if ({'mp4', 'mov', 'avi', 'mkv', 'webm', '3gp'}.contains(ext)) {
       return 'video';
-    if ({'mp3', 'wav', 'aac', 'm4a', 'ogg', 'opus'}.contains(ext))
+    }
+    if ({'mp3', 'wav', 'aac', 'm4a', 'ogg', 'opus'}.contains(ext)) {
       return 'audio';
+    }
     return 'document';
   }
 

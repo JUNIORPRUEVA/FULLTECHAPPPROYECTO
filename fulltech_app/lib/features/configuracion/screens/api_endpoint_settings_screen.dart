@@ -62,7 +62,7 @@ class _ApiEndpointSettingsScreenState
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<ApiBackend>(
-                    value: settings.backend,
+                    initialValue: settings.backend,
                     decoration: const InputDecoration(labelText: 'Origen'),
                     items: const [
                       DropdownMenuItem(

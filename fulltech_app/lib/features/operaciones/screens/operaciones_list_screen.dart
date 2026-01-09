@@ -64,7 +64,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                   ),
                   Flexible(
                     child: DropdownButtonFormField<String>(
-                      value: state.status,
+                      initialValue: state.status,
                       decoration: const InputDecoration(
                         labelText: 'Estado',
                         prefixIcon: Icon(Icons.flag_outlined),

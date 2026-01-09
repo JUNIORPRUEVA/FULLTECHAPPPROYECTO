@@ -159,15 +159,15 @@ final crmRealtimeProvider = Provider<void>((ref) {
 
   final pendingChatIds = <String>{};
   Timer? timer;
-  bool _isRefreshing = false;
+  bool isRefreshing = false;
 
   void flush() {
     timer?.cancel();
     timer = null;
 
     // Prevent multiple simultaneous refreshes
-    if (_isRefreshing) return;
-    _isRefreshing = true;
+    if (isRefreshing) return;
+    isRefreshing = true;
 
     // Always refresh threads once for any CRM event.
     // Controllers are offline-first (cache local then refresh), so this keeps
@@ -176,10 +176,10 @@ final crmRealtimeProvider = Provider<void>((ref) {
         .read(crmThreadsControllerProvider.notifier)
         .refresh()
         .then((_) {
-          _isRefreshing = false;
+          isRefreshing = false;
         })
         .catchError((e) {
-          _isRefreshing = false;
+          isRefreshing = false;
         });
 
     final selected = ref.read(selectedThreadIdProvider);

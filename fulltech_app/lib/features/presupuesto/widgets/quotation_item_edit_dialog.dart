@@ -107,7 +107,7 @@ class _QuotationItemEditDialogState extends State<QuotationItemEditDialog> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<QuotationDiscountMode>(
-                    value: _discountMode,
+                    initialValue: _discountMode,
                     items: const [
                       DropdownMenuItem(
                         value: QuotationDiscountMode.percent,

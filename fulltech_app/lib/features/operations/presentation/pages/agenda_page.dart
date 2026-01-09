@@ -103,7 +103,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _filterType,
+                      initialValue: _filterType,
                       decoration: const InputDecoration(
                         labelText: 'Tipo',
                         isDense: true,
@@ -119,7 +119,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _filterStatus,
+                      initialValue: _filterStatus,
                       decoration: const InputDecoration(
                         labelText: 'Estado',
                         isDense: true,

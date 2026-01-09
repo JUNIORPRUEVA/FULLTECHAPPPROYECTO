@@ -16,8 +16,9 @@ String _friendlyError(Object e) {
   if (e is DioException) {
     final code = e.response?.statusCode;
     if (code == 404) return 'Servicio no disponible.';
-    if (code == 401 || code == 403)
+    if (code == 401 || code == 403) {
       return 'Sesión no válida. Vuelve a iniciar.';
+    }
     return 'No se pudo conectar al servidor.';
   }
   return 'Ocurrió un error.';

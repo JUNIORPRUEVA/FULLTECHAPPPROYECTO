@@ -314,8 +314,9 @@ class LettersRepository {
     try {
       final server = await _lettersApi.markSent(id);
       final item = server['item'];
-      if (item is! Map<String, dynamic>)
+      if (item is! Map<String, dynamic>) {
         throw Exception('Respuesta inválida del servidor');
+      }
 
       final updated = LetterRecord.fromServerJson(
         item,
@@ -371,8 +372,9 @@ class LettersRepository {
 
     final s = (resp['subject'] ?? '').toString().trim();
     final b = (resp['body'] ?? '').toString().trim();
-    if (s.isEmpty || b.isEmpty)
+    if (s.isEmpty || b.isEmpty) {
       throw Exception('La IA devolvió una carta inválida');
+    }
     return (subject: s, body: b);
   }
 

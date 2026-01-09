@@ -11,11 +11,14 @@ import {
 import {
   convertChatToCustomer,
   deleteChatMessage,
+  deletePurchasedClient,
   editChatMessage,
   getChat,
+  getPurchasedClient,
   listChats,
   listChatMessages,
   listChatStats,
+  listPurchasedClients,
   markChatRead,
   patchChat,
   postUpload,
@@ -24,6 +27,7 @@ import {
   sendMediaMessage,
   sendTextMessage,
   sseStream,
+  updatePurchasedClient,
   uploadCrmFile,
 } from './crm_whatsapp.controller';
 import {
@@ -51,6 +55,11 @@ crmRouter.use(authMiddleware);
 
 crmRouter.get('/chats', expressAsyncHandler(listChats));
 crmRouter.get('/chats/stats', expressAsyncHandler(listChatStats));
+// NEW: Purchased clients endpoint (status = "compro" only)
+crmRouter.get('/purchased-clients', expressAsyncHandler(listPurchasedClients));
+crmRouter.get('/purchased-clients/:clientId', expressAsyncHandler(getPurchasedClient));
+crmRouter.patch('/purchased-clients/:clientId', expressAsyncHandler(updatePurchasedClient));
+crmRouter.delete('/purchased-clients/:clientId', expressAsyncHandler(deletePurchasedClient));
 crmRouter.get('/chats/:chatId', expressAsyncHandler(getChat));
 crmRouter.get('/chats/:chatId/messages', expressAsyncHandler(listChatMessages));
 crmRouter.patch('/chats/:chatId/messages/:messageId', expressAsyncHandler(editChatMessage));

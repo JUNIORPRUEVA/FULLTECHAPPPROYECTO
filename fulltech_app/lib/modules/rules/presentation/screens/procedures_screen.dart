@@ -152,7 +152,7 @@ class _ProceduresScreenState extends ConsumerState<ProceduresScreen> {
                   SizedBox(
                     width: 240,
                     child: DropdownButtonFormField<RulesCategory?>(
-                      value: _category,
+                      initialValue: _category,
                       decoration: const InputDecoration(
                         labelText: 'Categoría',
                         border: OutlineInputBorder(),
@@ -174,7 +174,7 @@ class _ProceduresScreenState extends ConsumerState<ProceduresScreen> {
                   SizedBox(
                     width: 220,
                     child: DropdownButtonFormField<bool?>(
-                      value: isAdmin ? _activeFilter : null,
+                      initialValue: isAdmin ? _activeFilter : null,
                       decoration: const InputDecoration(
                         labelText: 'Activo',
                         border: OutlineInputBorder(),
@@ -192,7 +192,7 @@ class _ProceduresScreenState extends ConsumerState<ProceduresScreen> {
                   SizedBox(
                     width: 260,
                     child: DropdownButtonFormField<String?>(
-                      value: isAdmin ? _roleFilter : null,
+                      initialValue: isAdmin ? _roleFilter : null,
                       decoration: const InputDecoration(
                         labelText: 'Visibilidad por rol',
                         border: OutlineInputBorder(),

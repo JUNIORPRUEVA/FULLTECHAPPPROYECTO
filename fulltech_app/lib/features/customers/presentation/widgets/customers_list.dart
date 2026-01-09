@@ -31,7 +31,7 @@ class CustomersList extends StatelessWidget {
     }
 
     if (error != null && customers.isEmpty) {
-      return CompactErrorWidget(error: error, onRetry: onRefresh);
+      return CompactErrorWidget(error: error!, onRetry: onRefresh);
     }
 
     if (customers.isEmpty) {
