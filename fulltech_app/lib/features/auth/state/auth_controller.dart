@@ -17,6 +17,8 @@ class AuthController extends StateNotifier<AuthState> {
   late final StreamSubscription<AuthEvent> _eventsSub;
 
   DateTime? _lastUnauthorizedHandledAt;
+  bool _bootstrapInProgress = false;
+  Completer<void>? _bootstrapCompleter;
 
   AuthController({required LocalDb db, required AuthApi Function() getApi})
     : _db = db,
@@ -86,70 +88,89 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> bootstrap() async {
-    if (kDebugMode) debugPrint('[AUTH] bootstrap()');
-    final session = await _db.readSession();
-    if (session == null) {
-      if (kDebugMode) debugPrint('[AUTH] bootstrap: no session');
-      state = const AuthUnauthenticated();
+    // Guard against concurrent bootstrap calls
+    if (_bootstrapInProgress) {
+      if (kDebugMode) {
+        debugPrint('[AUTH] bootstrap: already in progress, waiting...');
+      }
+      // Wait for the current bootstrap to complete
+      await _bootstrapCompleter?.future;
       return;
     }
 
-    if (kDebugMode) {
-      final t = session.token;
-      final suffix = t.length <= 6 ? t : t.substring(t.length - 6);
-      debugPrint(
-        '[AUTH] bootstrap: token=…$suffix userId=${session.user.id} empresaId=${session.user.empresaId} baseUrl=${AppConfig.apiBaseUrl}',
-      );
-    }
-
-    if (kDebugMode) {
-      debugPrint(
-        '[AUTH] bootstrap: session found user=${session.user.email} role=${session.user.role}',
-      );
-    }
-
-    // IMPORTANT: Avoid treating a stale/expired token as authenticated.
-    // Validate it first to prevent a cascade of 401s (settings/ui, crm/stream, etc.).
-    state = AuthValidating(user: session.user);
+    _bootstrapInProgress = true;
+    _bootstrapCompleter = Completer<void>();
 
     try {
-      final me = await _getApi().me();
-      // Keep stored user info fresh (token stays the same).
-      await _db.saveSession(AuthSession(token: session.token, user: me));
-      state = AuthAuthenticated(token: session.token, user: me);
-    } catch (e) {
-      // If we're offline/unreachable, keep the cached session so the app can
-      // work in offline-first mode; we'll validate again on next successful request.
-      if (e is DioException) {
-        final status = e.response?.statusCode;
-        final offline =
-            e.type == DioExceptionType.connectionError ||
-            e.type == DioExceptionType.connectionTimeout ||
-            e.type == DioExceptionType.receiveTimeout;
-
-        if (offline) {
-          state = AuthAuthenticated(token: session.token, user: session.user);
-          return;
-        }
-
-        if (status == 401) {
-          if (kDebugMode) {
-            debugPrint(
-              '[AUTH] bootstrap: token invalid (401), clearing session',
-            );
-          }
-          await _db.clearSession();
-          state = const AuthUnauthenticated();
-          return;
-        }
+      if (kDebugMode) debugPrint('[AUTH] bootstrap()');
+      final session = await _db.readSession();
+      if (session == null) {
+        if (kDebugMode) debugPrint('[AUTH] bootstrap: no session');
+        state = const AuthUnauthenticated();
+        return;
       }
 
       if (kDebugMode) {
-        debugPrint('[AUTH] bootstrap: validation error $e, preserving session');
+        final t = session.token;
+        final suffix = t.length <= 6 ? t : t.substring(t.length - 6);
+        debugPrint(
+          '[AUTH] bootstrap: token=…$suffix userId=${session.user.id} empresaId=${session.user.empresaId} baseUrl=${AppConfig.apiBaseUrl}',
+        );
       }
-      // Keep session and mark as authenticated for offline mode.
-      // The session will be re-validated on the next successful request.
-      state = AuthAuthenticated(token: session.token, user: session.user);
+
+      if (kDebugMode) {
+        debugPrint(
+          '[AUTH] bootstrap: session found user=${session.user.email} role=${session.user.role}',
+        );
+      }
+
+      // IMPORTANT: Avoid treating a stale/expired token as authenticated.
+      // Validate it first to prevent a cascade of 401s (settings/ui, crm/stream, etc.).
+      state = AuthValidating(user: session.user);
+
+      try {
+        final me = await _getApi().me();
+        // Keep stored user info fresh (token stays the same).
+        await _db.saveSession(AuthSession(token: session.token, user: me));
+        state = AuthAuthenticated(token: session.token, user: me);
+      } catch (e) {
+        // If we're offline/unreachable, keep the cached session so the app can
+        // work in offline-first mode; we'll validate again on next successful request.
+        if (e is DioException) {
+          final status = e.response?.statusCode;
+          final offline =
+              e.type == DioExceptionType.connectionError ||
+              e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.receiveTimeout;
+
+          if (offline) {
+            state = AuthAuthenticated(token: session.token, user: session.user);
+            return;
+          }
+
+          if (status == 401) {
+            if (kDebugMode) {
+              debugPrint(
+                '[AUTH] bootstrap: token invalid (401), clearing session',
+              );
+            }
+            await _db.clearSession();
+            state = const AuthUnauthenticated();
+            return;
+          }
+        }
+
+        if (kDebugMode) {
+          debugPrint('[AUTH] bootstrap: validation error $e, preserving session');
+        }
+        // Keep session and mark as authenticated for offline mode.
+        // The session will be re-validated on the next successful request.
+        state = AuthAuthenticated(token: session.token, user: session.user);
+      }
+    } finally {
+      _bootstrapInProgress = false;
+      _bootstrapCompleter?.complete();
+      _bootstrapCompleter = null;
     }
   }
 

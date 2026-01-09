@@ -92,6 +92,7 @@ class _Bootstrapper extends ConsumerStatefulWidget {
 class _BootstrapperState extends ConsumerState<_Bootstrapper> {
   ProviderSubscription<AuthState>? _authSub;
   ProviderSubscription<ApiEndpointSettings>? _apiSettingsSub;
+  bool _initialBootstrapDone = false;
 
   void _enforceApiForRole() {
     final settings = ref.read(apiEndpointSettingsProvider);
@@ -125,9 +126,23 @@ class _BootstrapperState extends ConsumerState<_Bootstrapper> {
       (prev, next) {
         _enforceApiForRole();
 
+        // IMPORTANT: Only reload session when settings actually change after initial load.
+        // Skip the bootstrap triggered by the initial settings load to avoid race condition.
+        if (!_initialBootstrapDone) {
+          if (kDebugMode) {
+            debugPrint(
+              '[AUTH] Skipping bootstrap on initial settings load to avoid race condition',
+            );
+          }
+          return;
+        }
+
         // IMPORTANT: switching server changes the session namespace
         // (sessions are stored per-baseUrl). Reload the appropriate session.
         // This avoids random logouts caused by provider rebuilds.
+        if (kDebugMode) {
+          debugPrint('[AUTH] Settings changed, reloading session for new server');
+        }
         Future.microtask(
           () => ref.read(authControllerProvider.notifier).bootstrap(),
         );
@@ -135,9 +150,15 @@ class _BootstrapperState extends ConsumerState<_Bootstrapper> {
     );
 
     // Restore existing session from local DB.
-    Future.microtask(
-      () => ref.read(authControllerProvider.notifier).bootstrap(),
-    );
+    // Mark bootstrap as done after this completes to prevent race condition
+    // with settings initialization.
+    Future.microtask(() async {
+      await ref.read(authControllerProvider.notifier).bootstrap();
+      _initialBootstrapDone = true;
+      if (kDebugMode) {
+        debugPrint('[AUTH] Initial bootstrap complete');
+      }
+    });
 
     Future.microtask(_enforceApiForRole);
   }
