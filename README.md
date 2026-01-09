@@ -9,8 +9,11 @@ Monorepo para aplicación FullTech:
 
 ### Para Desarrolladores
 
+**¿Necesitas bajar/subir cambios con Git?**
+👉 **[Referencia Rápida de Git (GIT_QUICK_REFERENCE.md)](GIT_QUICK_REFERENCE.md)** - Comandos esenciales
+
 **¿Primera vez trabajando en el proyecto?**
-👉 Lee la **[Guía de Desarrollo (GUIA_DESARROLLO.md)](GUIA_DESARROLLO.md)** - Explica cómo:
+👉 **[Guía de Desarrollo (GUIA_DESARROLLO.md)](GUIA_DESARROLLO.md)** - Guía completa:
 - Clonar el proyecto
 - Hacer cambios en el código
 - Usar Git para subir/bajar cambios
