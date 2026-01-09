@@ -14,6 +14,7 @@ class ApiClient {
 
   static bool _handlingUnauthorized = false;
   static DateTime? _lastUnauthorizedAt;
+  static Future<bool>? _refreshFuture;
 
   ApiClient._(this.dio, this.db);
 
@@ -32,11 +33,6 @@ class ApiClient {
     );
 
     final client = ApiClient._(dio, db);
-
-    bool hasNonEmptyAuthHeader(RequestOptions options) {
-      final auth = options.headers['Authorization'];
-      return auth != null && auth.toString().trim().isNotEmpty;
-    }
 
     dio.interceptors.add(
       InterceptorsWrapper(
@@ -60,27 +56,28 @@ class ApiClient {
             return options.responseType == ResponseType.json;
           });
 
-          final session = await db.readSession();
-          if (session != null) {
-            options.headers['Authorization'] = 'Bearer ${session.token}';
-
-            // Safe diagnostics: log only token suffix.
-            if (kDebugMode && options.extra['logSse'] == true) {
-              final t = session.token;
-              final suffix = t.length <= 8 ? t : t.substring(t.length - 8);
-              debugPrint(
-                '[NET][${options.extra['rid']}] ${options.method} ${options.path} token=…$suffix baseUrl=${dio.options.baseUrl}',
-              );
+          // Prefer in-memory token to avoid SQLite contention (Windows: DB lock -> logout loops).
+          final token = AuthTokenStore.token;
+          if (token != null && token.trim().isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          } else {
+            // Cold start fallback: load from local DB once.
+            final session = await db.readSession();
+            if (session != null) {
+              AuthTokenStore.set(session.token);
+              AuthTokenStore.setRefreshToken(session.refreshToken);
+              options.headers['Authorization'] = 'Bearer ${session.token}';
             }
           }
 
-          // Fallback: if local persistence failed but we still have an in-memory token
-          // (e.g. just logged in), attach it so requests don't get 401.
-          if (!hasNonEmptyAuthHeader(options)) {
-            final token = AuthTokenStore.token;
-            if (token != null && token.trim().isNotEmpty) {
-              options.headers['Authorization'] = 'Bearer $token';
-            }
+          // Safe diagnostics: log only token suffix.
+          if (kDebugMode && options.extra['logSse'] == true) {
+            final current = (options.headers['Authorization'] ?? '').toString();
+            final t = current.replaceFirst('Bearer', '').trim();
+            final suffix = t.length <= 8 ? t : t.substring(t.length - 8);
+            debugPrint(
+              '[NET][${options.extra['rid']}] ${options.method} ${options.path} token=…$suffix baseUrl=${dio.options.baseUrl}',
+            );
           }
           handler.next(options);
         },
@@ -173,6 +170,8 @@ class ApiClient {
             final authHeader = error.requestOptions.headers['Authorization'];
             final hadAuthHeader =
                 authHeader != null && authHeader.toString().trim().isNotEmpty;
+            final alreadyRetried =
+                error.requestOptions.extra['retried401'] == true;
 
             final path = error.requestOptions.path;
 
@@ -195,6 +194,75 @@ class ApiClient {
 
             if (kDebugMode && !recent) {
               debugPrint('[AUTH][HTTP] $detail baseUrl=${dio.options.baseUrl}');
+            }
+
+            // Attempt refresh-once, then retry the original request.
+            if (hadAuthHeader && !suppress && !alreadyRetried) {
+              final refreshToken = AuthTokenStore.refreshToken;
+              if (refreshToken != null && refreshToken.trim().isNotEmpty) {
+                _refreshFuture ??= () async {
+                  try {
+                    final res = await dio.post(
+                      '/auth/refresh',
+                      data: {'refresh_token': refreshToken},
+                      options: Options(extra: const {
+                        'offlineCache': false,
+                        'offlineQueue': false,
+                        'suppressUnauthorizedEvent': true,
+                      }),
+                    );
+                    final data = res.data;
+                    if (data is Map<String, dynamic>) {
+                      final newToken = (data['token'] ?? '').toString();
+                      final newRefresh =
+                          (data['refresh_token'] ?? data['refreshToken'])
+                              ?.toString();
+                      if (newToken.trim().isNotEmpty) {
+                        AuthTokenStore.set(newToken);
+                        if (newRefresh != null && newRefresh.trim().isNotEmpty) {
+                          AuthTokenStore.setRefreshToken(newRefresh);
+                        }
+
+                        // Persist best-effort.
+                        try {
+                          final session = await db.readSession();
+                          final user = session?.user;
+                          if (user != null) {
+                            await db.saveSession(
+                              AuthSession(
+                                token: newToken,
+                                refreshToken: newRefresh ?? refreshToken,
+                                user: user,
+                              ),
+                            );
+                          }
+                        } catch (_) {}
+                        return true;
+                      }
+                    }
+                    return false;
+                  } catch (_) {
+                    return false;
+                  } finally {
+                    _refreshFuture = null;
+                  }
+                }();
+
+                final ok = await _refreshFuture!;
+                if (ok) {
+                  final newReq = error.requestOptions;
+                  newReq.extra['retried401'] = true;
+                  newReq.headers['Authorization'] =
+                      'Bearer ${AuthTokenStore.token}';
+                  try {
+                    final response = await dio.fetch(newReq);
+                    handler.resolve(response);
+                    return;
+                  } catch (_) {
+                    // fallthrough to unauthorized handling
+                  }
+                }
+              }
             }
 
             if (hadAuthHeader && !suppress) {

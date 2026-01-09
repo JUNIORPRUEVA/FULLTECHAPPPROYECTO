@@ -7,7 +7,7 @@ class AuthApi {
 
   AuthApi(this._dio);
 
-  Future<({String token, AppUser user})> login({
+  Future<({String token, String? refreshToken, AppUser user})> login({
     required String email,
     required String password,
   }) async {
@@ -19,11 +19,13 @@ class AuthApi {
     final data = res.data as Map<String, dynamic>;
     return (
       token: data['token'] as String,
+      refreshToken: (data['refresh_token'] as String?) ??
+          (data['refreshToken'] as String?),
       user: AppUser.fromJson(data['user'] as Map<String, dynamic>),
     );
   }
 
-  Future<({String token, AppUser user})> register({
+  Future<({String token, String? refreshToken, AppUser user})> register({
     required String email,
     required String password,
     required String name,
@@ -39,6 +41,30 @@ class AuthApi {
     final data = res.data as Map<String, dynamic>;
     return (
       token: data['token'] as String,
+      refreshToken: (data['refresh_token'] as String?) ??
+          (data['refreshToken'] as String?),
+      user: AppUser.fromJson(data['user'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<({String token, String? refreshToken, AppUser user})> refresh({
+    required String refreshToken,
+  }) async {
+    final res = await _dio.post(
+      '/auth/refresh',
+      data: {'refresh_token': refreshToken},
+      options: Options(extra: const {
+        'offlineCache': false,
+        'offlineQueue': false,
+        'suppressUnauthorizedEvent': true,
+      }),
+    );
+
+    final data = res.data as Map<String, dynamic>;
+    return (
+      token: data['token'] as String,
+      refreshToken: (data['refresh_token'] as String?) ??
+          (data['refreshToken'] as String?),
       user: AppUser.fromJson(data['user'] as Map<String, dynamic>),
     );
   }

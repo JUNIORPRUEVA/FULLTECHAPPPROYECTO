@@ -272,6 +272,24 @@ model Usuario {
   
   // Agenda items assigned to this technician
   agenda_items_assigned AgendaItem[]
+
+  auth_refresh_tokens AuthRefreshToken[]
+}
+
+model AuthRefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  token_hash String   @unique
+  created_at DateTime @default(now())
+  expires_at DateTime
+  revoked_at DateTime?
+
+  user Usuario @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([expires_at])
+  @@index([revoked_at])
+  @@map("auth_refresh_tokens")
 }
 
 model RulesContent {

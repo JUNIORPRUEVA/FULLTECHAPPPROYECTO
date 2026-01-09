@@ -4,6 +4,10 @@ class OperationsJob {
   final String id;
   final String empresaId;
   final String crmCustomerId;
+  final String? crmChatId;
+  final String? crmTaskType;
+  final String? productId;
+  final String? serviceId;
   final String customerName;
   final String? customerPhone;
   final String? customerAddress;
@@ -11,8 +15,13 @@ class OperationsJob {
   final String priority;
   final String status;
   final String? notes;
+  final String? technicianNotes;
+  final String? cancelReason;
+  final DateTime? scheduledDate;
+  final String? preferredTime;
   final String? createdByUserId;
   final String? assignedTechId;
+  final String? lastUpdateByUserId;
   final List<String> assignedTeamIds;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -25,6 +34,10 @@ class OperationsJob {
     required this.id,
     required this.empresaId,
     required this.crmCustomerId,
+    required this.crmChatId,
+    required this.crmTaskType,
+    required this.productId,
+    required this.serviceId,
     required this.customerName,
     required this.customerPhone,
     required this.customerAddress,
@@ -32,8 +45,13 @@ class OperationsJob {
     required this.priority,
     required this.status,
     required this.notes,
+    required this.technicianNotes,
+    required this.cancelReason,
+    required this.scheduledDate,
+    required this.preferredTime,
     required this.createdByUserId,
     required this.assignedTechId,
+    required this.lastUpdateByUserId,
     required this.assignedTeamIds,
     required this.createdAt,
     required this.updatedAt,
@@ -60,10 +78,27 @@ class OperationsJob {
         ? assignedTeamIdsRaw.map((e) => e.toString()).toList(growable: false)
         : const <String>[];
 
+    DateTime? scheduledDate;
+    String? preferredTime;
+    final schedule = json['schedule'];
+    if (schedule is Map) {
+      final sc = schedule.cast<String, dynamic>();
+      final rawDate = (sc['scheduled_date'] ?? sc['scheduledDate'])?.toString();
+      if (rawDate != null && rawDate.trim().isNotEmpty) {
+        scheduledDate = DateTime.tryParse(rawDate);
+      }
+      preferredTime = (sc['preferred_time'] ?? sc['preferredTime'])?.toString();
+      if (preferredTime != null && preferredTime.trim().isEmpty) preferredTime = null;
+    }
+
     return OperationsJob(
       id: s('id'),
       empresaId: s('empresa_id', 'empresaId'),
       crmCustomerId: s('crm_customer_id', 'crmCustomerId'),
+      crmChatId: so('crm_chat_id', 'crmChatId'),
+      crmTaskType: so('crm_task_type', 'crmTaskType'),
+      productId: so('product_id', 'productId'),
+      serviceId: so('service_id', 'serviceId'),
       customerName: s('customer_name', 'customerName'),
       customerPhone: so('customer_phone', 'customerPhone'),
       customerAddress: so('customer_address', 'customerAddress'),
@@ -71,8 +106,13 @@ class OperationsJob {
       priority: so('priority') ?? 'normal',
       status: so('status') ?? 'pending_survey',
       notes: so('notes'),
+      technicianNotes: so('technician_notes', 'technicianNotes'),
+      cancelReason: so('cancel_reason', 'cancelReason'),
+      scheduledDate: scheduledDate,
+      preferredTime: preferredTime,
       createdByUserId: so('created_by_user_id', 'createdByUserId'),
       assignedTechId: so('assigned_tech_id', 'assignedTechId'),
+      lastUpdateByUserId: so('last_update_by_user_id', 'lastUpdateByUserId'),
       assignedTeamIds: assignedTeamIds,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -92,11 +132,16 @@ class OperationsJob {
 
     final createdAt = DateTime.tryParse((row['created_at'] ?? '').toString()) ?? DateTime.now();
     final updatedAt = DateTime.tryParse((row['updated_at'] ?? '').toString()) ?? createdAt;
+    final scheduledDate = DateTime.tryParse((row['scheduled_date'] ?? '').toString());
 
     return OperationsJob(
       id: (row['id'] ?? '').toString(),
       empresaId: (row['empresa_id'] ?? '').toString(),
       crmCustomerId: (row['crm_customer_id'] ?? '').toString(),
+      crmChatId: row['crm_chat_id'] as String?,
+      crmTaskType: row['crm_task_type'] as String?,
+      productId: row['product_id'] as String?,
+      serviceId: row['service_id'] as String?,
       customerName: (row['customer_name'] ?? '').toString(),
       customerPhone: (row['customer_phone'] as String?),
       customerAddress: (row['customer_address'] as String?),
@@ -104,8 +149,13 @@ class OperationsJob {
       priority: (row['priority'] ?? 'normal').toString(),
       status: (row['status'] ?? 'pending_survey').toString(),
       notes: (row['notes'] as String?),
+      technicianNotes: (row['technician_notes'] as String?),
+      cancelReason: (row['cancel_reason'] as String?),
+      scheduledDate: scheduledDate,
+      preferredTime: (row['preferred_time'] as String?),
       createdByUserId: (row['created_by_user_id'] as String?),
       assignedTechId: (row['assigned_tech_id'] as String?),
+      lastUpdateByUserId: (row['last_update_by_user_id'] as String?),
       assignedTeamIds: assignedTeamIds,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -124,6 +174,10 @@ class OperationsJob {
       'id': id,
       'empresa_id': empresaId,
       'crm_customer_id': crmCustomerId,
+      'crm_chat_id': crmChatId,
+      'crm_task_type': crmTaskType,
+      'product_id': productId,
+      'service_id': serviceId,
       'customer_name': customerName,
       'customer_phone': customerPhone,
       'customer_address': customerAddress,
@@ -131,8 +185,13 @@ class OperationsJob {
       'priority': priority,
       'status': status,
       'notes': notes,
+      'technician_notes': technicianNotes,
+      'cancel_reason': cancelReason,
+      'scheduled_date': scheduledDate?.toIso8601String(),
+      'preferred_time': preferredTime,
       'created_by_user_id': createdByUserId,
       'assigned_tech_id': assignedTechId,
+      'last_update_by_user_id': lastUpdateByUserId,
       'assigned_team_ids_json': jsonEncode(assignedTeamIds),
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),

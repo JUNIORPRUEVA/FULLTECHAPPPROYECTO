@@ -109,16 +109,17 @@ class OperationsRepository {
       final schedule = it['schedule'];
       if (schedule is Map) {
         final scheduleJson = schedule.cast<String, dynamic>();
+        final rawDate = (scheduleJson['scheduled_date'] ??
+                scheduleJson['scheduledDate'] ??
+                '')
+            .toString();
+        final rawTime = scheduleJson['preferred_time']?.toString();
         await _db.upsertOperationsSchedule(
           row: {
             'id': (scheduleJson['id'] ?? '').toString(),
             'job_id': job.id,
-            'scheduled_date':
-                (scheduleJson['scheduled_date'] ??
-                        scheduleJson['scheduledDate'] ??
-                        '')
-                    .toString(),
-            'preferred_time': scheduleJson['preferred_time']?.toString(),
+            'scheduled_date': rawDate,
+            'preferred_time': rawTime,
             'assigned_tech_id':
                 (scheduleJson['assigned_tech_id'] ??
                         scheduleJson['assignedTechId'] ??
@@ -147,6 +148,15 @@ class OperationsRepository {
             'last_error': null,
           },
         );
+
+        // Denormalize schedule into job row for fast agenda grouping/listing.
+        final jobRow = job.toLocalRow(
+          overrideSyncStatus: 'synced',
+          overrideLastError: null,
+        );
+        jobRow['scheduled_date'] = DateTime.tryParse(rawDate)?.toIso8601String();
+        jobRow['preferred_time'] = rawTime;
+        await _db.upsertOperationsJob(row: jobRow);
       }
 
       final survey = it['survey'];
@@ -401,6 +411,41 @@ class OperationsRepository {
     }
 
     return data;
+  }
+
+  Future<void> updateJobStatus({
+    required String jobId,
+    required String status, // PENDIENTE|EN_PROCESO|TERMINADO|CANCELADO
+    String? technicianNotes,
+    String? cancelReason,
+  }) async {
+    final payload = <String, dynamic>{
+      'status': status,
+      if (technicianNotes != null) 'technicianNotes': technicianNotes,
+      if (cancelReason != null) 'cancelReason': cancelReason,
+    };
+
+    final data = await _api.patchJobStatus(jobId, payload);
+    final job = OperationsJob.fromServerJson(data);
+    await _db.upsertOperationsJob(
+      row: job.toLocalRow(
+        overrideSyncStatus: 'synced',
+        overrideLastError: null,
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listJobHistory({
+    required String jobId,
+  }) async {
+    final data = await _api.listJobHistory(jobId);
+    final items =
+        (data['items'] as List?)
+            ?.whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList(growable: false) ??
+        const <Map<String, dynamic>>[];
+    return items;
   }
 
   Future<OperationsJob?> getLocalJobById({required String id}) async {

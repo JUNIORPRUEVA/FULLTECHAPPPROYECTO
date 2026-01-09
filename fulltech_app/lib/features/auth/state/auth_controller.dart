@@ -15,6 +15,8 @@ class AuthController extends StateNotifier<AuthState> {
   final AuthApi _api;
 
   late final StreamSubscription<AuthEvent> _eventsSub;
+  bool _refreshInProgress = false;
+  bool _reauthInProgress = false;
 
   AuthController({required LocalDb db, required AuthApi api})
     : _db = db,
@@ -49,13 +51,55 @@ class AuthController extends StateNotifier<AuthState> {
           return;
         }
 
-        // Clear session and mark as unauthenticated
-        if (kDebugMode) {
-          debugPrint('[AUTH] clearing session and logging out');
+        // DO NOT logout immediately on a single 401.
+        // Re-validate via /auth/me (and/or refresh) to prevent random logout loops
+        // caused by a single bad endpoint/temporary race.
+        if (_reauthInProgress) return;
+        _reauthInProgress = true;
+        try {
+          // Try refresh first if available.
+          final rt = AuthTokenStore.refreshToken ?? (await _db.readSession())?.refreshToken;
+          if (rt != null && rt.trim().isNotEmpty) {
+            final refreshed = await _refreshWithToken(rt);
+            if (refreshed) {
+              if (kDebugMode) debugPrint('[AUTH] 401 recovered by refresh; keeping session');
+              return;
+            }
+          }
+
+          // Validate token; if /auth/me succeeds, ignore this 401.
+          try {
+            await _api.me();
+            if (kDebugMode) debugPrint('[AUTH] 401 ignored: /auth/me ok');
+            return;
+          } catch (e) {
+            if (e is DioException) {
+              final status = e.response?.statusCode;
+              final offline =
+                  e.type == DioExceptionType.connectionError ||
+                  e.type == DioExceptionType.connectionTimeout ||
+                  e.type == DioExceptionType.receiveTimeout;
+              if (offline) {
+                if (kDebugMode) debugPrint('[AUTH] 401 ignored: offline during reauth');
+                return;
+              }
+              if (status != 401) {
+                if (kDebugMode) debugPrint('[AUTH] 401 ignored: /auth/me returned $status');
+                return;
+              }
+            }
+
+            // Confirmed invalid: clear session.
+            if (kDebugMode) {
+              debugPrint('[AUTH] clearing session and logging out');
+            }
+            AuthTokenStore.clear();
+            await _db.clearSession();
+            state = const AuthUnauthenticated();
+          }
+        } finally {
+          _reauthInProgress = false;
         }
-        AuthTokenStore.clear();
-        await _db.clearSession();
-        state = const AuthUnauthenticated();
       }
     });
   }
@@ -72,10 +116,13 @@ class AuthController extends StateNotifier<AuthState> {
 
     // Make token available immediately for ApiClient fallbacks.
     AuthTokenStore.set(session.token);
+    AuthTokenStore.setRefreshToken(session.refreshToken);
 
     if (kDebugMode) {
+      final t = session.token;
+      final suffix = t.length <= 6 ? t : t.substring(t.length - 6);
       debugPrint(
-        '[AUTH] bootstrap: session found user=${session.user.email} role=${session.user.role}',
+        '[AUTH] bootstrap: session found user=${session.user.email} role=${session.user.role} token=***$suffix',
       );
     }
 
@@ -86,7 +133,9 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final me = await _api.me();
       // Keep stored user info fresh (token stays the same).
-      await _db.saveSession(AuthSession(token: session.token, user: me));
+      await _db.saveSession(
+        AuthSession(token: session.token, refreshToken: session.refreshToken, user: me),
+      );
       state = AuthAuthenticated(token: session.token, user: me);
     } catch (e) {
       // If we're offline/unreachable, keep the cached session so the app can
@@ -104,10 +153,18 @@ class AuthController extends StateNotifier<AuthState> {
         }
 
         if (status == 401) {
+          // Attempt a single refresh (if available) before logging out.
+          final rt = session.refreshToken ?? AuthTokenStore.refreshToken;
+          if (rt != null && rt.trim().isNotEmpty) {
+            if (kDebugMode) {
+              debugPrint('[AUTH] bootstrap: token invalid (401), attempting refresh');
+            }
+            final refreshed = await _refreshWithToken(rt);
+            if (refreshed) return;
+          }
+
           if (kDebugMode) {
-            debugPrint(
-              '[AUTH] bootstrap: token invalid (401), clearing session',
-            );
+            debugPrint('[AUTH] bootstrap: token invalid (401), clearing session');
           }
           AuthTokenStore.clear();
           await _db.clearSession();
@@ -125,13 +182,51 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> _refreshWithToken(String refreshToken) async {
+    if (_refreshInProgress) return false;
+    _refreshInProgress = true;
+    try {
+      final result = await _api.refresh(refreshToken: refreshToken);
+      final session = AuthSession(
+        token: result.token,
+        refreshToken: result.refreshToken ?? refreshToken,
+        user: result.user,
+      );
+
+      AuthTokenStore.set(session.token);
+      AuthTokenStore.setRefreshToken(session.refreshToken);
+      await _db.saveSession(session);
+
+      if (kDebugMode) {
+        final t = session.token;
+        final suffix = t.length <= 6 ? t : t.substring(t.length - 6);
+        debugPrint('[AUTH] refresh: ok token=***$suffix user=${session.user.email}');
+      }
+
+      state = AuthAuthenticated(token: session.token, user: session.user);
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[AUTH] refresh: failed $e');
+      }
+      return false;
+    } finally {
+      _refreshInProgress = false;
+    }
+  }
+
   Future<void> login({required String email, required String password}) async {
     if (kDebugMode) debugPrint('[AUTH] login() email=$email');
     final result = await _api.login(email: email, password: password);
-    final session = AuthSession(token: result.token, user: result.user);
+    final session = AuthSession(
+      token: result.token,
+      refreshToken: result.refreshToken,
+      user: result.user,
+    );
 
     // Ensure token is available even if DB persistence fails.
     AuthTokenStore.set(session.token);
+    AuthTokenStore.setRefreshToken(session.refreshToken);
     try {
       await _db.saveSession(session);
     } catch (e) {

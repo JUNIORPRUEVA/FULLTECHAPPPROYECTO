@@ -5,6 +5,8 @@ import '../../../core/services/app_config.dart';
 import '../../../core/services/api_endpoint_settings.dart';
 import '../../../core/state/api_endpoint_settings_provider.dart';
 import '../../../core/widgets/module_page.dart';
+import '../../auth/state/auth_providers.dart';
+import '../../auth/state/auth_state.dart';
 
 class ApiEndpointSettingsScreen extends ConsumerStatefulWidget {
   const ApiEndpointSettingsScreen({super.key});
@@ -34,6 +36,7 @@ class _ApiEndpointSettingsScreenState
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(apiEndpointSettingsProvider);
+    final auth = ref.watch(authControllerProvider);
 
     // Keep controller in sync when state changes externally (e.g. load).
     final desired = settings.localBaseUrl;
@@ -62,6 +65,7 @@ class _ApiEndpointSettingsScreenState
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<ApiBackend>(
+                    key: ValueKey(settings.backend),
                     initialValue: settings.backend,
                     decoration: const InputDecoration(labelText: 'Origen'),
                     items: const [
@@ -74,8 +78,33 @@ class _ApiEndpointSettingsScreenState
                         child: Text('Local (desarrollo)'),
                       ),
                     ],
-                    onChanged: (v) {
+                    onChanged: (v) async {
                       if (v == null) return;
+                      if (v == settings.backend) return;
+
+                      if (auth is AuthAuthenticated) {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Confirmación'),
+                            content: const Text(
+                              'Cambiar el servidor cerrará tu sesión porque los tokens son específicos del servidor.\n\n¿Deseas continuar?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pop(false),
+                                child: const Text('Cancelar'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.of(context).pop(true),
+                                child: const Text('Sí, continuar'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok != true) return;
+                        await ref.read(authControllerProvider.notifier).logout();
+                      }
                       ref
                           .read(apiEndpointSettingsProvider.notifier)
                           .setBackend(v);
@@ -88,18 +117,50 @@ class _ApiEndpointSettingsScreenState
                       labelText: 'URL local',
                       hintText: 'http://localhost:3000/api',
                     ),
-                    onFieldSubmitted: (v) {
-                      ref
-                          .read(apiEndpointSettingsProvider.notifier)
-                          .setLocalBaseUrl(v);
-                    },
-                    onChanged: (v) {
-                      // Persist on change, but keep it light: only when it looks like a URL.
-                      if (v.trim().length < 8) return;
-                      ref
-                          .read(apiEndpointSettingsProvider.notifier)
-                          .setLocalBaseUrl(v);
-                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        final next = _localUrlController.text.trim();
+                        if (next.isEmpty) return;
+                        if (next == settings.localBaseUrl) return;
+
+                        if (auth is AuthAuthenticated) {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Confirmación'),
+                              content: const Text(
+                                'Cambiar el servidor cerrará tu sesión porque los tokens son específicos del servidor.\n\n¿Deseas continuar?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.of(context).pop(true),
+                                  child: const Text('Sí, continuar'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (ok != true) {
+                            _localUrlController.text = settings.localBaseUrl;
+                            return;
+                          }
+                          await ref.read(authControllerProvider.notifier).logout();
+                        }
+
+                        await ref
+                            .read(apiEndpointSettingsProvider.notifier)
+                            .setLocalBaseUrl(next);
+                      },
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Guardar URL local'),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(

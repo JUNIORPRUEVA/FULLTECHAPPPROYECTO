@@ -62,6 +62,20 @@ class OperationsApi {
     return _ensureOk(res.data);
   }
 
+  Future<Map<String, dynamic>> patchJobStatus(String id, Map<String, dynamic> payload) async {
+    final res = await _dio.patch(
+      '/operations/jobs/$id/status',
+      data: payload,
+      options: _noOfflineQueue,
+    );
+    return _ensureOk(res.data);
+  }
+
+  Future<Map<String, dynamic>> listJobHistory(String id) async {
+    final res = await _dio.get('/operations/jobs/$id/history');
+    return _ensureOk(res.data);
+  }
+
   Future<Map<String, dynamic>> submitSurvey(Map<String, dynamic> payload) async {
     final res = await _dio.post('/operations/surveys', data: payload, options: _noOfflineQueue);
     return _ensureOk(res.data);

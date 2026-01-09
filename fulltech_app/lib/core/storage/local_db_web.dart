@@ -31,6 +31,7 @@ class LocalDbWeb implements LocalDb {
           CREATE TABLE auth_session(
             id INTEGER PRIMARY KEY CHECK (id = 1),
             token TEXT NOT NULL,
+            refresh_token TEXT,
             user_json TEXT NOT NULL
           );
         ''');
@@ -217,6 +218,10 @@ class LocalDbWeb implements LocalDb {
             id TEXT PRIMARY KEY,
             empresa_id TEXT NOT NULL,
             crm_customer_id TEXT NOT NULL,
+            crm_chat_id TEXT,
+            crm_task_type TEXT,
+            product_id TEXT,
+            service_id TEXT,
             customer_name TEXT NOT NULL,
             customer_phone TEXT,
             customer_address TEXT,
@@ -224,8 +229,13 @@ class LocalDbWeb implements LocalDb {
             priority TEXT NOT NULL,
             status TEXT NOT NULL,
             notes TEXT,
+            technician_notes TEXT,
+            cancel_reason TEXT,
+            scheduled_date TEXT,
+            preferred_time TEXT,
             created_by_user_id TEXT,
             assigned_tech_id TEXT,
+            last_update_by_user_id TEXT,
             assigned_team_ids_json TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
@@ -704,6 +714,7 @@ class LocalDbWeb implements LocalDb {
 
     // Self-heal for legacy installs missing the `id` column in `auth_session`.
     await _ensureAuthSessionSchema(_database);
+    await _ensureOperationsJobsSchema(_database);
   }
 
   sqflite.Database get _database {
@@ -718,6 +729,7 @@ class LocalDbWeb implements LocalDb {
         CREATE TABLE IF NOT EXISTS auth_session(
           id INTEGER PRIMARY KEY CHECK (id = 1),
           token TEXT NOT NULL,
+          refresh_token TEXT,
           user_json TEXT NOT NULL
         );
       ''');
@@ -735,6 +747,7 @@ class LocalDbWeb implements LocalDb {
           CREATE TABLE auth_session(
             id INTEGER PRIMARY KEY CHECK (id = 1),
             token TEXT NOT NULL,
+            refresh_token TEXT,
             user_json TEXT NOT NULL
           );
         ''');
@@ -743,6 +756,11 @@ class LocalDbWeb implements LocalDb {
 
       if (!columnNames.contains('id')) {
         await db.execute('ALTER TABLE auth_session ADD COLUMN id INTEGER;');
+      }
+      if (!columnNames.contains('refresh_token')) {
+        await db.execute(
+          'ALTER TABLE auth_session ADD COLUMN refresh_token TEXT;',
+        );
       }
 
       await db.execute(
@@ -760,12 +778,64 @@ class LocalDbWeb implements LocalDb {
       await _database.insert('auth_session', {
         'id': 1,
         'token': session.token,
+        'refresh_token': session.refreshToken,
         'user_json': jsonEncode(session.user.toJson()),
       }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[DB][WEB] Failed to save session: $e');
       }
+    }
+  }
+
+  Future<void> _ensureOperationsJobsSchema(sqflite.Database db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS operations_jobs(
+          id TEXT PRIMARY KEY,
+          empresa_id TEXT NOT NULL,
+          crm_customer_id TEXT NOT NULL,
+          customer_name TEXT NOT NULL,
+          customer_phone TEXT,
+          customer_address TEXT,
+          service_type TEXT NOT NULL,
+          priority TEXT NOT NULL,
+          status TEXT NOT NULL,
+          notes TEXT,
+          created_by_user_id TEXT,
+          assigned_tech_id TEXT,
+          assigned_team_ids_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          deleted INTEGER NOT NULL,
+          deleted_at TEXT,
+          sync_status TEXT NOT NULL,
+          last_error TEXT
+        );
+      ''');
+
+      final info = await db.rawQuery('PRAGMA table_info(operations_jobs);');
+      final cols = <String>{
+        for (final row in info)
+          if (row['name'] is String) row['name'] as String,
+      };
+
+      Future<void> add(String name, String type) async {
+        if (cols.contains(name)) return;
+        await db.execute('ALTER TABLE operations_jobs ADD COLUMN $name $type;');
+      }
+
+      await add('crm_chat_id', 'TEXT');
+      await add('crm_task_type', 'TEXT');
+      await add('product_id', 'TEXT');
+      await add('service_id', 'TEXT');
+      await add('technician_notes', 'TEXT');
+      await add('cancel_reason', 'TEXT');
+      await add('scheduled_date', 'TEXT');
+      await add('preferred_time', 'TEXT');
+      await add('last_update_by_user_id', 'TEXT');
+    } catch (_) {
+      // Best-effort only.
     }
   }
 
@@ -776,6 +846,7 @@ class LocalDbWeb implements LocalDb {
     final row = rows.first;
     return AuthSession.fromJson({
       'token': row['token'] as String,
+      'refresh_token': row['refresh_token'] as String?,
       'user': jsonDecode(row['user_json'] as String) as Map<String, dynamic>,
     });
   }
