@@ -19,10 +19,16 @@ class ApiEndpointSettingsController extends StateNotifier<ApiEndpointSettings> {
     final prefs = await SharedPreferences.getInstance();
     final loaded = loadApiEndpointSettings(prefs);
     state = loaded;
+    // Apply immediately to avoid baseUrl races (especially around login).
+    applyApiEndpointSettings(loaded);
   }
 
   Future<void> setBackend(ApiBackend backend) async {
     state = state.copyWith(backend: backend);
+
+    // Apply immediately to avoid a window where providers rebuild
+    // before AppConfig has been updated.
+    applyApiEndpointSettings(state);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
@@ -37,6 +43,9 @@ class ApiEndpointSettingsController extends StateNotifier<ApiEndpointSettings> {
         : AppConfig.normalizeApiBaseUrl(value.trim());
 
     state = state.copyWith(localBaseUrl: normalized);
+
+    // Apply immediately to avoid baseUrl races.
+    applyApiEndpointSettings(state);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(kApiLocalBaseUrlKey, normalized);

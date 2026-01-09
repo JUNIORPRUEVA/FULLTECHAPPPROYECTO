@@ -18,6 +18,7 @@ import {
   listPurchases,
   nextFiscalNcf,
   payPosSale,
+  refundPosSale,
   reportCreditAging,
   reportInventoryLowStock,
   reportPurchasesSummary,
@@ -44,7 +45,9 @@ posRouter.post('/sales', requirePermission('pos.sell'), expressAsyncHandler(crea
 posRouter.get('/sales', expressAsyncHandler(listPosSales));
 posRouter.get('/sales/:id', expressAsyncHandler(getPosSale));
 posRouter.post('/sales/:id/pay', requirePermission('pos.sell'), expressAsyncHandler(payPosSale));
+posRouter.post('/sales/:id/complete', requirePermission('pos.sell'), expressAsyncHandler(payPosSale));
 posRouter.post('/sales/:id/cancel', requirePermission('pos.sell'), expressAsyncHandler(cancelPosSale));
+posRouter.post('/sales/:id/refund', requirePermission('pos.sell'), expressAsyncHandler(refundPosSale));
 
 // Fiscal
 posRouter.post('/fiscal/next-ncf', requirePermission('pos.sell'), expressAsyncHandler(nextFiscalNcf));

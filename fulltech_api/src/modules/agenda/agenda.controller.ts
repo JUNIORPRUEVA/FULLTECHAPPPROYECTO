@@ -21,70 +21,113 @@ export async function listAgendaItems(req: Request, res: Response) {
 
   const { type, technician_id, is_completed, from_date, to_date, limit, offset } = parsed.data;
 
+  const defaultStatuses = ['SERVICIO_RESERVADO', 'SOLUCION_GARANTIA'] as const;
+  const mappedStatus =
+    type === 'SERVICIO_RESERVADO'
+      ? 'SERVICIO_RESERVADO'
+      : type === 'SOLUCION_GARANTIA'
+        ? 'SOLUCION_GARANTIA'
+        : type === 'RESERVA'
+          ? 'RESERVA'
+          : type === 'GARANTIA'
+            ? 'EN_GARANTIA'
+            : null;
+
   const where: any = {
     empresa_id,
+    deleted_at: null,
+    status: mappedStatus ? mappedStatus : { in: defaultStatuses as any },
   };
 
-  if (type) {
-    where.type = type;
-  }
-
   if (technician_id) {
-    where.technician_id = technician_id;
+    where.OR = [
+      { assigned_tech_id: technician_id },
+      { technician_user_id: technician_id },
+    ];
   }
 
   if (typeof is_completed === 'boolean') {
-    where.is_completed = is_completed;
+    where.completed_at = is_completed ? { not: null } : null;
   }
 
   if (from_date || to_date) {
-    where.scheduled_at = {};
-    if (from_date) {
-      where.scheduled_at.gte = new Date(from_date);
-    }
-    if (to_date) {
-      where.scheduled_at.lte = new Date(to_date);
-    }
+    where.OR = where.OR ?? [];
+    const dateWhere: any = {};
+    if (from_date) dateWhere.gte = new Date(from_date);
+    if (to_date) dateWhere.lte = new Date(to_date);
+    where.OR.push({ scheduled_at: dateWhere });
+    where.OR.push({ resolution_due_at: dateWhere });
   }
 
-  const [items, total] = await Promise.all([
-    prisma.agendaItem.findMany({
-      where,
-      orderBy: [
-        { is_completed: 'asc' },
-        { scheduled_at: 'asc' },
-        { created_at: 'desc' },
-      ],
-      take: limit,
-      skip: offset,
-      include: {
-        service: true,
-        technician: {
-          select: {
-            id: true,
-            nombre_completo: true,
-            telefono: true,
-            rol: true,
-          },
+  try {
+    const [items, total] = await Promise.all([
+      prisma.operationsJob.findMany({
+        where,
+        orderBy: [
+          { completed_at: 'asc' },
+          { scheduled_at: 'asc' },
+          { resolution_due_at: 'asc' },
+          { created_at: 'desc' },
+        ],
+        take: limit,
+        skip: offset,
+        include: {
+          service: true,
+          product: true,
+          technician: true,
+          vendedor: true,
+          chat: true,
         },
-        thread: {
-          select: {
-            id: true,
-            phone_number: true,
-            display_name: true,
-          },
-        },
-      },
-    }),
-    prisma.agendaItem.count({ where }),
-  ]);
+      }),
+      prisma.operationsJob.count({ where }),
+    ]);
 
-  res.json({
-    items,
-    total,
-    limit,
-    offset,
-  });
+    res.json({ items, total, limit, offset });
+  } catch (e: any) {
+    const code = e?.code ?? e?.meta?.code;
+    const msg = e?.message ?? String(e);
+    console.error('[Operations] agenda list failed', { code, msg });
+    if (code === 'P2021' || code === 'P2022') {
+      res.json({ items: [], total: 0, limit, offset });
+      return;
+    }
+
+    const name = String(e?.name ?? '');
+    const looksLikeValidation =
+      name.includes('PrismaClientValidationError') ||
+      msg.includes('Unknown arg') ||
+      msg.includes('Unknown field') ||
+      msg.includes('include');
+
+    if (looksLikeValidation) {
+      try {
+        const [items, total] = await Promise.all([
+          prisma.operationsJob.findMany({
+            where,
+            orderBy: [
+              { completed_at: 'asc' },
+              { scheduled_at: 'asc' },
+              { resolution_due_at: 'asc' },
+              { created_at: 'desc' },
+            ],
+            take: limit,
+            skip: offset,
+          }),
+          prisma.operationsJob.count({ where }),
+        ]);
+
+        res.json({ items, total, limit, offset });
+        return;
+      } catch (fallbackErr: any) {
+        const fCode = fallbackErr?.code ?? fallbackErr?.meta?.code;
+        const fMsg = fallbackErr?.message ?? String(fallbackErr);
+        console.error('[Operations] agenda fallback failed', { fCode, fMsg });
+        res.json({ items: [], total: 0, limit, offset });
+        return;
+      }
+    }
+    throw e;
+  }
 }
 
 /**

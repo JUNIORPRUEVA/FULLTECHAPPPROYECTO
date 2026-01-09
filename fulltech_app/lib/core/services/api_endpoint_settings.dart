@@ -66,3 +66,23 @@ void applyApiEndpointSettings(ApiEndpointSettings settings) {
     AppConfig.setRuntimeCrmApiBaseUrlOverride(null);
   }
 }
+
+/// Computes the effective API base URL for the current settings.
+///
+/// In release builds, local overrides are always disabled.
+String effectiveApiBaseUrl(ApiEndpointSettings settings) {
+  if (kDebugMode && settings.backend == ApiBackend.local) {
+    return settings.localBaseUrl;
+  }
+  return AppConfig.apiBaseUrl;
+}
+
+/// Computes the effective CRM API base URL for the current settings.
+///
+/// Defaults to the main API URL to keep tokens/backends aligned.
+String effectiveCrmApiBaseUrl(ApiEndpointSettings settings) {
+  if (kDebugMode && settings.backend == ApiBackend.local) {
+    return settings.localBaseUrl;
+  }
+  return AppConfig.crmApiBaseUrl;
+}

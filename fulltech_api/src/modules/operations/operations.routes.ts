@@ -25,6 +25,7 @@ operationsRouter.post('/jobs', expressAsyncHandler(operationsController.createJo
 operationsRouter.get('/jobs', expressAsyncHandler(operationsController.listJobs));
 operationsRouter.get('/jobs/:id', expressAsyncHandler(operationsController.getJob));
 operationsRouter.patch('/jobs/:id', expressAsyncHandler(operationsController.patchJob));
+operationsRouter.patch('/jobs/:id/complete', expressAsyncHandler(operationsController.completeJob));
 
 // Survey
 operationsRouter.post('/surveys', expressAsyncHandler(operationsController.submitSurvey));

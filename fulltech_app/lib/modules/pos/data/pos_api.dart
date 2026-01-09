@@ -65,6 +65,14 @@ class PosApi {
     return (res.data as Map).cast<String, dynamic>();
   }
 
+  Future<Map<String, dynamic>> listFiscalSequences() async {
+    final res = await _dio.get(
+      'pos/fiscal/sequences',
+      options: Options(extra: {'offlineCache': false, 'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
   Future<List<Map<String, dynamic>>> listPurchases({
     String? status,
     DateTime? from,

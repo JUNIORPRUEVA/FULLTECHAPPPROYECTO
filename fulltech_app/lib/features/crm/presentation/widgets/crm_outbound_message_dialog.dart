@@ -34,14 +34,12 @@ class _CrmOutboundMessageDialogState
 
   static const _statusItems = <({String value, String label})>[
     (value: 'primer_contacto', label: 'Primer contacto'),
-    (value: 'pendiente', label: 'Pendiente'),
     (value: 'interesado', label: 'Interesado'),
     (value: 'reserva', label: 'Reserva'),
     (value: 'compro', label: 'Compró'),
     (value: 'compra_finalizada', label: 'Compra finalizada'),
     (value: 'servicio_reservado', label: 'Servicio reservado'),
     (value: 'no_interesado', label: 'No interesado'),
-    (value: 'activo', label: 'Activo'),
     (value: 'en_garantia', label: 'En garantía'),
     (value: 'solucion_garantia', label: 'Solución de garantía'),
   ];

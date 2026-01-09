@@ -29,6 +29,13 @@ function actorEmpresaId(req: Request): string {
   return empresaId;
 }
 
+function actorUserId(req: Request): string {
+  const u = (req as any)?.user as any;
+  const id = (u?.id ?? u?.userId ?? u?.usuarioId) as string | undefined;
+  if (!id) throw new ApiError(401, 'Missing user id');
+  return id;
+}
+
 let aiMessageAuditsExistsCache: boolean | null = null;
 let aiMessageAuditsExistsAtMs = 0;
 async function aiMessageAuditsTableExists(): Promise<boolean> {
@@ -962,9 +969,11 @@ export async function deletePurchasedClient(req: Request, res: Response) {
 }
 
 export async function patchChat(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const actor_user_id = actorUserId(req);
   const chatId = req.params.chatId;
 
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
   if (!chat) throw new ApiError(404, 'Chat not found');
 
   const parsed = crmChatPatchSchema.safeParse(req.body);
@@ -982,6 +991,9 @@ export async function patchChat(req: Request, res: Response) {
     productId,
     note,
     assignedToUserId,
+
+    operations_form,
+    operationsForm,
   } = parsed.data;
 
   const effectiveImportant = typeof isImportant !== 'undefined' ? isImportant : important;
@@ -991,10 +1003,282 @@ export async function patchChat(req: Request, res: Response) {
   const effectiveAssigned =
     typeof assignedToUserId !== 'undefined' ? assignedToUserId : assigned_user_id;
 
-  if (status && status.trim().length > 0) {
+  const nextStatus = status && status.trim().length > 0 ? status.trim() : null;
+
+  function combineDateTime(dateStr: unknown, timeStr: unknown): Date | null {
+    if (typeof dateStr !== 'string' || dateStr.trim().length === 0) return null;
+    if (typeof timeStr !== 'string' || timeStr.trim().length === 0) return null;
+    const d = dateStr.trim().split('T')[0];
+    const t = timeStr.trim();
+    // Accept HH:mm
+    const iso = `${d}T${t.length === 5 ? t : t}:00`;
+    const dt = new Date(iso);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function isOperationalStatus(s: string): boolean {
+    return (
+      s === 'por_levantamiento' ||
+      s === 'reserva' ||
+      s === 'servicio_reservado' ||
+      s === 'en_garantia' ||
+      s === 'solucion_garantia'
+    );
+  }
+
+  function mapCrmToOpsStatus(s: string): any {
+    switch (s) {
+      case 'por_levantamiento':
+        return 'POR_LEVANTAMIENTO';
+      case 'reserva':
+        return 'RESERVA';
+      case 'servicio_reservado':
+        return 'SERVICIO_RESERVADO';
+      case 'en_garantia':
+        return 'EN_GARANTIA';
+      case 'solucion_garantia':
+        return 'SOLUCION_GARANTIA';
+      default:
+        return null;
+    }
+  }
+
+  const opsForm = (operationsForm ?? operations_form) as any;
+
+  let operationsJob: any = null;
+
+  if (nextStatus && isOperationalStatus(nextStatus)) {
+    if (!opsForm || typeof opsForm !== 'object') {
+      throw new ApiError(400, 'operations_form is required for this status');
+    }
+
+    const opsStatus = mapCrmToOpsStatus(nextStatus);
+    if (!opsStatus) throw new ApiError(400, 'Invalid operations status mapping');
+
+    // Common fields
+    const customer_name = String(opsForm.customer_name ?? '').trim();
+    const customer_phone = String(opsForm.customer_phone ?? '').trim();
+    const notes = String(opsForm.notes ?? opsForm.details ?? '').trim();
+    const address_text = String(opsForm.address_text ?? '').trim();
+    const gps_lat = opsForm.location_gps_lat ?? opsForm.gps_lat;
+    const gps_lng = opsForm.location_gps_lng ?? opsForm.gps_lng;
+
+    const service_id = (opsForm.service_id ?? opsForm.interested_service_id) as string | undefined;
+    const product_id = (opsForm.product_id ?? opsForm.interested_product_id) as string | undefined;
+
+    // Status-specific validation
+    if (nextStatus === 'por_levantamiento') {
+      const vendedor_user_id = String(opsForm.vendedor_asignado_user_id ?? '').trim();
+      if (!customer_name) throw new ApiError(400, 'customer_name is required');
+      if (!customer_phone) throw new ApiError(400, 'customer_phone is required');
+      if (typeof gps_lat !== 'number' || typeof gps_lng !== 'number') {
+        throw new ApiError(400, 'location_gps_lat and location_gps_lng are required');
+      }
+      if (!address_text) throw new ApiError(400, 'address_text is required');
+      if (!notes) throw new ApiError(400, 'notes/details is required');
+      if (!service_id && !product_id) {
+        throw new ApiError(400, 'interested_service_id or interested_product_id is required');
+      }
+      if (!vendedor_user_id) {
+        throw new ApiError(400, 'vendedor_asignado_user_id is required');
+      }
+
+      const vendedor = await prisma.usuario.findFirst({
+        where: { id: vendedor_user_id, empresa_id, estado: 'activo' },
+        select: { id: true, rol: true },
+      });
+      if (!vendedor) throw new ApiError(400, 'Invalid vendedor_asignado_user_id');
+      if (!['admin', 'administrador', 'vendedor'].includes(String(vendedor.rol))) {
+        throw new ApiError(400, 'vendedor_asignado_user_id must be admin/administrador/vendedor');
+      }
+    }
+
+    let scheduled_at: Date | null = null;
+    let reservation_at: Date | null = null;
+    let technician_user_id: string | null = null;
+    let vendedor_user_id: string | null = null;
+    let warranty_start_date: Date | null = null;
+    let warranty_end_date: Date | null = null;
+    let warranty_months: number | null = null;
+    let product_serial: string | null = null;
+    let issue_details: string | null = null;
+    let resolution_due_at: Date | null = null;
+
+    if (nextStatus === 'servicio_reservado') {
+      scheduled_at = combineDateTime(opsForm.scheduled_date ?? opsForm.fecha_servicio, opsForm.scheduled_time ?? opsForm.hora_servicio);
+      if (!scheduled_at) throw new ApiError(400, 'scheduled_date and scheduled_time are required');
+      if (!service_id && !product_id) throw new ApiError(400, 'service_id or product_id is required');
+      if (!notes) throw new ApiError(400, 'notes/details is required');
+
+      const techId = String(opsForm.technician_user_id ?? opsForm.tecnico_id ?? '').trim();
+      if (techId) {
+        const tech = await prisma.usuario.findFirst({
+          where: { id: techId, empresa_id, estado: 'activo' },
+          select: { id: true, rol: true },
+        });
+        if (!tech) throw new ApiError(400, 'Invalid technician_user_id');
+        if (!['tecnico', 'contratista'].includes(String(tech.rol))) {
+          throw new ApiError(400, 'technician_user_id must be tecnico/contratista');
+        }
+        technician_user_id = tech.id;
+      }
+    }
+
+    if (nextStatus === 'reserva') {
+      reservation_at = combineDateTime(
+        opsForm.reservation_date ?? opsForm.fecha_reserva,
+        opsForm.reservation_time ?? opsForm.hora_reserva,
+      );
+      if (!reservation_at) throw new ApiError(400, 'reservation_date and reservation_time are required');
+      if (!service_id && !product_id) throw new ApiError(400, 'product_id or service_id is required');
+      if (!notes) throw new ApiError(400, 'notes/details is required');
+    }
+
+    if (nextStatus === 'en_garantia') {
+      const pid = String(product_id ?? '').trim();
+      if (!pid) throw new ApiError(400, 'product_id is required');
+      product_serial = String(opsForm.product_serial ?? opsForm.numero_serie ?? '').trim();
+      if (!product_serial) throw new ApiError(400, 'product_serial is required');
+
+      const ws = String(opsForm.warranty_start_date ?? '').trim();
+      if (!ws) throw new ApiError(400, 'warranty_start_date is required');
+      warranty_start_date = new Date(ws);
+      if (Number.isNaN(warranty_start_date.getTime())) throw new ApiError(400, 'Invalid warranty_start_date');
+
+      const we = String(opsForm.warranty_end_date ?? '').trim();
+      const wm = opsForm.warranty_months;
+      if (!we && (wm === undefined || wm === null || Number(wm) <= 0)) {
+        throw new ApiError(400, 'warranty_end_date OR warranty_months is required');
+      }
+      if (we) {
+        warranty_end_date = new Date(we);
+        if (Number.isNaN(warranty_end_date.getTime())) throw new ApiError(400, 'Invalid warranty_end_date');
+      }
+      if (wm !== undefined && wm !== null) {
+        const n = Number(wm);
+        if (!Number.isFinite(n) || n <= 0) throw new ApiError(400, 'Invalid warranty_months');
+        warranty_months = Math.trunc(n);
+      }
+
+      issue_details = String(opsForm.warranty_issue_details ?? opsForm.detalles ?? '').trim();
+      if (!issue_details) throw new ApiError(400, 'warranty_issue_details is required');
+    }
+
+    if (nextStatus === 'solucion_garantia') {
+      const pid = String(product_id ?? '').trim();
+      if (!pid) throw new ApiError(400, 'product_id is required');
+      product_serial = String(opsForm.product_serial ?? '').trim();
+      if (!product_serial) throw new ApiError(400, 'product_serial is required');
+      issue_details = String(opsForm.issue_details ?? opsForm.detalles ?? '').trim();
+      if (!issue_details) throw new ApiError(400, 'issue_details is required');
+
+      resolution_due_at = combineDateTime(opsForm.resolution_due_date, opsForm.resolution_due_time);
+
+      const techId = String(opsForm.technician_user_id ?? opsForm.tecnico_id ?? '').trim();
+      if (techId) {
+        const tech = await prisma.usuario.findFirst({
+          where: { id: techId, empresa_id, estado: 'activo' },
+          select: { id: true, rol: true },
+        });
+        if (!tech) throw new ApiError(400, 'Invalid technician_user_id');
+        if (!['tecnico', 'contratista'].includes(String(tech.rol))) {
+          throw new ApiError(400, 'technician_user_id must be tecnico/contratista');
+        }
+        technician_user_id = tech.id;
+      }
+    }
+
+    // Ensure a customer exists (needed by legacy operations_jobs schema)
+    const customer = await prisma.$transaction(async (tx) => {
+      let existingCustomer = await tx.customer.findFirst({
+        where: { empresa_id, telefono: customer_phone, deleted_at: null },
+      });
+
+      if (!existingCustomer) {
+        existingCustomer = await tx.customer.create({
+          data: {
+            empresa_id,
+            nombre: customer_name,
+            telefono: customer_phone,
+            direccion: address_text || null,
+            origen: 'whatsapp',
+          },
+        });
+      }
+
+      vendedor_user_id = String(opsForm.vendedor_asignado_user_id ?? opsForm.vendedor_user_id ?? '').trim() || null;
+
+      const serviceType = String(opsForm.tipo_servicio ?? '').trim() || 'CRM';
+
+      const job = await tx.operationsJob.upsert({
+        where: { chat_id: chatId },
+        create: {
+          empresa_id,
+          created_by_user_id: actor_user_id,
+          crm_customer_id: existingCustomer.id,
+          chat_id: chatId,
+          customer_name,
+          customer_phone,
+          customer_address: address_text || null,
+          address_text: address_text || null,
+          gps_lat: typeof gps_lat === 'number' ? gps_lat : null,
+          gps_lng: typeof gps_lng === 'number' ? gps_lng : null,
+          service_type: serviceType,
+          status: opsStatus,
+          notes: notes || null,
+          product_id: product_id?.toString() ?? null,
+          service_id: service_id?.toString() ?? null,
+          vendedor_user_id,
+          technician_user_id,
+          scheduled_at,
+          reservation_at,
+          warranty_start_date,
+          warranty_end_date,
+          warranty_months,
+          product_serial,
+          issue_details,
+          resolution_due_at,
+        },
+        update: {
+          crm_customer_id: existingCustomer.id,
+          customer_name,
+          customer_phone,
+          customer_address: address_text || null,
+          address_text: address_text || null,
+          gps_lat: typeof gps_lat === 'number' ? gps_lat : null,
+          gps_lng: typeof gps_lng === 'number' ? gps_lng : null,
+          status: opsStatus,
+          notes: notes || null,
+          product_id: product_id?.toString() ?? null,
+          service_id: service_id?.toString() ?? null,
+          vendedor_user_id,
+          technician_user_id,
+          scheduled_at,
+          reservation_at,
+          warranty_start_date,
+          warranty_end_date,
+          warranty_months,
+          product_serial,
+          issue_details,
+          resolution_due_at,
+        },
+      });
+
+      await tx.crmChat.update({
+        where: { id: chatId },
+        data: { status: nextStatus },
+      });
+
+      operationsJob = job;
+
+      return existingCustomer;
+    });
+
+    console.log('[CRM] status+ops upsert', { chatId, nextStatus, opsStatus, customerId: customer.id });
+  } else if (nextStatus) {
     await prisma.crmChat.update({
       where: { id: chatId },
-      data: { status: status.trim() },
+      data: { status: nextStatus },
     });
   }
 
@@ -1021,7 +1305,7 @@ export async function patchChat(req: Request, res: Response) {
 
   emitCrmEvent({ type: 'chat.updated', chatId });
 
-  res.json({ item: toChatApiItem(merged) });
+  res.json({ item: toChatApiItem(merged), operations_job: operationsJob });
 }
 
 export async function convertChatToCustomer(req: Request, res: Response) {

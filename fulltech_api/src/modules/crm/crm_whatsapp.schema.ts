@@ -79,4 +79,8 @@ export const crmChatPatchSchema = z.object({
   productId: z.string().max(200).optional().nullable(),
   note: z.string().max(5000).optional().nullable(),
   assignedToUserId: z.string().uuid().optional().nullable(),
+
+  // Atomic CRM -> Operations upsert payload
+  operations_form: z.record(z.any()).optional(),
+  operationsForm: z.record(z.any()).optional(),
 });

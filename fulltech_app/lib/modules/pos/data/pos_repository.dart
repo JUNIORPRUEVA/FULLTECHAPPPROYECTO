@@ -18,6 +18,8 @@ class PosRepository {
   static const _syncModule = 'pos';
   static const _opCheckout = 'checkout';
 
+  static const _tpvDraftStore = 'pos_tpv_drafts';
+
   Future<String> _productStore() async {
     final session = await _db.readSession();
     final empresaId = session?.user.empresaId;
@@ -45,6 +47,34 @@ class PosRepository {
         json: jsonEncode(p.toJson()),
       );
     }
+  }
+
+  Future<String> _tpvDraftId() async {
+    final session = await _db.readSession();
+    final empresaId = session?.user.empresaId?.trim() ?? '';
+    final userId = session?.user.id?.trim() ?? '';
+    return 'tpv_draft_${empresaId.isEmpty ? 'no_empresa' : empresaId}_${userId.isEmpty ? 'no_user' : userId}';
+  }
+
+  Future<String?> loadTpvDraftJson() async {
+    final id = await _tpvDraftId();
+    return _db.getEntityJson(store: _tpvDraftStore, id: id);
+  }
+
+  Future<void> saveTpvDraftJson(String json) async {
+    final id = await _tpvDraftId();
+    await _db.upsertEntity(store: _tpvDraftStore, id: id, json: json);
+  }
+
+  Future<void> clearTpvDraft() async {
+    final id = await _tpvDraftId();
+    await _db.deleteEntity(store: _tpvDraftStore, id: id);
+  }
+
+  Future<List<Map<String, dynamic>>> listFiscalSequences() async {
+    final res = await _api.listFiscalSequences();
+    final data = (res['data'] as List?)?.cast<Map>() ?? const [];
+    return data.map((e) => e.cast<String, dynamic>()).toList();
   }
 
   Future<List<PosProduct>> listProducts({

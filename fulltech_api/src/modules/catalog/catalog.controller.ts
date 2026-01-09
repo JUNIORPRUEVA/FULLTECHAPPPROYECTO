@@ -269,6 +269,12 @@ export async function createProducto(req: Request, res: Response) {
 
   await assertCategoriaActiva(empresaId, parsed.data.categoria_id);
 
+  const stockQty = Math.max(0, Math.trunc((parsed.data as any).stock_qty ?? 0));
+  const minPurchaseQty = Math.max(1, Math.trunc((parsed.data as any).min_purchase_qty ?? 1));
+  const lowStockThreshold = Math.max(0, Math.trunc((parsed.data as any).low_stock_threshold ?? 5));
+  const supplierId = (parsed.data as any).supplier_id ?? null;
+  const brand = (parsed.data as any).brand ?? null;
+
   if (parsed.data.product_type === 'simple') {
     const totalCost = parsed.data.precio_compra;
     const totalPrice = parsed.data.precio_venta;
@@ -285,6 +291,13 @@ export async function createProducto(req: Request, res: Response) {
         imagen_url: parsed.data.imagen_url,
         categoria_id: parsed.data.categoria_id,
         is_active: parsed.data.is_active ?? true,
+
+        // Stock settings
+        stock_qty: stockQty,
+        min_stock: lowStockThreshold,
+        min_purchase_qty: minPurchaseQty,
+        supplier_id: supplierId,
+        brand,
       },
       include: { categoria: true },
     });
@@ -330,6 +343,13 @@ export async function createProducto(req: Request, res: Response) {
         imagen_url: parsed.data.imagen_url,
         categoria_id: parsed.data.categoria_id,
         is_active: parsed.data.is_active ?? true,
+
+        // Stock settings (services usually non-stocked, but keep fields consistent)
+        stock_qty: 0,
+        min_stock: lowStockThreshold,
+        min_purchase_qty: minPurchaseQty,
+        supplier_id: supplierId,
+        brand,
       },
       include: { categoria: true },
     });
@@ -449,6 +469,19 @@ export async function updateProducto(req: Request, res: Response) {
       const precioCompra = parsed.data.precio_compra ?? Number((existing as any).precio_compra);
       const precioVenta = parsed.data.precio_venta ?? Number((existing as any).precio_venta);
 
+      const stockQty =
+        (parsed.data as any).stock_qty !== undefined
+          ? Math.max(0, Math.trunc((parsed.data as any).stock_qty))
+          : undefined;
+      const minPurchaseQty =
+        (parsed.data as any).min_purchase_qty !== undefined
+          ? Math.max(1, Math.trunc((parsed.data as any).min_purchase_qty))
+          : undefined;
+      const lowStockThreshold =
+        (parsed.data as any).low_stock_threshold !== undefined
+          ? Math.max(0, Math.trunc((parsed.data as any).low_stock_threshold))
+          : undefined;
+
       const producto = await tx.producto.update({
         where: { id },
         data: {
@@ -461,6 +494,12 @@ export async function updateProducto(req: Request, res: Response) {
           precio_venta: precioVenta,
           total_cost: precioCompra,
           total_price: precioVenta,
+
+          ...(stockQty !== undefined ? { stock_qty: stockQty } : {}),
+          ...(minPurchaseQty !== undefined ? { min_purchase_qty: minPurchaseQty } : {}),
+          ...(lowStockThreshold !== undefined ? { min_stock: lowStockThreshold } : {}),
+          ...((parsed.data as any).supplier_id !== undefined ? { supplier_id: (parsed.data as any).supplier_id } : {}),
+          ...((parsed.data as any).brand !== undefined ? { brand: (parsed.data as any).brand } : {}),
         },
         include: { categoria: true },
       });
@@ -506,6 +545,19 @@ export async function updateProducto(req: Request, res: Response) {
 
       const { totalCost, totalPrice } = calculateTotals(itemsInput);
 
+      const stockQty =
+        (parsed.data as any).stock_qty !== undefined
+          ? Math.max(0, Math.trunc((parsed.data as any).stock_qty))
+          : undefined;
+      const minPurchaseQty =
+        (parsed.data as any).min_purchase_qty !== undefined
+          ? Math.max(1, Math.trunc((parsed.data as any).min_purchase_qty))
+          : undefined;
+      const lowStockThreshold =
+        (parsed.data as any).low_stock_threshold !== undefined
+          ? Math.max(0, Math.trunc((parsed.data as any).low_stock_threshold))
+          : undefined;
+
       const producto = await tx.producto.update({
         where: { id },
         data: {
@@ -518,6 +570,12 @@ export async function updateProducto(req: Request, res: Response) {
           precio_venta: totalPrice,
           total_cost: totalCost,
           total_price: totalPrice,
+
+          ...(stockQty !== undefined ? { stock_qty: stockQty } : {}),
+          ...(minPurchaseQty !== undefined ? { min_purchase_qty: minPurchaseQty } : {}),
+          ...(lowStockThreshold !== undefined ? { min_stock: lowStockThreshold } : {}),
+          ...((parsed.data as any).supplier_id !== undefined ? { supplier_id: (parsed.data as any).supplier_id } : {}),
+          ...((parsed.data as any).brand !== undefined ? { brand: (parsed.data as any).brand } : {}),
         },
         include: { categoria: true },
       });

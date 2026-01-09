@@ -1,6 +1,16 @@
 import { z } from 'zod';
 
 export const operationsJobStatusEnum = z.enum([
+  // Canonical CRM-driven statuses
+  'POR_LEVANTAMIENTO',
+  'SERVICIO_RESERVADO',
+  'SOLUCION_GARANTIA',
+  'INSTALACION_PENDIENTE',
+  'INSTALACION_FINALIZADA',
+  'RESERVA',
+  'EN_GARANTIA',
+
+  // Legacy statuses (backward compatible)
   'pending_survey',
   'survey_in_progress',
   'survey_completed',
@@ -28,13 +38,22 @@ export const createJobSchema = z.object({
 });
 
 export const listJobsQuerySchema = z.object({
+  // Support both `q` (legacy) and `search` (spec)
   q: z.string().optional(),
+  search: z.string().optional(),
   status: operationsJobStatusEnum.optional(),
   assigned_tech_id: z.string().uuid().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
+
+  // Support both offset pagination (legacy) and page/limit (spec)
+  page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+export const completeJobSchema = z.object({
+  completed_at: z.string().optional(),
 });
 
 export const patchJobSchema = z.object({
@@ -124,3 +143,4 @@ export type StartInstallationDto = z.infer<typeof startInstallationSchema>;
 export type CompleteInstallationDto = z.infer<typeof completeInstallationSchema>;
 export type CreateWarrantyTicketDto = z.infer<typeof createWarrantyTicketSchema>;
 export type PatchWarrantyTicketDto = z.infer<typeof patchWarrantyTicketSchema>;
+export type CompleteJobDto = z.infer<typeof completeJobSchema>;

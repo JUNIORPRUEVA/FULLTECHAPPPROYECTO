@@ -114,14 +114,6 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
                 ),
               ),
               DropdownMenuItem(
-                value: 'pendiente',
-                child: Text(
-                  'Pendiente',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
                 value: 'interesado',
                 child: Text(
                   'Interesado',
@@ -133,6 +125,14 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
                 value: 'reserva',
                 child: Text(
                   'Reserva',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              DropdownMenuItem(
+                value: 'por_levantamiento',
+                child: Text(
+                  'Por levantamiento',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -165,14 +165,6 @@ class _CrmTopBarState extends ConsumerState<CrmTopBar> {
                 value: 'no_interesado',
                 child: Text(
                   'No interesado',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'activo',
-                child: Text(
-                  'Activo',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

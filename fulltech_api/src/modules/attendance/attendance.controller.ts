@@ -158,7 +158,7 @@ export async function createPunch(req: Request, res: Response) {
   } catch (error: any) {
     console.error('[ATTENDANCE] Create error:', error);
     if (error.name === 'ZodError') {
-      return res.status(400).json({ error: 'Datos inválidos', details: error.errors });
+      return res.status(422).json({ error: 'Datos inválidos', details: error.errors });
     }
     return res.status(500).json({ error: 'Error al crear registro de asistencia' });
   }
@@ -221,7 +221,7 @@ export async function listRecords(req: Request, res: Response) {
   } catch (error: any) {
     console.error('[ATTENDANCE] List error:', error);
     if (error.name === 'ZodError') {
-      return res.status(400).json({ error: 'Query inválido', details: error.errors });
+      return res.status(422).json({ error: 'Query inválido', details: error.errors });
     }
     return res.status(500).json({ error: 'Error al listar registros de asistencia' });
   }
@@ -319,7 +319,7 @@ export async function updateRecord(req: Request, res: Response) {
   } catch (error: any) {
     console.error('[ATTENDANCE] Update error:', error);
     if (error.name === 'ZodError') {
-      return res.status(400).json({ error: 'Datos inválidos', details: error.errors });
+      return res.status(422).json({ error: 'Datos inválidos', details: error.errors });
     }
     return res.status(500).json({ error: 'Error al actualizar registro' });
   }

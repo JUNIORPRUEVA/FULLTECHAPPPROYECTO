@@ -66,7 +66,8 @@ class ChatListItemPro extends StatelessWidget {
                         ? CircleAvatar(
                             radius: 22,
                             backgroundImage: NetworkImage(profilePhotoUrl),
-                            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                            backgroundColor:
+                                theme.colorScheme.surfaceContainerHighest,
                           )
                         : CircleAvatar(
                             radius: 22,
@@ -147,7 +148,7 @@ class ChatListItemPro extends StatelessWidget {
                             ),
                           ),
                           if (thread.status.isNotEmpty &&
-                              thread.status != 'activo')
+                              thread.status != 'primer_contacto')
                             Padding(
                               padding: const EdgeInsets.only(left: 6),
                               child: _StatusChipMini(status: thread.status),
@@ -399,12 +400,12 @@ class _StatusChipMini extends StatelessWidget {
     switch (v.toLowerCase()) {
       case 'primer_contacto':
         return '1er';
-      case 'pendiente':
-        return 'Pend.';
       case 'interesado':
         return 'Int.';
       case 'reserva':
         return 'Res.';
+      case 'por_levantamiento':
+        return 'Lev.';
       case 'compro':
         return 'Cpró';
       case 'no_interesado':
@@ -417,7 +418,7 @@ class _StatusChipMini extends StatelessWidget {
   Color _statusColor(String v) {
     switch (v.toLowerCase()) {
       case 'primer_contacto':
-      case 'pendiente':
+      case 'por_levantamiento':
         return Colors.orange;
       case 'interesado':
         return Colors.blue;

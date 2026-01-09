@@ -8,7 +8,8 @@ String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
   final trimmed = url.trim();
   if (trimmed.isEmpty) return null;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
+    return trimmed;
   final base = AppConfig.apiBaseUrl.replaceFirst(RegExp(r'/api/?$'), '');
   if (trimmed.startsWith('/')) return '$base$trimmed';
   return '$base/$trimmed';
@@ -32,7 +33,8 @@ class ChatListTilePro extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final title = (thread.displayName != null && thread.displayName!.trim().isNotEmpty)
+    final title =
+        (thread.displayName != null && thread.displayName!.trim().isNotEmpty)
         ? thread.displayName!.trim()
         : (thread.phone ?? thread.waId);
 
@@ -175,7 +177,8 @@ class ChatListTilePro extends StatelessWidget {
     final parts = v.trim().split(RegExp(r'\s+'));
     final a = parts.isNotEmpty ? parts.first : '';
     final b = parts.length > 1 ? parts[1] : '';
-    final s = '${a.isNotEmpty ? a[0] : ''}${b.isNotEmpty ? b[0] : ''}'.toUpperCase();
+    final s = '${a.isNotEmpty ? a[0] : ''}${b.isNotEmpty ? b[0] : ''}'
+        .toUpperCase();
     return s.isEmpty ? '?' : s;
   }
 
@@ -219,7 +222,7 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final s = status.trim().isEmpty ? 'activo' : status.trim();
+    final s = status.trim().isEmpty ? 'primer_contacto' : status.trim();
 
     Color bg;
     Color fg;
@@ -229,13 +232,13 @@ class _StatusChip extends StatelessWidget {
         bg = theme.colorScheme.tertiaryContainer;
         fg = theme.colorScheme.onTertiaryContainer;
         break;
-      case 'pendiente':
-        bg = theme.colorScheme.surfaceContainerHighest;
-        fg = theme.colorScheme.onSurface;
-        break;
       case 'interesado':
         bg = theme.colorScheme.secondaryContainer;
         fg = theme.colorScheme.onSecondaryContainer;
+        break;
+      case 'por_levantamiento':
+        bg = theme.colorScheme.primaryContainer;
+        fg = theme.colorScheme.onPrimaryContainer;
         break;
       case 'reserva':
         bg = theme.colorScheme.tertiaryContainer;
@@ -269,6 +272,8 @@ class _StatusChip extends StatelessWidget {
     switch (s) {
       case 'primer_contacto':
         return 'Primer contacto';
+      case 'por_levantamiento':
+        return 'Por levantamiento';
       case 'no_interesado':
         return 'No interesado';
       case 'compro':

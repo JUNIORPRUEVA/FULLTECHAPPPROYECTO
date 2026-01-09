@@ -5,6 +5,7 @@ import '../../../core/services/app_config.dart';
 import '../../../core/services/auth_api.dart';
 import '../../../core/storage/local_db.dart';
 import '../../../core/state/api_endpoint_settings_provider.dart';
+import '../../../core/services/api_endpoint_settings.dart';
 import 'auth_controller.dart';
 import 'auth_state.dart';
 
@@ -16,9 +17,10 @@ final localDbProvider = Provider<LocalDb>((ref) {
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   // Rebuild client when the API endpoint setting changes.
-  ref.watch(apiEndpointSettingsProvider);
+  final settings = ref.watch(apiEndpointSettingsProvider);
   final db = ref.watch(localDbProvider);
-  return ApiClient.forBaseUrl(db, AppConfig.apiBaseUrl);
+  final baseUrl = effectiveApiBaseUrl(settings);
+  return ApiClient.forBaseUrl(db, baseUrl);
 });
 
 final authApiProvider = Provider<AuthApi>((ref) {
@@ -29,7 +31,10 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
   (ref) {
     return AuthController(
       db: ref.watch(localDbProvider),
-      api: ref.watch(authApiProvider),
+      // IMPORTANT: do NOT watch authApiProvider here.
+      // Watching it would rebuild AuthController on every endpoint change,
+      // resetting state and forcing re-login.
+      getApi: () => ref.read(authApiProvider),
     );
   },
 );
