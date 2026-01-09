@@ -13,6 +13,7 @@ import '../../../../features/catalogo/models/producto.dart';
 import '../../../../features/presupuesto/state/presupuesto_catalog_controller.dart';
 import '../../../../features/presupuesto/state/presupuesto_catalog_state.dart';
 import '../../models/pos_models.dart';
+import '../../models/pos_ticket.dart';
 import '../../state/pos_providers.dart';
 import '../../state/pos_tpv_controller.dart';
 import 'pos_invoice_viewer_screen.dart';

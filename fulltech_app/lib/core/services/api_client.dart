@@ -152,7 +152,7 @@ class ApiClient {
             // Track last 401 path+time to avoid repeated logs
             final now = DateTime.now();
             final recent = _lastUnauthorizedAt != null &&
-                now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 5);
+                now.difference(_lastUnauthorizedAt!) < const Duration(seconds: 10);
             
             if (kDebugMode && !recent) {
               debugPrint('[AUTH][HTTP] $detail baseUrl=${dio.options.baseUrl}');
@@ -165,12 +165,17 @@ class ApiClient {
                 _lastUnauthorizedAt = now;
                 try {
                   if (kDebugMode) {
-                    debugPrint('[AUTH] clearing local session due to $detail');
+                    debugPrint('[AUTH] emitting unauthorized event for $detail');
                   }
-                  await db.clearSession();
+                  // Let AuthController handle session clearing to avoid race conditions
+                  // and ensure proper state management
                   AuthEvents.unauthorized(status, detail);
+                  
+                  // Keep the flag set for a bit longer to prevent race conditions
+                  // from multiple simultaneous 401 responses
+                  await Future.delayed(const Duration(milliseconds: 500));
                 } finally {
-                  // Release lock shortly after to allow future real logouts.
+                  // Release lock after delay to prevent duplicate logout events
                   _handlingUnauthorized = false;
                 }
               }

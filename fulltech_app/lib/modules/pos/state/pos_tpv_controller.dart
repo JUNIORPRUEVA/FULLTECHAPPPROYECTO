@@ -259,7 +259,7 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     required double value,
   }) {
     final t = state.activeTicket;
-    final safeValue = value.isNaN || value.isInfinite ? 0 : value;
+    final safeValue = value.isNaN || value.isInfinite ? 0.0 : value;
     _updateTicket(t.copyWith(discountType: type, discountValue: safeValue));
   }
 
@@ -270,7 +270,7 @@ class PosTpvController extends StateNotifier<PosTpvState> {
 
   void setItbisRatePercent(double percent) {
     final t = state.activeTicket;
-    final p = percent.isNaN || percent.isInfinite ? 0 : percent;
+    final p = percent.isNaN || percent.isInfinite ? 0.0 : percent;
     final rate = (p.clamp(0, 100) / 100.0).toDouble();
     _updateTicket(t.copyWith(itbisRate: rate));
   }
@@ -427,12 +427,4 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     state = state.copyWith(tickets: tickets);
     _schedulePersist();
   }
-}
-
-extension _PosTicketComputed on PosTicket {
-  double get subtotal =>
-      items.fold<double>(0, (acc, it) => acc + (it.qty * it.unitPrice));
-
-  double get lineDiscounts =>
-      items.fold<double>(0, (acc, it) => acc + it.discountAmount);
 }

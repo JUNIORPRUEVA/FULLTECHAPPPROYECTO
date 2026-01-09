@@ -29,6 +29,88 @@ class PosApi {
     return items.map((e) => e.cast<String, dynamic>()).toList();
   }
 
+  // === Customers (shared with CRM / /api/customers) ===
+
+  Future<Map<String, dynamic>> listCustomers({
+    String? q,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _dio.get(
+      'customers',
+      queryParameters: {
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        'limit': limit,
+        'offset': offset,
+      },
+      options: Options(extra: {'offlineCache': true}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> createCustomer(Map<String, dynamic> payload) async {
+    final res = await _dio.post(
+      'customers',
+      data: payload,
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> patchCustomer(String id, Map<String, dynamic> patch) async {
+    final res = await _dio.patch(
+      'customers/$id',
+      data: patch,
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> getCustomer(String id) async {
+    final res = await _dio.get(
+      'customers/$id',
+      options: Options(extra: {'offlineCache': true}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  // === Fiscal sequences (POS) ===
+  // Note: backend routes may vary; these methods exist to satisfy repository usage.
+
+  Future<Map<String, dynamic>> listNcfSequences() async {
+    final res = await _dio.get(
+      'pos/fiscal/sequences',
+      options: Options(extra: {'offlineCache': true}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> createNcfSequence(Map<String, dynamic> payload) async {
+    final res = await _dio.post(
+      'pos/fiscal/sequences',
+      data: payload,
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> updateNcfSequence(String id, Map<String, dynamic> payload) async {
+    final res = await _dio.patch(
+      'pos/fiscal/sequences/$id',
+      data: payload,
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> deleteNcfSequence(String id) async {
+    final res = await _dio.delete(
+      'pos/fiscal/sequences/$id',
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
   Future<Map<String, dynamic>> createSale(Map<String, dynamic> payload) async {
     final res = await _dio.post(
       'pos/sales',

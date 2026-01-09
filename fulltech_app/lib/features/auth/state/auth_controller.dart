@@ -37,7 +37,21 @@ class AuthController extends StateNotifier<AuthState> {
           return;
         }
 
+        // Check if session still exists before clearing
+        // (it might have been cleared by another concurrent 401)
+        final session = await _db.readSession();
+        if (session == null) {
+          if (kDebugMode) {
+            debugPrint('[AUTH] session already cleared, updating state only');
+          }
+          state = const AuthUnauthenticated();
+          return;
+        }
+
         // Clear session and mark as unauthenticated
+        if (kDebugMode) {
+          debugPrint('[AUTH] clearing session and logging out');
+        }
         await _db.clearSession();
         state = const AuthUnauthenticated();
       }
