@@ -56,7 +56,11 @@ async function main() {
     console.log(`Token Version: ${user.token_version}`);
 
     let needsUpdate = false;
-    const updateData: any = {};
+    const updateData: {
+      estado?: string;
+      password_hash?: string;
+      token_version?: { increment: number };
+    } = {};
 
     // Check if user is not active
     if (user.estado !== 'activo') {
@@ -92,7 +96,7 @@ async function main() {
     console.log('\n=== LOGIN CREDENTIALS ===');
     console.log(`Email: ${email}`);
     if (newPassword) {
-      console.log(`Password: ${newPassword}`);
+      console.log(`Password: *** (updated - use the password you provided)`);
     } else {
       console.log(`Password: (unchanged)`);
     }
