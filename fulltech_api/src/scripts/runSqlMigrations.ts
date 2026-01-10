@@ -62,10 +62,16 @@ export async function runSqlMigrations(options?: {
     return;
   }
 
-  const files = fs
+  const allSqlFiles = fs
     .readdirSync(migrationsDirAbs)
     .filter((f) => f.toLowerCase().endsWith('.sql'))
     .sort((a, b) => a.localeCompare(b));
+
+  // Only apply real migrations with a stable, date-prefixed filename.
+  // This prevents accidentally executing ad-hoc scripts like "verify_*.sql" on boot.
+  const isMigrationFile = (f: string) => /^\d{4}-\d{2}-\d{2}_.+\.sql$/i.test(f);
+  const files = allSqlFiles.filter(isMigrationFile);
+  const skipped = allSqlFiles.filter((f) => !isMigrationFile(f));
 
   if (files.length === 0) return;
 
@@ -84,7 +90,19 @@ export async function runSqlMigrations(options?: {
     `);
 
     // eslint-disable-next-line no-console
-    console.log(`[SQL_MIGRATIONS] Found ${files.length} .sql files`);
+    console.log(
+      `[SQL_MIGRATIONS] Found ${files.length} migration .sql files` +
+        (skipped.length > 0
+          ? ` (${skipped.length} non-migration .sql skipped)`
+          : ''),
+    );
+
+    if (skipped.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[SQL_MIGRATIONS] Skipped non-migration SQL files: ${skipped.join(', ')}`,
+      );
+    }
 
     for (const filename of files) {
       const fullPath = path.join(migrationsDirAbs, filename);
@@ -158,8 +176,16 @@ export async function runSqlMigrations(options?: {
           throw new Error(msg);
         }
 
+        // Keep the service booting in non-strict mode, but avoid noisy warnings.
+        // If you want a hard failure, set SQL_MIGRATIONS_STRICT=true.
         // eslint-disable-next-line no-console
-        console.warn(msg);
+        console.log(
+          `[SQL_MIGRATIONS] Checksum mismatch in ${filename}; skipping (set SQL_MIGRATIONS_STRICT=true to fail)`,
+        );
+        if (truthy(process.env.SQL_MIGRATIONS_MISMATCH_DETAILS)) {
+          // eslint-disable-next-line no-console
+          console.log(msg);
+        }
         continue;
       }
 
