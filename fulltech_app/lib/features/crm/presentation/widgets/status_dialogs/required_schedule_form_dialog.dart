@@ -8,28 +8,27 @@ import '../../../state/crm_providers.dart';
 
 class RequiredScheduleFormResult {
   final DateTime scheduledAt;
-  final double lat;
-  final double lng;
+  final String address;
   final String? note;
   final String assignedTechnicianId;
   final String serviceId;
 
   const RequiredScheduleFormResult({
     required this.scheduledAt,
-    required this.lat,
-    required this.lng,
+    required this.address,
     required this.note,
     required this.assignedTechnicianId,
     required this.serviceId,
   });
 
   Map<String, dynamic> toJson() {
-    final locationText = 'Lat: $lat, Lng: $lng';
+    final locationText = address.trim();
     return {
       'scheduledAt': scheduledAt.toIso8601String(),
-      'lat': lat,
-      'lng': lng,
-      // Backward compatible with older CRM API payloads.
+      // Preferred (and matches backend schema): direccion/address.
+      'direccion': locationText,
+      'address': locationText,
+      // Backward compatible with older CRM API payloads (location_text).
       'locationText': locationText,
       'note': note,
       'assignedTechnicianId': assignedTechnicianId,
@@ -94,8 +93,7 @@ class _RequiredScheduleFormDialogState
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
 
-  final _latCtrl = TextEditingController();
-  final _lngCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
   String? _technicianId;
@@ -110,17 +108,13 @@ class _RequiredScheduleFormDialogState
     _selectedDate = DateTime(initial.year, initial.month, initial.day);
     _selectedTime = TimeOfDay(hour: initial.hour, minute: initial.minute);
 
-    _latCtrl.addListener(_recomputeCanSubmit);
-    _lngCtrl.addListener(_recomputeCanSubmit);
+    _addressCtrl.addListener(_recomputeCanSubmit);
     _noteCtrl.addListener(_recomputeCanSubmit);
   }
 
   @override
   void dispose() {
-    _latCtrl
-      ..removeListener(_recomputeCanSubmit)
-      ..dispose();
-    _lngCtrl
+    _addressCtrl
       ..removeListener(_recomputeCanSubmit)
       ..dispose();
     _noteCtrl
@@ -134,23 +128,7 @@ class _RequiredScheduleFormDialogState
     return null;
   }
 
-  String? _latValidator(String? v) {
-    final raw = (v ?? '').trim();
-    if (raw.isEmpty) return 'Latitud requerida';
-    final value = double.tryParse(raw.replaceAll(',', '.'));
-    if (value == null) return 'Latitud inválida';
-    if (value < -90 || value > 90) return 'Rango -90 a 90';
-    return null;
-  }
-
-  String? _lngValidator(String? v) {
-    final raw = (v ?? '').trim();
-    if (raw.isEmpty) return 'Longitud requerida';
-    final value = double.tryParse(raw.replaceAll(',', '.'));
-    if (value == null) return 'Longitud inválida';
-    if (value < -180 || value > 180) return 'Rango -180 a 180';
-    return null;
-  }
+  String? _addressValidator(String? v) => _requiredTextValidator(v);
 
   void _recomputeCanSubmit() {
     final valid = _formKey.currentState?.validate() ?? false;
@@ -243,10 +221,8 @@ class _RequiredScheduleFormDialogState
     if (!_formKey.currentState!.validate()) return;
     if (_technicianId == null || _technicianId!.trim().isEmpty) return;
     if (_serviceId == null || _serviceId!.trim().isEmpty) return;
-
-    final lat = double.tryParse(_latCtrl.text.trim().replaceAll(',', '.'));
-    final lng = double.tryParse(_lngCtrl.text.trim().replaceAll(',', '.'));
-    if (lat == null || lng == null) return;
+    final address = _addressCtrl.text.trim();
+    if (address.isEmpty) return;
 
     final scheduledAt = DateTime(
       _selectedDate.year,
@@ -259,8 +235,7 @@ class _RequiredScheduleFormDialogState
     Navigator.of(context).pop(
       RequiredScheduleFormResult(
         scheduledAt: scheduledAt,
-        lat: lat,
-        lng: lng,
+        address: address,
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         assignedTechnicianId: _technicianId!,
         serviceId: _serviceId!,
@@ -326,40 +301,15 @@ class _RequiredScheduleFormDialogState
                   ],
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _latCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Latitud *',
-                          hintText: 'Ej: 18.4861',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          signed: true,
-                          decimal: true,
-                        ),
-                        validator: _latValidator,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _lngCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Longitud *',
-                          hintText: 'Ej: -69.9312',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          signed: true,
-                          decimal: true,
-                        ),
-                        validator: _lngValidator,
-                      ),
-                    ),
-                  ],
+                TextFormField(
+                  controller: _addressCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Dirección *',
+                    hintText: 'Ej: Calle, sector, referencia...',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 2,
+                  validator: _addressValidator,
                 ),
                 const SizedBox(height: 16),
                 techniciansAsync.when(

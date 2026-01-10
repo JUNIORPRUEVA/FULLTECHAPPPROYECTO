@@ -983,8 +983,6 @@ model OperationsJob {
   service_id          String? @db.Uuid
   scheduled_at        DateTime?
   location_text       String? @db.Text
-  lat                 Float?
-  lng                 Float?
   technician_notes    String? @db.Text
   cancel_reason       String? @db.Text
   last_update_by_user_id String? @db.Uuid

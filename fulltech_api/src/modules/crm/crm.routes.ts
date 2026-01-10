@@ -46,6 +46,7 @@ import {
   postMessage,
   sendMessage,
 } from './crm.controller';
+import { listCrmOperationsItems } from './crm_operations.controller';
 
 export const crmRouter = Router();
 
@@ -82,6 +83,9 @@ crmRouter.post('/chats/:chatId/convert-to-customer', expressAsyncHandler(convert
 crmRouter.patch('/chats/:chatId/read', expressAsyncHandler(markChatRead));
 crmRouter.post('/chats/:chatId/messages/text', expressAsyncHandler(sendTextMessage));
 crmRouter.post('/chats/outbound/text', expressAsyncHandler(sendOutboundTextMessage));
+
+// CRM → Operations helper list (filtered by current user)
+crmRouter.get('/operations/items', expressAsyncHandler(listCrmOperationsItems));
 
 crmRouter.get('/stream', expressAsyncHandler(sseStream));
 

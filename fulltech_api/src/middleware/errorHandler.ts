@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
+import { Prisma } from '@prisma/client';
 
 export class ApiError extends Error {
   public statusCode: number;
@@ -55,6 +56,38 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       message: err.message,
       code: err.code ?? 'API_ERROR',
       details: err.details ?? null,
+    });
+  }
+
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    const safeMessage = 'Database error';
+    const details =
+      process.env.NODE_ENV === 'production'
+        ? null
+        : {
+            prismaCode: err.code,
+            meta: err.meta ?? null,
+            message: err.message,
+          };
+
+    return res.status(500).json({
+      error: safeMessage,
+      message: safeMessage,
+      code: `PRISMA_${err.code}`,
+      details,
+    });
+  }
+
+  if (err instanceof Prisma.PrismaClientValidationError) {
+    const safeMessage = 'Database validation error';
+    const details =
+      process.env.NODE_ENV === 'production' ? null : { message: err.message };
+
+    return res.status(500).json({
+      error: safeMessage,
+      message: safeMessage,
+      code: 'PRISMA_VALIDATION_ERROR',
+      details,
     });
   }
 

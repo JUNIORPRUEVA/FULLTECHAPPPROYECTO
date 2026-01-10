@@ -21,13 +21,13 @@ import { emitCrmEvent } from './crm_stream';
 // Outbound is text-only.
 const CRM_MEDIA_DISABLED_ERROR = 'Outbound media is disabled. Send text only.';
 
-function actorEmpresaId(req: Request): string {
+export function actorEmpresaId(req: Request): string {
   const empresaId = (req as any)?.user?.empresaId as string | undefined;
   if (!empresaId) throw new ApiError(401, 'Missing empresaId');
   return empresaId;
 }
 
-function actorUserId(req: Request): string {
+export function actorUserId(req: Request): string {
   const userId = (req as any)?.user?.userId as string | undefined;
   if (!userId) throw new ApiError(401, 'Missing userId');
   return userId;
@@ -53,6 +53,26 @@ async function aiMessageAuditsTableExists(): Promise<boolean> {
   } catch {
     aiMessageAuditsExistsCache = false;
     aiMessageAuditsExistsAtMs = now;
+    return false;
+  }
+}
+
+const opsTableExistsCache = new Map<string, { exists: boolean; atMs: number }>();
+async function tableExists(tableName: string): Promise<boolean> {
+  const now = Date.now();
+  const cached = opsTableExistsCache.get(tableName);
+  if (cached && now - cached.atMs < 60_000) return cached.exists;
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
+      'SELECT to_regclass($1) as regclass',
+      `public.${tableName}`,
+    );
+    const exists = Boolean(rows?.[0]?.regclass);
+    opsTableExistsCache.set(tableName, { exists, atMs: now });
+    return exists;
+  } catch {
+    opsTableExistsCache.set(tableName, { exists: false, atMs: now });
     return false;
   }
 }
@@ -1850,51 +1870,60 @@ export async function postChatStatus(req: Request, res: Response) {
       const d = parseScheduledAt(scheduledAt ?? null);
       if (!d) throw new ApiError(400, 'scheduledAt is required for servicio_reservado');
 
-      await tx.operationsSchedule.upsert({
-        where: { job_id: job.id },
-        create: {
-          job_id: job.id,
-          scheduled_date: dateOnlyUtc(d),
-          preferred_time: formatTimeHHmm(d),
-          assigned_tech_id: assignedTechnicianId ?? null,
-          additional_tech_ids: [],
-          customer_availability_notes: note ?? null,
-        } as any,
-        update: {
-          scheduled_date: dateOnlyUtc(d),
-          preferred_time: formatTimeHHmm(d),
-          assigned_tech_id: typeof assignedTechnicianId === 'undefined' ? undefined : (assignedTechnicianId ?? null),
-          customer_availability_notes: note ?? null,
-        } as any,
-      });
+      // Some deployments only have operations_jobs (no operations_schedule table yet).
+      // Keep CRM→Operations working by treating operations_jobs.scheduled_at as the source of truth.
+      if (await tableExists('operations_schedule')) {
+        await tx.operationsSchedule.upsert({
+          where: { job_id: job.id },
+          create: {
+            job_id: job.id,
+            scheduled_date: dateOnlyUtc(d),
+            preferred_time: formatTimeHHmm(d),
+            assigned_tech_id: assignedTechnicianId ?? null,
+            additional_tech_ids: [],
+            customer_availability_notes: note ?? null,
+          } as any,
+          update: {
+            scheduled_date: dateOnlyUtc(d),
+            preferred_time: formatTimeHHmm(d),
+            assigned_tech_id:
+              typeof assignedTechnicianId === 'undefined' ? undefined : (assignedTechnicianId ?? null),
+            customer_availability_notes: note ?? null,
+          } as any,
+        });
+      }
     }
 
     if (mapping.taskType === 'GARANTIA') {
       const reason = (problemDescription ?? '').trim();
       if (!reason) throw new ApiError(400, 'problemDescription is required for garantia');
 
-      const existingTicket = await tx.operationsWarrantyTicket.findFirst({
-        where: { job_id: job.id, status: { in: ['pending', 'in_progress'] as any } },
-        orderBy: { reported_at: 'desc' },
-      });
+      // Best-effort: some deployments may not have warranty tables yet.
+      if (await tableExists('operations_warranty_tickets')) {
+        const existingTicket = await tx.operationsWarrantyTicket.findFirst({
+          where: { job_id: job.id, status: { in: ['pending', 'in_progress'] as any } },
+          orderBy: { reported_at: 'desc' },
+        });
 
-      if (!existingTicket) {
-        await tx.operationsWarrantyTicket.create({
-          data: {
-            job_id: job.id,
-            reason,
-            assigned_tech_id: assignedTechnicianId ?? null,
-            status: 'pending',
-          } as any,
-        });
-      } else {
-        await tx.operationsWarrantyTicket.update({
-          where: { id: existingTicket.id },
-          data: {
-            ...(existingTicket.status === 'pending' ? { reason } : {}),
-            assigned_tech_id: typeof assignedTechnicianId === 'undefined' ? undefined : (assignedTechnicianId ?? null),
-          } as any,
-        });
+        if (!existingTicket) {
+          await tx.operationsWarrantyTicket.create({
+            data: {
+              job_id: job.id,
+              reason,
+              assigned_tech_id: assignedTechnicianId ?? null,
+              status: 'pending',
+            } as any,
+          });
+        } else {
+          await tx.operationsWarrantyTicket.update({
+            where: { id: existingTicket.id },
+            data: {
+              ...(existingTicket.status === 'pending' ? { reason } : {}),
+              assigned_tech_id:
+                typeof assignedTechnicianId === 'undefined' ? undefined : (assignedTechnicianId ?? null),
+            } as any,
+          });
+        }
       }
     }
 
