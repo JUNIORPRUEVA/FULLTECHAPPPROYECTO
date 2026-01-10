@@ -24,6 +24,18 @@ function sha256(text: string): string {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+function normalizeToLf(text: string): string {
+  // Canonicalize line endings so checksums are stable across OSes.
+  // This prevents false "edited migration" alarms caused only by CRLF/LF differences.
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+function toCrlfFromLf(text: string): string {
+  // Convert canonical LF text into CRLF (useful to match historical checksums
+  // calculated on Windows when the same migration was originally applied).
+  return text.replace(/\n/g, '\r\n');
+}
+
 export async function runSqlMigrations(options?: {
   migrationsDirAbs?: string;
   databaseUrl?: string;
@@ -77,7 +89,9 @@ export async function runSqlMigrations(options?: {
     for (const filename of files) {
       const fullPath = path.join(migrationsDirAbs, filename);
       const rawSql = fs.readFileSync(fullPath, 'utf8');
-      const checksum = sha256(rawSql);
+      const canonicalSql = normalizeToLf(rawSql);
+      const checksum = sha256(canonicalSql);
+      const checksumCrlf = sha256(toCrlfFromLf(canonicalSql));
 
       // Check if this migration was already applied
       const existing = await client.query(
@@ -87,6 +101,22 @@ export async function runSqlMigrations(options?: {
 
       // Migration already applied and unchanged - skip silently
       if (existing.rowCount && existing.rows[0].checksum === checksum) {
+        continue;
+      }
+
+      // If the only difference is line endings (CRLF vs LF), treat as unchanged.
+      // Optionally repair the stored checksum to the canonical (LF-normalized) value
+      // so future comparisons are stable.
+      if (existing.rowCount && existing.rows[0].checksum === checksumCrlf) {
+        await client.query(
+          'UPDATE _sql_migrations SET checksum = $2 WHERE filename = $1',
+          [filename, checksum],
+        );
+
+        // eslint-disable-next-line no-console
+        console.log(
+          `[SQL_MIGRATIONS] Normalized checksum (CRLF->LF) for ${filename}`,
+        );
         continue;
       }
 
