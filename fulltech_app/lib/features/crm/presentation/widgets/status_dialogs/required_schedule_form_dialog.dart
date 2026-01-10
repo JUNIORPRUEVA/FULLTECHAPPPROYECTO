@@ -8,25 +8,29 @@ import '../../../state/crm_providers.dart';
 
 class RequiredScheduleFormResult {
   final DateTime scheduledAt;
-  final String address;
+  final double lat;
+  final double lng;
   final String? note;
   final String assignedTechnicianId;
   final String serviceId;
 
   const RequiredScheduleFormResult({
     required this.scheduledAt,
-    required this.address,
+    required this.lat,
+    required this.lng,
     required this.note,
     required this.assignedTechnicianId,
     required this.serviceId,
   });
 
   Map<String, dynamic> toJson() {
+    final locationText = 'Lat: $lat, Lng: $lng';
     return {
       'scheduledAt': scheduledAt.toIso8601String(),
-      'address': address,
+      'lat': lat,
+      'lng': lng,
       // Backward compatible with older CRM API payloads.
-      'locationText': address,
+      'locationText': locationText,
       'note': note,
       'assignedTechnicianId': assignedTechnicianId,
       'serviceId': serviceId,
@@ -90,7 +94,8 @@ class _RequiredScheduleFormDialogState
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
 
-  final _addressCtrl = TextEditingController();
+  final _latCtrl = TextEditingController();
+  final _lngCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
   String? _technicianId;
@@ -105,13 +110,17 @@ class _RequiredScheduleFormDialogState
     _selectedDate = DateTime(initial.year, initial.month, initial.day);
     _selectedTime = TimeOfDay(hour: initial.hour, minute: initial.minute);
 
-    _addressCtrl.addListener(_recomputeCanSubmit);
+    _latCtrl.addListener(_recomputeCanSubmit);
+    _lngCtrl.addListener(_recomputeCanSubmit);
     _noteCtrl.addListener(_recomputeCanSubmit);
   }
 
   @override
   void dispose() {
-    _addressCtrl
+    _latCtrl
+      ..removeListener(_recomputeCanSubmit)
+      ..dispose();
+    _lngCtrl
       ..removeListener(_recomputeCanSubmit)
       ..dispose();
     _noteCtrl
@@ -122,6 +131,24 @@ class _RequiredScheduleFormDialogState
 
   String? _requiredTextValidator(String? v) {
     if (v == null || v.trim().isEmpty) return 'Este campo es requerido';
+    return null;
+  }
+
+  String? _latValidator(String? v) {
+    final raw = (v ?? '').trim();
+    if (raw.isEmpty) return 'Latitud requerida';
+    final value = double.tryParse(raw.replaceAll(',', '.'));
+    if (value == null) return 'Latitud inválida';
+    if (value < -90 || value > 90) return 'Rango -90 a 90';
+    return null;
+  }
+
+  String? _lngValidator(String? v) {
+    final raw = (v ?? '').trim();
+    if (raw.isEmpty) return 'Longitud requerida';
+    final value = double.tryParse(raw.replaceAll(',', '.'));
+    if (value == null) return 'Longitud inválida';
+    if (value < -180 || value > 180) return 'Rango -180 a 180';
     return null;
   }
 
@@ -206,9 +233,9 @@ class _RequiredScheduleFormDialogState
       _recomputeCanSubmit();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_serviceErrorMessage(e))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_serviceErrorMessage(e))));
     }
   }
 
@@ -216,6 +243,10 @@ class _RequiredScheduleFormDialogState
     if (!_formKey.currentState!.validate()) return;
     if (_technicianId == null || _technicianId!.trim().isEmpty) return;
     if (_serviceId == null || _serviceId!.trim().isEmpty) return;
+
+    final lat = double.tryParse(_latCtrl.text.trim().replaceAll(',', '.'));
+    final lng = double.tryParse(_lngCtrl.text.trim().replaceAll(',', '.'));
+    if (lat == null || lng == null) return;
 
     final scheduledAt = DateTime(
       _selectedDate.year,
@@ -228,7 +259,8 @@ class _RequiredScheduleFormDialogState
     Navigator.of(context).pop(
       RequiredScheduleFormResult(
         scheduledAt: scheduledAt,
-        address: _addressCtrl.text.trim(),
+        lat: lat,
+        lng: lng,
         note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         assignedTechnicianId: _technicianId!,
         serviceId: _serviceId!,
@@ -294,15 +326,40 @@ class _RequiredScheduleFormDialogState
                   ],
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _addressCtrl,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Dirección *',
-                    hintText: 'Ej: Calle 123, Ciudad',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: _requiredTextValidator,
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _latCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Latitud *',
+                          hintText: 'Ej: 18.4861',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                          decimal: true,
+                        ),
+                        validator: _latValidator,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _lngCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Longitud *',
+                          hintText: 'Ej: -69.9312',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                          decimal: true,
+                        ),
+                        validator: _lngValidator,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 techniciansAsync.when(
@@ -330,12 +387,12 @@ class _RequiredScheduleFormDialogState
                                     (t) => DropdownMenuItem<String>(
                                       value: t.id,
                                       child: Text(
-                                          t.telefono.trim().isEmpty
-                                              ? t.nombreCompleto
-                                              : '${t.nombreCompleto} — ${t.telefono.trim()}',
-                                        ),
+                                        t.telefono.trim().isEmpty
+                                            ? t.nombreCompleto
+                                            : '${t.nombreCompleto} — ${t.telefono.trim()}',
                                       ),
-                                    )
+                                    ),
+                                  )
                                   .toList(growable: false),
                               onChanged: (v) {
                                 setState(() => _technicianId = v);
@@ -489,7 +546,11 @@ class _ServicePickerDialogState extends ConsumerState<_ServicePickerDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_RequiredScheduleFormDialogState._serviceErrorMessage(e))),
+        SnackBar(
+          content: Text(
+            _RequiredScheduleFormDialogState._serviceErrorMessage(e),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
