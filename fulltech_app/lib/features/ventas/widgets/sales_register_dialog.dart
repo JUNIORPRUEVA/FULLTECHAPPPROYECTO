@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/services/app_config.dart';
+import '../../../core/widgets/adaptive_image.dart';
 import '../../catalogo/models/producto.dart';
 import '../../catalogo/state/catalog_providers.dart';
 import '../../customers/data/models/customer_response.dart';
@@ -175,10 +176,23 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
     return '$base/$v';
   }
 
+  bool _isLikelyLocalPath(String value) {
+    // Treat backend-served paths like /uploads/... as remote (not local).
+    if (value.startsWith('/uploads/')) return false;
+
+    // Windows: C:\... or C:/...
+    if (RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(value)) return true;
+    // file://...
+    if (value.startsWith('file://')) return true;
+    return false;
+  }
+
   Widget _tinyProductThumb(Producto p) {
     final cs = Theme.of(context).colorScheme;
     final raw = p.imagenUrl.trim();
-    final url = raw.isEmpty ? '' : _publicUrlFromMaybeRelative(raw);
+    final source = raw.isEmpty
+        ? ''
+        : (_isLikelyLocalPath(raw) ? raw : _publicUrlFromMaybeRelative(raw));
 
     return SizedBox(
       width: 28,
@@ -187,10 +201,10 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
         borderRadius: BorderRadius.circular(6),
         child: ColoredBox(
           color: cs.surfaceContainerHighest,
-          child: url.isEmpty
+          child: source.isEmpty
               ? Icon(Icons.image_outlined, size: 16, color: cs.onSurfaceVariant)
-              : Image.network(
-                  url,
+              : adaptiveImage(
+                  source,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Icon(
                     Icons.broken_image_outlined,

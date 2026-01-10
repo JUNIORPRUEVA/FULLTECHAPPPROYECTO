@@ -8,7 +8,6 @@ import '../models/crm_quick_reply.dart';
 import '../models/ai_settings.dart';
 import '../models/ai_suggestion.dart';
 import '../models/customer.dart';
-import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/storage/local_db_interface.dart';
 import '../../../../core/storage/db_write_queue.dart';
@@ -207,44 +206,6 @@ class CrmRepository {
       text: text,
       status: status,
       displayName: displayName,
-    );
-  }
-
-  Future<CrmMessage> sendMediaMessage({
-    required String threadId,
-    required PlatformFile file,
-    String? caption,
-    String? type,
-    String? toWaId,
-    String? toPhone,
-  }) {
-    return _remote.sendMediaMessage(
-      threadId: threadId,
-      file: file,
-      caption: caption,
-      type: type,
-      toWaId: toWaId,
-      toPhone: toPhone,
-    );
-  }
-
-  Future<CrmMessage> sendLocationMessage({
-    required String threadId,
-    required double latitude,
-    required double longitude,
-    String? label,
-    String? address,
-    String? toWaId,
-    String? toPhone,
-  }) {
-    return _remote.sendLocationMessage(
-      threadId: threadId,
-      latitude: latitude,
-      longitude: longitude,
-      label: label,
-      address: address,
-      toWaId: toWaId,
-      toPhone: toPhone,
     );
   }
 

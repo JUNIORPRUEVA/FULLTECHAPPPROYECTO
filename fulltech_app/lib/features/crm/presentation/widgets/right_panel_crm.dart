@@ -367,6 +367,14 @@ class _ActionsSection extends ConsumerWidget {
                 value: 'por_levantamiento',
                 child: Text('Por levantamiento'),
               ),
+              DropdownMenuItem(
+                value: 'mantenimiento',
+                child: Text('Mantenimiento'),
+              ),
+              DropdownMenuItem(
+                value: 'instalacion',
+                child: Text('Instalación'),
+              ),
               DropdownMenuItem(value: 'garantia', child: Text('Garantía')),
               DropdownMenuItem(
                 value: 'no_interesado',
@@ -390,12 +398,62 @@ class _ActionsSection extends ConsumerWidget {
                     // Mandatory schedule form for specific statuses.
                     if (nextStatus == CrmStatuses.reserva ||
                         nextStatus == CrmStatuses.agendado ||
-                        nextStatus == CrmStatuses.porLevantamiento) {
+                        nextStatus == CrmStatuses.porLevantamiento ||
+                        nextStatus == CrmStatuses.mantenimiento ||
+                        nextStatus == CrmStatuses.instalacion) {
                       final title = nextStatus == CrmStatuses.reserva
                           ? 'Reserva'
                           : (nextStatus == CrmStatuses.agendado
                                 ? 'Agendado'
-                                : 'Por levantamiento');
+                                : (nextStatus == CrmStatuses.porLevantamiento
+                                      ? 'Por levantamiento'
+                                      : (nextStatus == CrmStatuses.mantenimiento
+                                            ? 'Mantenimiento'
+                                            : 'Instalación')));
+
+                      String? phoneOverride;
+                      final hasPhone =
+                          (thread.phone ?? '').toString().trim().isNotEmpty;
+                      if (!hasPhone) {
+                        phoneOverride = await showDialog<String>(
+                          context: context,
+                          builder: (_) {
+                            final ctrl = TextEditingController();
+                            return AlertDialog(
+                              title: const Text('Teléfono requerido'),
+                              content: TextField(
+                                controller: ctrl,
+                                keyboardType: TextInputType.phone,
+                                decoration: const InputDecoration(
+                                  labelText: 'Teléfono (WhatsApp) *',
+                                  hintText: 'Ej: +1 8090000000',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(null),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton(
+                                  onPressed: () {
+                                    final v = ctrl.text.trim();
+                                    Navigator.of(context).pop(
+                                      v.isEmpty ? null : v,
+                                    );
+                                  },
+                                  child: const Text('Continuar'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                        if (phoneOverride == null ||
+                            phoneOverride.trim().isEmpty) {
+                          return;
+                        }
+                      }
 
                       final result =
                           await showDialog<RequiredScheduleFormResult>(
@@ -408,6 +466,7 @@ class _ActionsSection extends ConsumerWidget {
                       final payload = {
                         'status': nextStatus,
                         ...result.toJson(),
+                        if (phoneOverride != null) 'phone': phoneOverride,
                       };
 
                       await ref

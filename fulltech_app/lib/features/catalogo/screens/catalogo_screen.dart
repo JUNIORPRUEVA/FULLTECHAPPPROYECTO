@@ -9,7 +9,6 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/services/app_config.dart';
 import '../../../core/widgets/module_page.dart';
 import '../models/categoria_producto.dart';
-import '../models/marca_producto.dart';
 import '../models/producto.dart';
 import '../state/catalog_providers.dart';
 import '../../../modules/inventory/state/inventory_providers.dart';
@@ -42,6 +41,8 @@ bool _isLikelyLocalPath(String value) {
   if (value.startsWith('file://')) return true;
   return false;
 }
+
+enum _StockMode { add, subtract }
 
 class CatalogoScreen extends ConsumerStatefulWidget {
   const CatalogoScreen({super.key});
@@ -889,6 +890,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
         final products = ref.read(catalogControllerProvider).productos;
 
         Producto? selected;
+        var mode = _StockMode.add;
         final qtyCtrl = TextEditingController();
         final noteCtrl = TextEditingController();
         var isSubmitting = false;
@@ -902,16 +904,361 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
 
         return StatefulBuilder(
           builder: (context, setLocalState) {
+            Widget selectedThumb(Producto p) {
+              final raw = p.imagenUrl.trim();
+              if (raw.isNotEmpty && _isLikelyLocalPath(raw)) {
+                if (kIsWeb) {
+                  return Container(
+                    color: cs.surfaceContainerHighest,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.image_not_supported_outlined,
+                      color: cs.onSurfaceVariant,
+                      size: 16,
+                    ),
+                  );
+                }
+                final path = raw.startsWith('file://')
+                    ? Uri.parse(raw).toFilePath()
+                    : raw;
+                return Image.file(
+                  File(path),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: cs.surfaceContainerHighest,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.image_not_supported_outlined,
+                      color: cs.onSurfaceVariant,
+                      size: 16,
+                    ),
+                  ),
+                );
+              }
+
+              final url = resolveCatalogPublicUrl(raw);
+              if (url == null) {
+                return Container(
+                  color: cs.surfaceContainerHighest,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.photo_outlined,
+                    color: cs.onSurfaceVariant,
+                    size: 16,
+                  ),
+                );
+              }
+
+              return Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: cs.surfaceContainerHighest,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.image_not_supported_outlined,
+                    color: cs.onSurfaceVariant,
+                    size: 16,
+                  ),
+                ),
+              );
+            }
+
+            Future<Producto?> pickProduct() async {
+              final scrollCtrl = ScrollController();
+              final picked = await showDialog<Producto>(
+                context: dialogContext,
+                builder: (pickContext) {
+                  final pickCs = Theme.of(pickContext).colorScheme;
+                  final searchCtrl = TextEditingController();
+                  List<Producto> filtered = List<Producto>.from(products);
+
+                  Color stockColor(Producto p) {
+                    if (p.stock <= 0) return pickCs.error;
+                    if (p.stock <= p.minStock) return Colors.amber.shade800;
+                    return Colors.green.shade700;
+                  }
+
+                  Widget thumb(Producto p) {
+                    final raw = p.imagenUrl.trim();
+                    if (raw.isNotEmpty && _isLikelyLocalPath(raw)) {
+                      if (kIsWeb) {
+                        return Container(
+                          color: pickCs.surfaceContainerHighest,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: pickCs.onSurfaceVariant,
+                          ),
+                        );
+                      }
+                      final path = raw.startsWith('file://')
+                          ? Uri.parse(raw).toFilePath()
+                          : raw;
+                      return Image.file(
+                        File(path),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: pickCs.surfaceContainerHighest,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: pickCs.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    }
+
+                    final url = resolveCatalogPublicUrl(raw);
+                    if (url == null) {
+                      return Container(
+                        color: pickCs.surfaceContainerHighest,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.photo_outlined,
+                          color: pickCs.onSurfaceVariant,
+                        ),
+                      );
+                    }
+
+                    return Image.network(
+                      url,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: pickCs.surfaceContainerHighest,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.image_not_supported_outlined,
+                          color: pickCs.onSurfaceVariant,
+                        ),
+                      ),
+                    );
+                  }
+
+                  void applyFilter(String raw) {
+                    final q = raw.trim().toLowerCase();
+                    if (q.isEmpty) {
+                      filtered = List<Producto>.from(products);
+                      return;
+                    }
+                    filtered = products
+                        .where((p) => p.nombre.toLowerCase().contains(q))
+                        .toList();
+                  }
+
+                  applyFilter('');
+
+                  return StatefulBuilder(
+                    builder: (pickContext, setPickState) {
+                      final screenW = MediaQuery.of(pickContext).size.width;
+                      final maxW = screenW < 760 ? screenW - 24 : 760.0;
+
+                      return Dialog(
+                        insetPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 18,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: maxW,
+                            maxHeight: 620,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Seleccionar producto',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Cerrar',
+                                      onPressed: () =>
+                                          Navigator.of(pickContext).pop(),
+                                      icon: const Icon(Icons.close),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: searchCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Buscar',
+                                    prefixIcon: Icon(Icons.search),
+                                  ),
+                                  onChanged: (v) {
+                                    setPickState(() => applyFilter(v));
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                Expanded(
+                                  child: filtered.isEmpty
+                                      ? Center(
+                                          child: Text(
+                                            searchCtrl.text.trim().isEmpty
+                                                ? 'No hay productos disponibles.'
+                                                : 'No hay resultados.',
+                                            style: Theme.of(
+                                              pickContext,
+                                            ).textTheme.titleMedium,
+                                          ),
+                                        )
+                                      : Scrollbar(
+                                          controller: scrollCtrl,
+                                          thumbVisibility: true,
+                                          child: ListView.separated(
+                                            controller: scrollCtrl,
+                                            primary: false,
+                                            itemCount: filtered.length,
+                                            separatorBuilder: (_, __) =>
+                                                const SizedBox(height: 8),
+                                            itemBuilder: (context, i) {
+                                              final p = filtered[i];
+                                              return Material(
+                                                color: pickCs
+                                                    .surfaceContainerHighest,
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                child: InkWell(
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                  onTap: () => Navigator.of(
+                                                    pickContext,
+                                                  ).pop(p),
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                          10,
+                                                        ),
+                                                    child: Row(
+                                                      children: [
+                                                        ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                10,
+                                                              ),
+                                                          child: SizedBox(
+                                                            width: 44,
+                                                            height: 44,
+                                                            child: thumb(p),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 10,
+                                                        ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            p.nombre,
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style: Theme.of(pickContext)
+                                                                .textTheme
+                                                                .titleSmall
+                                                                ?.copyWith(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w800,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 10,
+                                                                vertical: 6,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: stockColor(p)
+                                                                .withValues(
+                                                                  alpha: 0.12,
+                                                                ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  999,
+                                                                ),
+                                                            border: Border.all(
+                                                              color:
+                                                                  stockColor(
+                                                                    p,
+                                                                  ).withValues(
+                                                                    alpha: 0.35,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            'Stock: ${p.stock}',
+                                                            style: Theme.of(pickContext)
+                                                                .textTheme
+                                                                .labelSmall
+                                                                ?.copyWith(
+                                                                  color:
+                                                                      stockColor(
+                                                                        p,
+                                                                      ),
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w900,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+              scrollCtrl.dispose();
+              return picked;
+            }
+
             Future<void> submit() async {
               final p = selected;
               final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
               if (p == null || qty <= 0) return;
               if (isSubmitting) return;
 
+              final delta = mode == _StockMode.add ? qty : -qty;
+              if (delta < 0 && (p.stock + delta) < 0) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'No puedes restar $qty. Stock actual: ${p.stock}',
+                    ),
+                  ),
+                );
+                return;
+              }
+
               setLocalState(() => isSubmitting = true);
-              final ok = await ctrl.addStock(
+              final ok = await ctrl.adjustStock(
                 p.id,
-                qty: qty,
+                delta: delta,
                 note: noteCtrl.text.trim().isEmpty
                     ? null
                     : noteCtrl.text.trim(),
@@ -975,40 +1322,113 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Autocomplete<Producto>(
-                        optionsBuilder: (textEditingValue) {
-                          final q = textEditingValue.text.trim().toLowerCase();
-                          if (q.isEmpty)
-                            return const Iterable<Producto>.empty();
-                          return products
-                              .where((p) => p.nombre.toLowerCase().contains(q))
-                              .take(20);
-                        },
-                        displayStringForOption: (p) => p.nombre,
-                        onSelected: (p) => setLocalState(() => selected = p),
-                        fieldViewBuilder:
-                            (context, textCtrl, focusNode, onFieldSubmitted) {
-                              return TextField(
-                                controller: textCtrl,
-                                focusNode: focusNode,
-                                decoration: InputDecoration(
-                                  labelText: 'Producto',
-                                  prefixIcon: const Icon(
-                                    Icons.inventory_2_outlined,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: isSubmitting
+                            ? null
+                            : () async {
+                                final picked = await pickProduct();
+                                if (picked == null) return;
+                                setLocalState(() => selected = picked);
+                              },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Producto',
+                            prefixIcon: Icon(Icons.inventory_2_outlined),
+                          ),
+                          child: Row(
+                            children: [
+                              if (selected != null) ...[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: SizedBox(
+                                    width: 28,
+                                    height: 28,
+                                    child: selectedThumb(selected!),
                                   ),
-                                  helperText: selected == null
-                                      ? 'Busca y selecciona un producto'
-                                      : null,
                                 ),
-                              );
-                            },
+                                const SizedBox(width: 10),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  selected == null
+                                      ? 'Seleccionar...'
+                                      : selected!.nombre,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontWeight: selected == null
+                                        ? FontWeight.w600
+                                        : FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              if (selected != null) ...[
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        (selected!.stock <= 0
+                                                ? cs.error
+                                                : (selected!.stock <=
+                                                          selected!.minStock
+                                                      ? Colors.amber.shade800
+                                                      : Colors.green.shade700))
+                                            .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    'Stock: ${selected!.stock}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 6),
+                              const Icon(Icons.expand_more),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SegmentedButton<_StockMode>(
+                        segments: const [
+                          ButtonSegment<_StockMode>(
+                            value: _StockMode.add,
+                            icon: Icon(Icons.add_circle_outline),
+                            label: Text('Agregar'),
+                          ),
+                          ButtonSegment<_StockMode>(
+                            value: _StockMode.subtract,
+                            icon: Icon(Icons.remove_circle_outline),
+                            label: Text('Restar'),
+                          ),
+                        ],
+                        selected: {mode},
+                        onSelectionChanged: isSubmitting
+                            ? null
+                            : (s) {
+                                setLocalState(() => mode = s.first);
+                              },
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: qtyCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Cantidad a agregar',
-                          prefixIcon: Icon(Icons.add_circle_outline),
+                        decoration: InputDecoration(
+                          labelText: mode == _StockMode.add
+                              ? 'Cantidad a agregar'
+                              : 'Cantidad a restar',
+                          prefixIcon: Icon(
+                            mode == _StockMode.add
+                                ? Icons.add_circle_outline
+                                : Icons.remove_circle_outline,
+                          ),
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [
@@ -1977,119 +2397,177 @@ class _FiltersBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 900;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: isMobile ? 320 : 420,
-                      child: TextField(
-                        controller: searchCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Buscar producto',
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        onChanged: onChangedQuery,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 260,
-                      child: DropdownButtonFormField<String>(
-                        initialValue: selectedCategoriaId,
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('Todas las categorías'),
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final headerBg = cs.surfaceContainerHigh;
+    final onHeader = cs.onSurface;
+    final outlineColor = cs.outlineVariant;
+
+    InputDecoration decorateInput(InputDecoration base, {Widget? prefixIcon}) {
+      return base.copyWith(
+        filled: true,
+        fillColor: cs.surface,
+        prefixIcon: prefixIcon,
+        labelStyle: TextStyle(color: cs.onSurfaceVariant),
+      );
+    }
+
+    ButtonStyle outlineOnHeader() {
+      return OutlinedButton.styleFrom(
+        foregroundColor: cs.primary,
+        side: BorderSide(color: cs.primary.withValues(alpha: 0.72)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      );
+    }
+
+    ButtonStyle stockHighlight() {
+      return FilledButton.styleFrom(
+        backgroundColor: cs.tertiaryContainer,
+        foregroundColor: cs.onTertiaryContainer,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      );
+    }
+
+    return Material(
+      elevation: 1,
+      color: headerBg,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: outlineColor, width: 1),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: IconTheme(
+                    data: IconThemeData(color: onHeader),
+                    child: DefaultTextStyle(
+                      style: TextStyle(color: onHeader),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: isMobile ? 300 : 400,
+                            child: TextField(
+                              controller: searchCtrl,
+                              decoration: decorateInput(
+                                const InputDecoration(
+                                  labelText: 'Buscar producto',
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.search,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                              onChanged: onChangedQuery,
+                            ),
                           ),
-                          for (final c in categorias)
-                            DropdownMenuItem<String>(
-                              value: c.id,
-                              child: Text(
-                                c.nombre,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 250,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: selectedCategoriaId,
+                              items: [
+                                const DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('Todas las categorías'),
+                                ),
+                                for (final c in categorias)
+                                  DropdownMenuItem<String>(
+                                    value: c.id,
+                                    child: Text(
+                                      c.nombre,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                              onChanged: onChangedCategoria,
+                              decoration: decorateInput(
+                                const InputDecoration(labelText: 'Categoría'),
+                                prefixIcon: const Icon(
+                                  Icons.category_outlined,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ),
+                          ),
+                          const SizedBox(width: 12),
+                          OutlinedButton.icon(
+                            style: outlineOnHeader(),
+                            onPressed: isLoading ? null : onManageCategorias,
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text('+ Categoría'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            style: stockHighlight(),
+                            onPressed: isLoading ? null : onAdjustStock,
+                            icon: const Icon(Icons.inventory_2_outlined),
+                            label: const Text('Ajuste de stock'),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            style: outlineOnHeader(),
+                            onPressed: isLoading ? null : onManageMarcas,
+                            icon: const Icon(Icons.sell_outlined),
+                            label: const Text('Marca'),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            tooltip: 'Sincronizar',
+                            onPressed: isLoading ? null : onSync,
+                            icon: const Icon(Icons.sync),
+                            color: onHeader,
+                          ),
+                          const SizedBox(width: 4),
+                          FilledButton.icon(
+                            onPressed: isLoading ? null : onCreateProducto,
+                            icon: const Icon(Icons.add),
+                            label: const Text('+ Nuevo'),
+                          ),
+                          const SizedBox(width: 8),
+                          Tooltip(
+                            message: 'Mostrar inactivos',
+                            child: Switch(
+                              value: includeInactive,
+                              onChanged: isLoading
+                                  ? null
+                                  : onChangedIncludeInactive,
+                            ),
+                          ),
+                          if (!isOnline) ...[
+                            const SizedBox(width: 10),
+                            Icon(
+                              Icons.wifi_off,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Offline',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ],
-                        onChanged: onChangedCategoria,
-                        decoration: const InputDecoration(
-                          labelText: 'Categoría',
-                          prefixIcon: Icon(Icons.category_outlined),
-                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Switch(
-                          value: includeInactive,
-                          onChanged: onChangedIncludeInactive,
-                        ),
-                        const SizedBox(width: 6),
-                        const Text('Incluir inactivos'),
-                      ],
-                    ),
-                    const Spacer(),
-                    OutlinedButton.icon(
-                      onPressed: isLoading ? null : onManageCategorias,
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('+ Categoría'),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: isLoading ? null : onAdjustStock,
-                      icon: const Icon(Icons.playlist_add_outlined),
-                      label: const Text('Ajuste de stock'),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: isLoading ? null : onManageMarcas,
-                      icon: const Icon(Icons.sell_outlined),
-                      label: const Text('Marca'),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Sincronizar',
-                      onPressed: isLoading ? null : onSync,
-                      icon: const Icon(Icons.sync),
-                    ),
-                    const SizedBox(width: 4),
-                    FilledButton.icon(
-                      onPressed: isLoading ? null : onCreateProducto,
-                      icon: const Icon(Icons.add),
-                      label: const Text('+ Nuevo'),
-                    ),
-                    if (!isOnline) ...[
-                      const SizedBox(width: 10),
-                      Icon(
-                        Icons.wifi_off,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Offline',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

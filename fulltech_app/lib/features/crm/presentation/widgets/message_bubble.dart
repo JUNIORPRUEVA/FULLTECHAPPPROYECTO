@@ -59,6 +59,11 @@ class MessageBubble extends StatelessWidget {
     final mediaUrl = (message.mediaUrl ?? '').trim();
     final hasMedia = mediaUrl.isNotEmpty;
 
+    final isText = message.type.trim().toLowerCase() == 'text';
+    final placeholder = _placeholderForType(message.type);
+    final showNonTextPlaceholderRow = !isText && !hasMedia;
+    final showCaption = showNonTextPlaceholderRow && hasBody && body != placeholder;
+
     final showSendingPlaceholder =
         isMe && !hasMedia && status == 'sending' && message.type != 'text';
 
@@ -188,7 +193,32 @@ class MessageBubble extends StatelessWidget {
                           ),
                         if (hasBody) const SizedBox(height: 8),
                       ],
-                      if (hasBody)
+                      if (showNonTextPlaceholderRow) ...[
+                        _MediaRow(
+                          icon: mediaIcon,
+                          label: placeholder,
+                          labelStyle:
+                              (theme.textTheme.bodySmall ?? const TextStyle())
+                                  .copyWith(color: fg),
+                        ),
+                        if (showCaption) const SizedBox(height: 8),
+                        if (showCaption)
+                          RichText(
+                            text: _formatToSpan(
+                              context,
+                              body,
+                              baseStyle: bodyStyle,
+                            ),
+                          )
+                        else if (!hasBody && showSendingPlaceholder)
+                          Text(
+                            'Enviando ${message.type}...',
+                            style: bodyStyle.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ] else if (hasBody)
                         RichText(
                           text: _formatToSpan(
                             context,
@@ -196,16 +226,8 @@ class MessageBubble extends StatelessWidget {
                             baseStyle: bodyStyle,
                           ),
                         )
-                      else if (showSendingPlaceholder)
-                        Text(
-                          'Enviando ${message.type}...',
-                          style: bodyStyle.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        )
-                      else if (!hasMedia)
-                        Text('[sin texto] ${message.type}', style: bodyStyle),
+                      else
+                        Text('[sin texto]', style: bodyStyle),
                       if (!showSender)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
@@ -506,6 +528,29 @@ String _mediaLabel(String type, String url, {required String fallback}) {
   }
   if (t == 'image') return name.isEmpty ? 'Imagen' : 'Imagen · $name';
   return name.isEmpty ? url : name;
+}
+
+String _placeholderForType(String type) {
+  final t = type.trim().toLowerCase();
+  switch (t) {
+    case 'image':
+      return '[Imagen recibida]';
+    case 'video':
+      return '[Video recibido]';
+    case 'audio':
+    case 'ptt':
+      return '[Audio recibido]';
+    case 'document':
+      return '[Documento recibido]';
+    case 'sticker':
+      return '[Sticker recibido]';
+    case 'location':
+      return '[Ubicación recibida]';
+    case 'contact':
+      return '[Contacto recibido]';
+    default:
+      return '[Archivo recibido]';
+  }
 }
 
 String _lastPathSegment(String url) {

@@ -14,16 +14,12 @@ import {
   crmDeleteChatMessageSchema,
   crmEditChatMessageSchema,
   crmOutboundSendTextSchema,
-  crmRecordMediaSchema,
-  crmSendMediaFieldsSchema,
   crmSendTextSchema,
 } from './crm_whatsapp.schema';
-import {
-  detectMediaType,
-  toPublicUrlFromAbsoluteFile,
-  uploadCrmFile,
-} from './crm_whatsapp.upload';
 import { emitCrmEvent } from './crm_stream';
+
+// Outbound is text-only.
+const CRM_MEDIA_DISABLED_ERROR = 'Outbound media is disabled. Send text only.';
 
 function actorEmpresaId(req: Request): string {
   const empresaId = (req as any)?.user?.empresaId as string | undefined;
@@ -69,6 +65,34 @@ function parseBeforeDate(raw?: string): Date | null {
 
 function digitsOnly(v: string): string {
   return v.replace(/[^0-9]/g, '');
+}
+
+async function fetchCustomerNamesByPhones(opts: {
+  empresaId: string;
+  phoneDigits: string[];
+}): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(opts.phoneDigits.map((p) => String(p ?? '').trim()).filter(Boolean)));
+  if (unique.length === 0) return new Map();
+
+  // Match customers by digits-only phone. This tolerates values stored as "+1..." or "(809)...".
+  const rows = await prisma.$queryRawUnsafe<{ telefono_digits: string; nombre: string }[]>(
+    `
+    SELECT regexp_replace(telefono, '\\D', '', 'g') AS telefono_digits, nombre
+    FROM customers_legacy
+    WHERE empresa_id = $1::uuid
+      AND regexp_replace(telefono, '\\D', '', 'g') = ANY($2::text[])
+    `,
+    opts.empresaId,
+    unique,
+  );
+
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    const k = String((r as any).telefono_digits ?? '').trim();
+    const v = String((r as any).nombre ?? '').trim();
+    if (k && v && !map.has(k)) map.set(k, v);
+  }
+  return map;
 }
 
 function phoneFromWaId(waId: string): string | null {
@@ -263,6 +287,14 @@ function toChatApiItem(chat: any) {
   const phoneCandidate = chat.phone ?? phoneFromWaId(waId);
   const phoneE164 = toPhoneE164(phoneCandidate);
 
+  const preferredName =
+    (chat.customer_name && String(chat.customer_name).trim().length > 0
+      ? String(chat.customer_name).trim()
+      : null) ??
+    (chat.display_name && String(chat.display_name).trim().length > 0
+      ? String(chat.display_name).trim()
+      : null);
+
   const important = Boolean(chat.important ?? chat.is_important ?? false);
   const followUp = Boolean(chat.follow_up ?? chat.followUp ?? false);
   const productId = chat.product_id ?? chat.productId ?? null;
@@ -271,8 +303,6 @@ function toChatApiItem(chat: any) {
 
   const scheduledAt = chat.scheduled_at ?? chat.scheduledAt ?? null;
   const locationText = chat.location_text ?? chat.locationText ?? null;
-  const lat = typeof chat.lat !== 'undefined' ? chat.lat : null;
-  const lng = typeof chat.lng !== 'undefined' ? chat.lng : null;
   const assignedTechId = chat.assigned_tech_id ?? chat.assignedTechId ?? null;
   const serviceId = chat.service_id ?? chat.serviceId ?? null;
   const purchasedAt = chat.purchased_at ?? chat.purchasedAt ?? null;
@@ -289,7 +319,7 @@ function toChatApiItem(chat: any) {
     id: chat.id,
     waId,
     phoneE164,
-    displayName: chat.display_name ?? null,
+    displayName: preferredName,
     lastMessageText: chat.last_message_preview ?? null,
     lastMessageAt: chat.last_message_at ?? null,
     unreadCount: chat.unread_count ?? 0,
@@ -304,8 +334,6 @@ function toChatApiItem(chat: any) {
     // buyflow/scheduling fields (camelCase)
     scheduledAt,
     locationText,
-    lat,
-    lng,
     assignedTechId,
     serviceId,
     purchasedAt,
@@ -322,7 +350,7 @@ function toChatApiItem(chat: any) {
     // backward compatible snake_case
     wa_id: waId,
     phone: phoneE164,
-    display_name: chat.display_name ?? null,
+    display_name: preferredName,
     last_message_preview: chat.last_message_preview ?? null,
     last_message_at: chat.last_message_at ?? null,
     unread_count: chat.unread_count ?? 0,
@@ -390,9 +418,10 @@ async function fetchVipStatsByPhoneDigits(params: {
 }
 
 export async function getChat(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const chatId = req.params.chatId;
 
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
   if (!chat) throw new ApiError(404, 'Chat not found');
 
   // Enrich with meta if available.
@@ -403,6 +432,18 @@ export async function getChat(req: Request, res: Response) {
     if (meta) merged = { ...chat, ...meta };
   } catch {
     // ignore meta errors
+  }
+
+  try {
+    const waId = String(merged.wa_id ?? '');
+    const candidate = merged.phone ?? phoneFromWaId(waId);
+    const phoneE164 = candidate ? toPhoneE164(candidate) : null;
+    if (phoneE164) {
+      const map = await fetchCustomerNamesByPhones({ empresaId: empresa_id, phoneDigits: [phoneE164] });
+      merged = { ...merged, customer_name: map.get(phoneE164) ?? null };
+    }
+  } catch {
+    // ignore customer lookup errors
   }
 
   res.json({ item: toChatApiItem(merged) });
@@ -554,29 +595,6 @@ function toMessageApiItem(m: any) {
   const fromMe = direction === 'out';
   const type = String(m.message_type ?? m.type ?? 'text');
   const createdAt = m.timestamp ?? m.created_at ?? null;
-  const normalizeMediaUrl = (raw: unknown): string | null => {
-    if (typeof raw !== 'string') return null;
-    const url = raw.trim();
-    if (url.length === 0) return null;
-
-    const base = env.PUBLIC_BASE_URL.replace(/\/$/, '');
-
-    if (url.startsWith('/uploads/')) return `${base}${url}`;
-
-    try {
-      const parsed = new URL(url);
-      const host = parsed.hostname;
-      if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
-        return `${base}${parsed.pathname}${parsed.search}`;
-      }
-    } catch {
-      // ignore
-    }
-
-    return url;
-  };
-
-  const mediaUrl = normalizeMediaUrl(m.media_url ?? null);
 
   return {
     // canonical camelCase
@@ -585,21 +603,14 @@ function toMessageApiItem(m: any) {
     direction,
     fromMe,
     type,
+    messageType: type,
     text: m.text ?? null,
-    mediaUrl,
-    mimeType: m.media_mime ?? null,
-    fileName: m.media_name ?? null,
-    size: m.media_size ?? null,
     status: m.status ?? 'received',
     createdAt,
 
     // backward compatible snake_case
     chat_id: m.chat_id,
     message_type: m.message_type ?? type,
-    media_url: mediaUrl,
-    media_mime: m.media_mime ?? null,
-    media_size: m.media_size ?? null,
-    media_name: m.media_name ?? null,
     remote_message_id: m.remote_message_id ?? null,
     quoted_message_id: m.quoted_message_id ?? null,
     timestamp: m.timestamp ?? null,
@@ -663,10 +674,6 @@ export async function deleteChatMessage(req: Request, res: Response) {
     data: {
       status: 'deleted',
       text: null,
-      media_url: null,
-      media_mime: null,
-      media_size: null,
-      media_name: null,
       error: null,
     },
   });
@@ -686,6 +693,7 @@ export async function deleteChatMessage(req: Request, res: Response) {
 }
 
 export async function editChatMessage(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const chatId = String(req.params.chatId ?? '').trim();
   const messageId = String(req.params.messageId ?? '').trim();
 
@@ -715,7 +723,7 @@ export async function editChatMessage(req: Request, res: Response) {
     throw new ApiError(409, 'Deleted messages cannot be edited');
   }
 
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
   if (!chat) throw new ApiError(404, 'Chat not found');
 
   const remoteMessageId = (msg.remote_message_id ?? '').trim();
@@ -844,8 +852,27 @@ export async function listChats(req: Request, res: Response) {
     prisma.crmChat.count({ where }),
   ]);
 
+  const phoneDigits = items
+    .map((c: any) => {
+      const waId = String(c.wa_id ?? '');
+      const candidate = c.phone ?? phoneFromWaId(waId);
+      return candidate ? toPhoneE164(candidate) : null;
+    })
+    .filter((p: any) => typeof p === 'string' && p.length > 0) as string[];
+
+  const customerNameByPhone = await fetchCustomerNamesByPhones({
+    empresaId: empresa_id,
+    phoneDigits,
+  });
+
   const metaByChatId = await fetchChatMeta(items.map((c: any) => c.id));
-  const merged = items.map((c: any) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
+  const merged = items.map((c: any) => {
+    const waId = String(c.wa_id ?? '');
+    const candidate = c.phone ?? phoneFromWaId(waId);
+    const phoneE164 = candidate ? toPhoneE164(candidate) : null;
+    const customer_name = phoneE164 ? customerNameByPhone.get(phoneE164) ?? null : null;
+    return { ...c, customer_name, ...(metaByChatId.get(c.id) ?? {}) };
+  });
   const mapped = merged.map(toChatApiItem);
   res.json({ items: mapped, total, page, limit });
 }
@@ -888,9 +915,27 @@ export async function listPurchasedClients(req: Request, res: Response) {
     prisma.crmChat.count({ where }),
   ]);
 
+  const phoneDigitsForCustomers = items
+    .map((c: any) => {
+      const waId = String(c.wa_id ?? '');
+      const candidate = c.phone ?? phoneFromWaId(waId);
+      return candidate ? toPhoneE164(candidate) : null;
+    })
+    .filter((p: any) => typeof p === 'string' && p.length > 0) as string[];
+  const customerNameByPhone = await fetchCustomerNamesByPhones({
+    empresaId: empresa_id,
+    phoneDigits: phoneDigitsForCustomers,
+  });
+
   // Enrich with meta if available
   const metaByChatId = await fetchChatMeta(items.map((c: any) => c.id));
-  const merged = items.map((c: any) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
+  const merged = items.map((c: any) => {
+    const waId = String(c.wa_id ?? '');
+    const candidate = c.phone ?? phoneFromWaId(waId);
+    const phoneE164 = candidate ? toPhoneE164(candidate) : null;
+    const customer_name = phoneE164 ? customerNameByPhone.get(phoneE164) ?? null : null;
+    return { ...c, customer_name, ...(metaByChatId.get(c.id) ?? {}) };
+  });
   
   // Map to client format (same as chat format but clearly for "purchased clients")
   const mappedBase = merged.map(toChatApiItem);
@@ -972,8 +1017,26 @@ export async function listBoughtInbox(req: Request, res: Response) {
     prisma.crmChat.count({ where }),
   ]);
 
+  const phoneDigitsForCustomers = items
+    .map((c: any) => {
+      const waId = String(c.wa_id ?? '');
+      const candidate = c.phone ?? phoneFromWaId(waId);
+      return candidate ? toPhoneE164(candidate) : null;
+    })
+    .filter((p: any) => typeof p === 'string' && p.length > 0) as string[];
+  const customerNameByPhone = await fetchCustomerNamesByPhones({
+    empresaId: empresa_id,
+    phoneDigits: phoneDigitsForCustomers,
+  });
+
   const metaByChatId = await fetchChatMeta(items.map((c: any) => c.id));
-  const merged = items.map((c: any) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
+  const merged = items.map((c: any) => {
+    const waId = String(c.wa_id ?? '');
+    const candidate = c.phone ?? phoneFromWaId(waId);
+    const phoneE164 = candidate ? toPhoneE164(candidate) : null;
+    const customer_name = phoneE164 ? customerNameByPhone.get(phoneE164) ?? null : null;
+    return { ...c, customer_name, ...(metaByChatId.get(c.id) ?? {}) };
+  });
 
   const mappedBase = merged.map(toChatApiItem);
   const phoneDigits = mappedBase
@@ -1368,10 +1431,16 @@ function normalizePriority(raw?: string | null): 'low' | 'normal' | 'high' | nul
 }
 
 function normalizeCrmChatStatus(raw: string): string {
-  const s = String(raw ?? '').trim().toLowerCase();
+  const s = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
   if (!s) return s;
   // Accept aliases: users might send "agendado"/"reservado" for scheduling.
   if (s === 'agendado' || s === 'reservado') return 'servicio_reservado';
+  if (s === 'instalacion') return 'instalacion';
+  if (s === 'mantenimiento') return 'mantenimiento';
   return s;
 }
 
@@ -1389,6 +1458,8 @@ function needsOperationsTask(status: string): boolean {
     status === 'reserva' ||
     status === 'por_levantamiento' ||
     status === 'servicio_reservado' ||
+    status === 'instalacion' ||
+    status === 'mantenimiento' ||
     status === 'solucion_garantia' ||
     status === 'en_garantia' ||
     status === 'garantia' ||
@@ -1398,7 +1469,7 @@ function needsOperationsTask(status: string): boolean {
 
 function mapCrmStatusToTaskType(
   status: string,
-): { taskType: 'LEVANTAMIENTO' | 'SERVICIO_RESERVADO' | 'GARANTIA'; initialJobStatus: string } | null {
+): { taskType: 'LEVANTAMIENTO' | 'SERVICIO_RESERVADO' | 'GARANTIA' | 'INSTALACION'; initialJobStatus: string; serviceTypeLabel?: string } | null {
   if (status === 'reserva') {
     // Treat RESERVA as an operational scheduled service so it appears in Operaciones/Agenda.
     return { taskType: 'SERVICIO_RESERVADO', initialJobStatus: 'scheduled' };
@@ -1408,6 +1479,14 @@ function mapCrmStatusToTaskType(
   }
   if (status === 'servicio_reservado') {
     return { taskType: 'SERVICIO_RESERVADO', initialJobStatus: 'scheduled' };
+  }
+  if (status === 'instalacion') {
+    return { taskType: 'INSTALACION', initialJobStatus: 'scheduled', serviceTypeLabel: 'Instalación' };
+  }
+  if (status === 'mantenimiento') {
+    // Keep DB enum unchanged by mapping to SERVICIO_RESERVADO,
+    // but label the job so the app can show it under the Mantenimiento tab.
+    return { taskType: 'SERVICIO_RESERVADO', initialJobStatus: 'scheduled', serviceTypeLabel: 'Mantenimiento' };
   }
   if (
     status === 'solucion_garantia' ||
@@ -1440,10 +1519,11 @@ async function ensureCustomerForChat(params: {
   tx: any;
   empresaId: string;
   chat: { id: string; wa_id: string; phone: string | null; display_name: string | null };
+  phoneOverride?: string | null;
 }): Promise<{ id: string; nombre: string; telefono: string; direccion: string | null; ubicacion_mapa: string | null }> {
-  const { tx, empresaId, chat } = params;
+  const { tx, empresaId, chat, phoneOverride } = params;
 
-  const phoneCandidate = chat.phone ?? phoneFromWaId(String(chat.wa_id ?? ''));
+  const phoneCandidate = chat.phone ?? phoneOverride ?? phoneFromWaId(String(chat.wa_id ?? ''));
   const telefono = toPhoneE164(phoneCandidate);
   if (!telefono) throw new ApiError(400, 'Chat has no valid phone; cannot create operations task', undefined, 'INVALID_PHONE');
 
@@ -1483,6 +1563,15 @@ export async function postChatStatus(req: Request, res: Response) {
   const body = parsed.data;
   const nextStatus = normalizeCrmChatStatus(body.status);
 
+  const phoneOverride =
+    typeof (body as any).phone !== 'undefined'
+      ? (body as any).phone
+      : typeof (body as any).phone_e164 !== 'undefined'
+        ? (body as any).phone_e164
+        : typeof (body as any).phoneE164 !== 'undefined'
+          ? (body as any).phoneE164
+          : null;
+
   const scheduledAt =
     typeof body.scheduledAt !== 'undefined'
       ? body.scheduledAt
@@ -1501,8 +1590,6 @@ export async function postChatStatus(req: Request, res: Response) {
       : typeof (body as any).location_text !== 'undefined'
         ? (body as any).location_text
         : null;
-  const lat = parseNumberOrNull((body as any).lat);
-  const lng = parseNumberOrNull((body as any).lng);
   const note =
     typeof body.note !== 'undefined'
       ? body.note
@@ -1550,17 +1637,16 @@ export async function postChatStatus(req: Request, res: Response) {
   // For servicio_reservado and por_levantamiento, scheduling fields are mandatory.
   // For reserva, keep backward compatibility: only require scheduling fields when the client provides any of them.
   const locationResolved = String(locationText ?? address ?? '').trim();
-  const hasCoords = lat !== null && lng !== null;
 
   const wantsSchedulingPayload =
     nextStatus === 'servicio_reservado' ||
     nextStatus === 'por_levantamiento' ||
+    nextStatus === 'instalacion' ||
+    nextStatus === 'mantenimiento' ||
     (nextStatus === 'reserva' &&
       (scheduledAt !== null ||
         address !== null ||
         locationText !== null ||
-        lat !== null ||
-        lng !== null ||
         assignedTechnicianId !== null ||
         serviceId !== null));
 
@@ -1568,9 +1654,8 @@ export async function postChatStatus(req: Request, res: Response) {
     const d = parseScheduledAt(scheduledAt ?? null);
     if (!d) throw new ApiError(422, 'scheduled_at is required for this status');
 
-    // Location: allow either textual location or lat/lng coords.
-    if (!locationResolved && !hasCoords) {
-      throw new ApiError(422, 'location_text or lat/lng is required for this status');
+    if (!locationResolved) {
+      throw new ApiError(422, 'location_text (direccion) is required for this status');
     }
     if (!assignedTechnicianId) {
       throw new ApiError(422, 'assigned_tech_id is required for this status');
@@ -1599,9 +1684,6 @@ export async function postChatStatus(req: Request, res: Response) {
     if (wantsSchedulingPayload) {
       chatPatch.scheduled_at = parseScheduledAt(scheduledAt ?? null);
       chatPatch.location_text = locationResolved.length > 0 ? locationResolved : null;
-      // Lat/Lng are optional now; allow nulls.
-      chatPatch.lat = lat;
-      chatPatch.lng = lng;
       chatPatch.assigned_tech_id = assignedTechnicianId;
       chatPatch.service_id = serviceId;
     }
@@ -1639,6 +1721,7 @@ export async function postChatStatus(req: Request, res: Response) {
         phone: chat.phone ?? null,
         display_name: chat.display_name ?? null,
       },
+      phoneOverride: phoneOverride ?? null,
     });
 
     if (wantsSchedulingPayload) {
@@ -1702,11 +1785,14 @@ export async function postChatStatus(req: Request, res: Response) {
     });
 
     const serviceTypeLabel =
-      mapping.taskType === 'LEVANTAMIENTO'
+      mapping.serviceTypeLabel ??
+      (mapping.taskType === 'LEVANTAMIENTO'
         ? 'Levantamiento'
         : mapping.taskType === 'GARANTIA'
           ? 'Garantía'
-          : 'Servicio reservado';
+          : mapping.taskType === 'INSTALACION'
+            ? 'Instalación'
+            : 'Servicio reservado');
 
     const baseJobData: any = {
       empresa_id,
@@ -1724,8 +1810,6 @@ export async function postChatStatus(req: Request, res: Response) {
       service_id: serviceId ?? undefined,
       scheduled_at: wantsSchedulingPayload ? parseScheduledAt(scheduledAt ?? null) : undefined,
       location_text: wantsSchedulingPayload ? (locationResolved.length > 0 ? locationResolved : null) : undefined,
-      lat: wantsSchedulingPayload ? lat : undefined,
-      lng: wantsSchedulingPayload ? lng : undefined,
       last_update_by_user_id: user_id,
     };
 
@@ -1758,7 +1842,11 @@ export async function postChatStatus(req: Request, res: Response) {
 
     // Upsert schedule / warranty ticket based on type
     // NOTE: Levantamientos also need to show up in Agenda immediately.
-    if (mapping.taskType === 'SERVICIO_RESERVADO' || mapping.taskType === 'LEVANTAMIENTO') {
+    if (
+      mapping.taskType === 'SERVICIO_RESERVADO' ||
+      mapping.taskType === 'LEVANTAMIENTO' ||
+      mapping.taskType === 'INSTALACION'
+    ) {
       const d = parseScheduledAt(scheduledAt ?? null);
       if (!d) throw new ApiError(400, 'scheduledAt is required for servicio_reservado');
 
@@ -2015,26 +2103,15 @@ export async function listChatMessages(req: Request, res: Response) {
 }
 
 export async function postUpload(req: Request, res: Response) {
-  // multer placed file in req.file
-  const file = req.file;
-  if (!file) throw new ApiError(400, 'Missing file field "file"');
-
-  const publicUrl = toPublicUrlFromAbsoluteFile(file.path);
-
-  res.status(201).json({
-    url: publicUrl,
-    mime: file.mimetype,
-    size: file.size,
-    name: file.originalname,
-  });
+  throw new ApiError(410, CRM_MEDIA_DISABLED_ERROR);
 }
 
-export { uploadCrmFile };
 
 export async function sendTextMessage(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const chatId = req.params.chatId;
 
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
   if (!chat) throw new ApiError(404, 'Chat not found');
 
   const parsed = crmSendTextSchema.safeParse(req.body);
@@ -2068,6 +2145,7 @@ export async function sendTextMessage(req: Request, res: Response) {
 }
 
 export async function sendOutboundTextMessage(req: Request, res: Response) {
+  const empresaId = actorEmpresaId(req);
   const parsed = crmOutboundSendTextSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
 
@@ -2080,14 +2158,14 @@ export async function sendOutboundTextMessage(req: Request, res: Response) {
 
   // Upsert so user can message a number even if it was not in the list yet.
   const chat = await prisma.crmChat.upsert({
-    where: { wa_id: normalized.waId },
+    where: ({ empresa_id_wa_id: { empresa_id: empresaId, wa_id: normalized.waId } } as any),
     create: {
       wa_id: normalized.waId,
       phone: normalized.phoneE164,
       status: status ?? 'primer_contacto',
       display_name: displayName,
       empresa: {
-        connect: { id: env.DEFAULT_EMPRESA_ID },
+        connect: { id: empresaId },
       },
     },
     update: {
@@ -2123,140 +2201,11 @@ export async function sendOutboundTextMessage(req: Request, res: Response) {
 }
 
 export async function sendMediaMessage(req: Request, res: Response) {
-  const chatId = req.params.chatId;
-
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
-  if (!chat) throw new ApiError(404, 'Chat not found');
-
-  const file = req.file;
-  if (!file) throw new ApiError(400, 'Missing file field "file"');
-
-  const parsed = crmSendMediaFieldsSchema.safeParse(req.body);
-  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
-
-  const publicUrl = toPublicUrlFromAbsoluteFile(file.path);
-  const mediaType = parsed.data.type ?? detectMediaType(file.mimetype);
-  const createdAt = new Date();
-
-  const msg = await prisma.crmChatMessage.create({
-    data: {
-      empresa_id: chat.empresa_id,
-      chat_id: chatId,
-      direction: 'out',
-      message_type: mediaType,
-      text: parsed.data.caption?.trim() || null,
-      media_url: publicUrl,
-      media_mime: file.mimetype,
-      media_size: file.size,
-      media_name: file.originalname,
-      status: 'sent',
-      timestamp: createdAt,
-    },
-  });
-
-  try {
-    const evo = new EvolutionClient();
-    const send = await evo.sendMedia({
-      toWaId: chat.wa_id,
-      toPhone: chat.phone ?? undefined,
-      mediaUrl: publicUrl,
-      caption: parsed.data.caption?.trim() || undefined,
-      mediaType,
-    });
-
-    const updated = await prisma.crmChatMessage.update({
-      where: { id: msg.id },
-      data: { remote_message_id: send.messageId, status: 'sent' },
-    });
-
-    await prisma.crmChat.update({
-      where: { id: chatId },
-      data: {
-        last_message_preview: parsed.data.caption?.trim().slice(0, 180) || `[${mediaType}]`,
-        last_message_at: createdAt,
-      },
-    });
-
-    emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
-    emitCrmEvent({ type: 'chat.updated', chatId });
-
-    res.status(201).json({ item: updated });
-  } catch (e: any) {
-    console.error('[CRM] sendMediaMessage: Evolution send failed', {
-      chatId,
-      waId: chat.wa_id,
-      phone: chat.phone,
-      error: e?.message ?? String(e),
-    });
-
-    const updated = await prisma.crmChatMessage.update({
-      where: { id: msg.id },
-      data: {
-        status: 'failed',
-        error: e?.message ?? String(e),
-      },
-    });
-
-    emitCrmEvent({ type: 'message.new', chatId, messageId: updated.id });
-
-    // Return the failed message to the client so the UI can keep working.
-    res.status(201).json({
-      item: updated,
-      warning: 'Evolution send failed',
-    });
-  }
+  throw new ApiError(410, CRM_MEDIA_DISABLED_ERROR);
 }
 
 export async function recordMediaMessage(req: Request, res: Response) {
-  const chatId = req.params.chatId;
-
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
-  if (!chat) throw new ApiError(404, 'Chat not found');
-
-  const parsed = crmRecordMediaSchema.safeParse(req.body);
-  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
-
-  const skipEvolution = Boolean((parsed.data as any).skipEvolution ?? false);
-  const remoteMessageId = ((parsed.data as any).remoteMessageId ?? null) as string | null;
-
-  if (skipEvolution) {
-    if (!remoteMessageId || remoteMessageId.trim().length === 0) {
-      throw new ApiError(400, 'remoteMessageId is required when skipEvolution=true');
-    }
-  }
-
-  const mediaType = parsed.data.type ?? 'image';
-  const createdAt = new Date();
-
-  const msg = await prisma.crmChatMessage.create({
-    data: {
-      empresa_id: chat.empresa_id,
-      chat_id: chatId,
-      direction: 'out',
-      message_type: mediaType,
-      text: parsed.data.caption?.trim() || null,
-      media_url: parsed.data.mediaUrl.trim(),
-      media_mime: parsed.data.mimeType?.trim() || null,
-      media_size: parsed.data.size ?? null,
-      media_name: parsed.data.fileName?.trim() || null,
-      remote_message_id: remoteMessageId?.trim() || null,
-      status: 'sent',
-      timestamp: createdAt,
-    },
-  });
-
-  await prisma.crmChat.update({
-    where: { id: chatId },
-    data: {
-      last_message_preview: parsed.data.caption?.trim().slice(0, 180) || `[${mediaType}]`,
-      last_message_at: createdAt,
-    },
-  });
-
-  emitCrmEvent({ type: 'message.new', chatId, messageId: msg.id });
-  emitCrmEvent({ type: 'chat.updated', chatId });
-
-  res.status(201).json({ item: msg, note: 'Recorded only (skipEvolution)' });
+  throw new ApiError(410, CRM_MEDIA_DISABLED_ERROR);
 }
 
 export async function markChatRead(req: Request, res: Response) {

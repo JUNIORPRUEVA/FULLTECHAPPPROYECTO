@@ -1401,7 +1401,7 @@ model CrmTask {
 }
 
 // =====================
-// WhatsApp CRM (Single-tenant)
+// WhatsApp CRM (multi-tenant by empresa_id)
 // =====================
 
 model CrmChat {
@@ -1416,8 +1416,6 @@ model CrmChat {
   status               String    @default("primer_contacto")
   scheduled_at         DateTime?
   location_text        String?   @db.Text
-  lat                  Float?
-  lng                  Float?
   assigned_tech_id     String?   @db.Uuid
   service_id           String?   @db.Uuid
   purchased_at         DateTime?
@@ -1430,7 +1428,7 @@ model CrmChat {
   messages CrmChatMessage[]
   operations_jobs OperationsJob[] @relation("CrmChatToOperationsJobs")
 
-  @@unique([wa_id])
+  @@unique([empresa_id, wa_id])
   @@index([last_message_at])
   @@index([empresa_id])
   @@map("crm_chats")
@@ -1443,11 +1441,7 @@ model CrmChatMessage {
   direction         String
   message_type      String
   text              String?
-  media_url         String?
-  media_mime        String?
-  media_size        Int?
-  media_name        String?
-  remote_message_id String?  @unique
+  remote_message_id String?
   quoted_message_id String?
   status            String   @default("received")
   error             String?
@@ -1457,6 +1451,7 @@ model CrmChatMessage {
   empresa Empresa  @relation("CrmChatMessageToEmpresa", fields: [empresa_id], references: [id])
   chat    CrmChat  @relation(fields: [chat_id], references: [id], onDelete: Cascade)
 
+  @@unique([empresa_id, remote_message_id])
   @@index([chat_id, timestamp(sort: Desc)])
   @@index([empresa_id])
   @@map("crm_messages")

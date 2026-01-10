@@ -1,4 +1,16 @@
 -- ============================================================================
+-- Script PSQL (NO MIGRATION): Verificación de Flujo CRM → Operaciones
+-- ============================================================================
+-- IMPORTANTE:
+--   Este archivo usa comandos de psql como \echo y \gx.
+--   No es compatible con el runner Node/pg (client.query). Por eso vive en
+--   sql/manual/ y tiene extensión .psql.
+--
+-- Uso (ejemplo):
+--   psql "$DATABASE_URL" -v chat_id='...' -v empresa_id='...' -f sql/manual/verify_crm_operations_flow.psql
+-- ============================================================================
+
+-- ============================================================================
 -- Script SQL: Verificación de Flujo CRM → Operaciones
 -- ============================================================================
 -- Este script verifica que al marcar un chat con estado "agendado" o 

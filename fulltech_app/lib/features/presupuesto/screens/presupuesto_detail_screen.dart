@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/app_config.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../core/widgets/module_page.dart';
+import '../../../core/widgets/adaptive_image.dart';
 import '../../../core/widgets/catalog_product_grid_card.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
@@ -624,18 +625,18 @@ class _QuotePane extends ConsumerWidget {
                 height: 34,
                 child: ClipOval(
                   child: (imageUrl != null && imageUrl.trim().isNotEmpty)
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: cs.surfaceContainerHighest,
-                            child: Icon(
-                              Icons.image_not_supported_outlined,
-                              size: 18,
-                              color: cs.onSurfaceVariant,
+                        ? adaptiveImage(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: cs.surfaceContainerHighest,
+                              child: Icon(
+                                Icons.image_not_supported_outlined,
+                                size: 18,
+                                color: cs.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        )
+                          )
                       : Container(
                           color: cs.surfaceContainerHighest,
                           child: Icon(
@@ -882,6 +883,17 @@ class _QuotePane extends ConsumerWidget {
       return '$base/$v';
     }
 
+    bool isLikelyLocalPath(String value) {
+      // Treat backend-served paths like /uploads/... as remote (not local).
+      if (value.startsWith('/uploads/')) return false;
+
+      // Windows: C:\... or C:/...
+      if (RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(value)) return true;
+      // file://...
+      if (value.startsWith('file://')) return true;
+      return false;
+    }
+
     String? imageUrlFor(QuotationItemDraft it) {
       final id = it.productId;
       if (id == null) return null;
@@ -891,7 +903,9 @@ class _QuotePane extends ConsumerWidget {
       );
       final raw = p?.imagenUrl;
       if (raw == null || raw.trim().isEmpty) return null;
-      return publicUrlFromMaybeRelative(raw);
+      final v = raw.trim();
+      if (isLikelyLocalPath(v)) return v;
+      return publicUrlFromMaybeRelative(v);
     }
 
     return LayoutBuilder(

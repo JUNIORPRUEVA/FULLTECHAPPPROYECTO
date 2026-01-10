@@ -8,6 +8,7 @@ import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
 import '../../services/providers/services_provider.dart';
 import '../models/operations_models.dart';
+import '../constants/operations_tab_mapping.dart';
 import '../state/operations_providers.dart';
 
 class OperacionesListScreen extends ConsumerStatefulWidget {
@@ -40,44 +41,11 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
       role == 'tecnico' || role == 'tecnico_fijo' || role == 'contratista';
 
   String _tabLabel(int index) {
-    switch (index) {
-      case 0:
-        return 'Agenda';
-      case 1:
-        return 'Levantamientos';
-      default:
-        return '';
-    }
-  }
-
-  bool _isWarranty(OperationsJob job) {
-    final t = (job.crmTaskType ?? '').toUpperCase();
-    if (t == 'GARANTIA') return true;
-    return job.status.startsWith('warranty_') || job.status == 'closed';
-  }
-
-  bool _isReserva(OperationsJob job) {
-    final t = (job.crmTaskType ?? '').toUpperCase();
-    return t == 'SERVICIO_RESERVADO' || t == 'INSTALACION';
+    return operationsTabLabel(OperationsTab.values[index]);
   }
 
   bool _matchesTab(int index, OperationsJob job) {
-    final t = (job.crmTaskType ?? '').toUpperCase();
-    if (index == 0) {
-      // Agenda: show anything that already has a schedule (and keep warranty).
-      // This ensures CRM -> (agendado/por_levantamiento) appears immediately.
-      final isScheduled = job.scheduledDate != null ||
-          job.status == 'pending_scheduling' ||
-          job.status == 'scheduled';
-      return isScheduled || _isReserva(job) || _isWarranty(job);
-    }
-    if (index == 1) {
-      return t == 'LEVANTAMIENTO' ||
-          job.status.startsWith('pending_survey') ||
-          job.status.startsWith('survey_') ||
-          job.status == 'pending_scheduling';
-    }
-    return true;
+    return jobMatchesTab(OperationsTab.values[index], job);
   }
 
   DateTime? _effectiveDate(OperationsJob job) {
@@ -91,8 +59,11 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   }
 
   String _typeLabelFor(int tabIndex, OperationsJob job) {
-    if (tabIndex == 1) return 'Por levantamiento';
-    if (_isWarranty(job)) return 'Solución garantía';
+    final tab = OperationsTab.values[tabIndex];
+    if (tab == OperationsTab.levantamientos) return 'Por levantamiento';
+    if (tab == OperationsTab.mantenimiento) return 'Mantenimiento';
+    if (tab == OperationsTab.instalaciones) return 'Instalación';
+    if (isWarranty(job)) return 'Solución garantía';
     return 'Agendar';
   }
 
@@ -221,7 +192,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
     final techsAsync = ref.watch(operationsTechniciansProvider);
 
     return DefaultTabController(
-      length: 2,
+      length: OperationsTab.values.length,
       child: ModulePage(
         title: 'Operaciones',
         actions: [
@@ -411,12 +382,15 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
             const SizedBox(height: 8),
             TabBar(
               isScrollable: true,
-              tabs: List.generate(2, (i) => Tab(text: _tabLabel(i))),
+              tabs: List.generate(
+                OperationsTab.values.length,
+                (i) => Tab(text: _tabLabel(i)),
+              ),
             ),
             const SizedBox(height: 8),
             Expanded(
               child: TabBarView(
-                children: List.generate(2, (tabIndex) {
+                children: List.generate(OperationsTab.values.length, (tabIndex) {
                   final filtered = state.items
                       .where((j) => _matchesTab(tabIndex, j))
                       .toList();
@@ -430,7 +404,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                     'Próximos': <OperationsJob>[],
                     'Sin fecha': <OperationsJob>[],
                   };
-                  if (tabIndex == 0) {
+                  if (OperationsTab.values[tabIndex] == OperationsTab.agenda) {
                     for (final j in filtered) {
                       final day = _effectiveDay(j);
                       if (day == null) {
@@ -454,7 +428,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                   return ListView(
                     padding: const EdgeInsets.all(12),
                     children: [
-                      if (tabIndex == 0) ...[
+                      if (OperationsTab.values[tabIndex] == OperationsTab.agenda) ...[
                         for (final section in const [
                           'Hoy',
                           'Próximos',
@@ -673,7 +647,8 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                                 return Card(
                                   child: ListTile(
                                     leading: Icon(
-                                      tabIndex == 1
+                                      OperationsTab.values[tabIndex] ==
+                                              OperationsTab.levantamientos
                                           ? Icons.assignment_turned_in_outlined
                                           : Icons.event_outlined,
                                       color: statusColor,

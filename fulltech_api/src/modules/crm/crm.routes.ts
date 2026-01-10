@@ -27,14 +27,10 @@ import {
   patchChat,
   patchPostSaleState,
   postChatStatus,
-  postUpload,
-  recordMediaMessage,
   sendOutboundTextMessage,
-  sendMediaMessage,
   sendTextMessage,
   sseStream,
   updatePurchasedClient,
-  uploadCrmFile,
 } from './crm_whatsapp.controller';
 import {
   convertThreadToCustomer,
@@ -86,22 +82,8 @@ crmRouter.post('/chats/:chatId/convert-to-customer', expressAsyncHandler(convert
 crmRouter.patch('/chats/:chatId/read', expressAsyncHandler(markChatRead));
 crmRouter.post('/chats/:chatId/messages/text', expressAsyncHandler(sendTextMessage));
 crmRouter.post('/chats/outbound/text', expressAsyncHandler(sendOutboundTextMessage));
-crmRouter.post(
-  '/chats/:chatId/messages/media',
-  uploadCrmFile,
-  expressAsyncHandler(sendMediaMessage),
-);
-
-// Record-only helper for client direct Evolution sends.
-crmRouter.post(
-  '/chats/:chatId/messages/media-record',
-  expressAsyncHandler(recordMediaMessage),
-);
 
 crmRouter.get('/stream', expressAsyncHandler(sseStream));
-
-// Upload helper for media
-crmRouter.post('/upload', uploadCrmFile, expressAsyncHandler(postUpload));
 
 // Quick Replies (templates) - restricted
 crmRouter.get('/quick-replies', expressAsyncHandler(listQuickReplies));

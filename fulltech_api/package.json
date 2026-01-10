@@ -23,7 +23,8 @@
     "audit-empresas": "tsx scripts/audit_empresas.ts",
     "delete-other-empresas": "tsx scripts/delete_other_empresas.ts",
     "delete-instance-chats": "tsx scripts/delete_instance_number_chats.ts",
-    "clear-crm-chats": "tsx scripts/clear_crm_chats.ts"
+    "clear-crm-chats": "tsx scripts/clear_crm_chats.ts",
+    "crm:verify": "tsx scripts/verify_crm_integrity.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

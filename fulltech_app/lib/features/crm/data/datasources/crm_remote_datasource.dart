@@ -371,7 +371,7 @@ class CrmRemoteDataSource {
       return CrmMessage.fromJson(data['item'] as Map<String, dynamic>);
     }
 
-    throw UnsupportedError('Use media upload endpoint for non-text messages');
+    throw UnsupportedError('Only text messages are supported');
   }
 
   Future<CrmMessage> sendMessage({
@@ -386,7 +386,7 @@ class CrmRemoteDataSource {
     List<String>? aiUsedKnowledge,
   }) async {
     if (type != 'text') {
-      throw UnsupportedError('Use sendMediaMessage() for non-text messages');
+      throw UnsupportedError('Only text messages are supported');
     }
 
     // Optional: send directly via Evolution from the client app.
@@ -600,95 +600,7 @@ class CrmRemoteDataSource {
     String? toWaId,
     String? toPhone,
   }) async {
-    final directSettings = await EvolutionDirectSettings.load();
-    final useDirectRequested =
-        AppConfig.crmSendDirectEvolution || directSettings.enabled;
-
-    final baseUrl = AppConfig.evolutionApiBaseUrl.trim().isNotEmpty
-        ? AppConfig.evolutionApiBaseUrl.trim()
-        : directSettings.baseUrl;
-    final apiKey = AppConfig.evolutionApiKey.trim().isNotEmpty
-        ? AppConfig.evolutionApiKey.trim()
-        : directSettings.apiKey;
-    final instance = AppConfig.evolutionInstance.trim().isNotEmpty
-        ? AppConfig.evolutionInstance.trim()
-        : directSettings.instance;
-    final defaultCountryCode =
-        AppConfig.evolutionDefaultCountryCode.trim().isNotEmpty
-        ? AppConfig.evolutionDefaultCountryCode.trim()
-        : directSettings.defaultCountryCode;
-
-    final directConfigured =
-        baseUrl.trim().isNotEmpty && apiKey.trim().isNotEmpty;
-    final useDirect = useDirectRequested && directConfigured;
-
-    final mapsUrl = 'https://www.google.com/maps?q=$latitude,$longitude';
-    final safeLabel = (label ?? '').trim();
-    final recordText = safeLabel.isEmpty
-        ? 'Ubicación: $mapsUrl'
-        : 'Ubicación ($safeLabel): $mapsUrl';
-
-    // If direct isn't configured, fall back to a normal text message.
-    if (!useDirect) {
-      return sendMessage(threadId: threadId, message: recordText);
-    }
-
-    // Ensure destination is known when not provided.
-    String? resolvedWaId = toWaId;
-    String? resolvedPhone = toPhone;
-    if ((resolvedWaId == null || resolvedWaId.trim().isEmpty) &&
-        (resolvedPhone == null || resolvedPhone.trim().isEmpty)) {
-      try {
-        final chat = await getThread(threadId);
-        resolvedWaId = chat.waId;
-        resolvedPhone = chat.phone;
-      } catch (_) {}
-    }
-
-    final evo = EvolutionDirectClient.create(
-      baseUrl: baseUrl,
-      apiKey: apiKey,
-      instance: instance,
-      defaultCountryCode: defaultCountryCode,
-    );
-
-    final send = await evo.sendLocation(
-      latitude: latitude,
-      longitude: longitude,
-      name: safeLabel.isEmpty ? null : safeLabel,
-      address: (address ?? '').trim().isEmpty ? null : address!.trim(),
-      toWaId: resolvedWaId,
-      toPhone: resolvedPhone,
-    );
-
-    if (send.messageId == null || send.messageId!.trim().isEmpty) {
-      throw Exception('Evolution did not return messageId');
-    }
-
-    try {
-      final res = await _dio.post(
-        '/crm/chats/$threadId/messages/text',
-        data: {
-          'text': recordText,
-          'skipEvolution': true,
-          'remoteMessageId': send.messageId,
-        },
-        options: _jsonOptions,
-      );
-
-      final data = res.data as Map<String, dynamic>;
-      return CrmMessage.fromJson(data['item'] as Map<String, dynamic>);
-    } catch (_) {
-      return CrmMessage(
-        id: 'evo-${send.messageId}',
-        fromMe: true,
-        type: 'text',
-        body: recordText,
-        mediaUrl: null,
-        status: 'sent',
-        createdAt: DateTime.now(),
-      );
-    }
+    throw UnsupportedError('Only text messages are supported');
   }
 
   Future<Map<String, dynamic>> sendOutboundTextMessage({
@@ -848,137 +760,7 @@ class CrmRemoteDataSource {
     String? toWaId,
     String? toPhone,
   }) async {
-    final resolvedType = (type != null && type.trim().isNotEmpty)
-        ? type.trim()
-        : _inferMediaType(file);
-
-    final directSettings = await EvolutionDirectSettings.load();
-    final useDirectRequested =
-        AppConfig.crmSendDirectEvolution || directSettings.enabled;
-
-    final baseUrl = AppConfig.evolutionApiBaseUrl.trim().isNotEmpty
-        ? AppConfig.evolutionApiBaseUrl.trim()
-        : directSettings.baseUrl;
-    final apiKey = AppConfig.evolutionApiKey.trim().isNotEmpty
-        ? AppConfig.evolutionApiKey.trim()
-        : directSettings.apiKey;
-    final instance = AppConfig.evolutionInstance.trim().isNotEmpty
-        ? AppConfig.evolutionInstance.trim()
-        : directSettings.instance;
-    final defaultCountryCode =
-        AppConfig.evolutionDefaultCountryCode.trim().isNotEmpty
-        ? AppConfig.evolutionDefaultCountryCode.trim()
-        : directSettings.defaultCountryCode;
-
-    final directConfigured =
-        baseUrl.trim().isNotEmpty && apiKey.trim().isNotEmpty;
-    final useDirect = useDirectRequested && directConfigured;
-
-    Future<CrmMessage> directFlow() async {
-      final uploaded = await _uploadCrmFile(file);
-      final mediaUrl = (uploaded['url'] ?? '').toString().trim();
-      if (mediaUrl.isEmpty) throw Exception('Upload did not return url');
-
-      String? resolvedWaId = toWaId;
-      String? resolvedPhone = toPhone;
-      if ((resolvedWaId == null || resolvedWaId.trim().isEmpty) &&
-          (resolvedPhone == null || resolvedPhone.trim().isEmpty)) {
-        // Fallback: fetch chat to resolve destination (covers cases where chat isn't in the current list page).
-        try {
-          final chat = await getThread(threadId);
-          resolvedWaId = chat.waId;
-          resolvedPhone = chat.phone;
-        } catch (_) {
-          // keep nulls; EvolutionDirectClient will throw a clear error
-        }
-      }
-
-      final evo = EvolutionDirectClient.create(
-        baseUrl: baseUrl,
-        apiKey: apiKey,
-        instance: instance,
-        defaultCountryCode: defaultCountryCode,
-      );
-
-      final send = await evo.sendMedia(
-        mediaUrl: mediaUrl,
-        caption: caption,
-        mediaType: resolvedType,
-        toWaId: resolvedWaId,
-        toPhone: resolvedPhone,
-      );
-      if (send.messageId == null || send.messageId!.trim().isEmpty) {
-        throw Exception('Evolution did not return messageId');
-      }
-
-      try {
-        final res = await _dio.post(
-          '/crm/chats/$threadId/messages/media-record',
-          data: {
-            'mediaUrl': mediaUrl,
-            'mimeType': uploaded['mime']?.toString(),
-            'size': uploaded['size'],
-            'fileName': uploaded['name']?.toString() ?? file.name,
-            if (caption != null && caption.trim().isNotEmpty)
-              'caption': caption.trim(),
-            if (resolvedType != null && resolvedType.trim().isNotEmpty)
-              'type': resolvedType.trim(),
-            'skipEvolution': true,
-            'remoteMessageId': send.messageId,
-          },
-          options: _jsonOptions,
-        );
-
-        final data = res.data as Map<String, dynamic>;
-        final item = (data['item'] ?? data) as Map<String, dynamic>;
-        return CrmMessage.fromJson(item);
-      } catch (_) {
-        // Evolution send succeeded, but backend record failed.
-        return CrmMessage(
-          id: 'evo-${send.messageId}',
-          fromMe: true,
-          type: resolvedType ?? 'media',
-          body: (caption != null && caption.trim().isNotEmpty)
-              ? caption.trim()
-              : file.name,
-          mediaUrl: mediaUrl,
-          status: 'sent',
-          createdAt: DateTime.now(),
-        );
-      }
-    }
-
-    final multipart = await _toMultipart(file);
-    final form = FormData();
-    form.files.add(MapEntry('file', multipart));
-    // If type is omitted, backend will infer it from mime-type.
-    if (resolvedType != null && resolvedType.trim().isNotEmpty) {
-      form.fields.add(MapEntry('type', resolvedType.trim()));
-    }
-    if (caption != null && caption.trim().isNotEmpty) {
-      form.fields.add(MapEntry('caption', caption.trim()));
-    }
-
-    try {
-      final res = await _dio.post(
-        '/crm/chats/$threadId/messages/media',
-        data: form,
-        options: Options(contentType: 'multipart/form-data'),
-      );
-
-      final data = res.data as Map<String, dynamic>;
-      final item = (data['item'] ?? data) as Map<String, dynamic>;
-      return CrmMessage.fromJson(item);
-    } catch (e) {
-      // If backend media send fails, fall back to direct Evolution send when configured.
-      if (!useDirect) rethrow;
-      if (kDebugMode) {
-        debugPrint(
-          '[CRM][SEND] backend media failed, falling back to Evolution direct: $e',
-        );
-      }
-      return directFlow();
-    }
+    throw UnsupportedError('Only text messages are supported');
   }
 
   Future<CrmChatStats> getChatStats() async {

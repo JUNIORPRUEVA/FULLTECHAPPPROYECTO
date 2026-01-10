@@ -178,7 +178,7 @@ export async function getCustomer(req: Request, res: Response) {
   const whatsappId = customer.telefono ? `${customer.telefono}@s.whatsapp.net` : null;
   const chats = whatsappId
     ? await prisma.crmChat.findMany({
-        where: { wa_id: whatsappId },
+        where: { empresa_id, wa_id: whatsappId },
         orderBy: { last_message_at: 'desc' },
         select: {
           id: true,
@@ -267,7 +267,7 @@ export async function getCustomerChats(req: Request, res: Response) {
   const whatsappId = customer.telefono ? `${customer.telefono}@s.whatsapp.net` : null;
   const chats = whatsappId
     ? await prisma.crmChat.findMany({
-        where: { wa_id: whatsappId },
+        where: { empresa_id, wa_id: whatsappId },
         orderBy: { last_message_at: 'desc' },
         select: {
           id: true,

@@ -87,6 +87,12 @@ export const crmChatPatchSchema = z.object({
 export const crmChatStatusSchema = z.object({
   status: z.string().min(1).max(50),
 
+  // Optional phone override used when the chat has no phone on record.
+  // This prevents 400 INVALID_PHONE when creating Operations jobs from CRM.
+  phone: z.string().min(6).max(40).optional().nullable(),
+  phone_e164: z.string().min(6).max(40).optional().nullable(),
+  phoneE164: z.string().min(6).max(40).optional().nullable(),
+
   // Optional metadata collected from dialogs
   scheduledAt: z.string().optional().nullable(),
   scheduled_at: z.string().optional().nullable(),
@@ -97,9 +103,6 @@ export const crmChatStatusSchema = z.object({
 
   locationText: z.string().max(2000).optional().nullable(),
   location_text: z.string().max(2000).optional().nullable(),
-
-  lat: z.union([z.number(), z.string()]).optional().nullable(),
-  lng: z.union([z.number(), z.string()]).optional().nullable(),
 
   note: z.string().max(5000).optional().nullable(),
   notes: z.string().max(5000).optional().nullable(),

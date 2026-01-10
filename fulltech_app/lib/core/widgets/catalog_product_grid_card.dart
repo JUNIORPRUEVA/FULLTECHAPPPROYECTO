@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/app_config.dart';
@@ -65,6 +68,25 @@ class CatalogProductGridCard extends StatelessWidget {
     return '$base/$v';
   }
 
+  bool _isLikelyLocalPath(String value) {
+    // Treat backend-served paths like /uploads/... as remote (not local).
+    if (value.startsWith('/uploads/')) return false;
+
+    // Windows: C:\... or C:/...
+    if (RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(value)) return true;
+    // file://...
+    if (value.startsWith('file://')) return true;
+    return false;
+  }
+
+  String _normalizeFilePath(String raw) {
+    if (raw.startsWith('file://')) {
+      final uri = Uri.tryParse(raw);
+      if (uri != null) return uri.toFilePath();
+    }
+    return raw;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -74,6 +96,64 @@ class CatalogProductGridCard extends StatelessWidget {
 
     final normalizedImageRaw = imageRaw.trim();
 
+    Widget buildImage() {
+      if (normalizedImageRaw.isEmpty) {
+        return Container(
+          color: cs.surfaceContainerHighest,
+          child: Icon(Icons.photo_outlined, color: cs.onSurfaceVariant),
+        );
+      }
+
+      if (_isLikelyLocalPath(normalizedImageRaw)) {
+        if (kIsWeb) {
+          return Container(
+            color: cs.surfaceContainerHighest,
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              color: cs.onSurfaceVariant,
+            ),
+          );
+        }
+
+        final path = _normalizeFilePath(normalizedImageRaw);
+        return Image.file(
+          File(path),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            color: cs.surfaceContainerHighest,
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        );
+      }
+
+      final url = _publicUrlFromMaybeRelative(normalizedImageRaw);
+      final uri = Uri.tryParse(url);
+      if (uri == null || !(uri.hasScheme && uri.hasAuthority)) {
+        return Container(
+          color: cs.surfaceContainerHighest,
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            color: cs.onSurfaceVariant,
+          ),
+        );
+      }
+
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: cs.surfaceContainerHighest,
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -81,23 +161,7 @@ class CatalogProductGridCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (normalizedImageRaw.isNotEmpty)
-              Image.network(
-                _publicUrlFromMaybeRelative(normalizedImageRaw),
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: cs.surfaceContainerHighest,
-                  child: Icon(
-                    Icons.image_not_supported_outlined,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              )
-            else
-              Container(
-                color: cs.surfaceContainerHighest,
-                child: Icon(Icons.photo_outlined, color: cs.onSurfaceVariant),
-              ),
+            buildImage(),
             if (stockBadge != null)
               Positioned(
                 left: 8,

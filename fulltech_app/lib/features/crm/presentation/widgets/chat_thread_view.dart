@@ -1,13 +1,7 @@
 import 'dart:async';
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
 
 import '../../data/models/crm_thread.dart';
 import '../../data/models/ai_suggestion.dart';
@@ -34,7 +28,6 @@ class ChatThreadView extends ConsumerStatefulWidget {
 class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
   final _textCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final AudioRecorder _recorder = AudioRecorder();
 
   ProviderSubscription<CrmMessagesState>? _messagesSub;
   bool _isNearBottom = true;
@@ -96,11 +89,6 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     _textCtrl.dispose();
     _scrollCtrl.removeListener(_handleScroll);
     _scrollCtrl.dispose();
-    Future.microtask(() async {
-      try {
-        await _recorder.dispose();
-      } catch (_) {}
-    });
     super.dispose();
   }
 
@@ -536,31 +524,6 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                     final isNarrow = constraints.maxWidth < 420;
                     final iconButtons = <Widget>[
                       IconButton(
-                        tooltip: 'Audio',
-                        iconSize: 20,
-                        visualDensity: VisualDensity.compact,
-                        onPressed: state.sending
-                            ? null
-                            : () => _recordAndSendAudio(notifier),
-                        icon: const Icon(Icons.mic),
-                      ),
-                      IconButton(
-                        tooltip: 'Imagen',
-                        iconSize: 20,
-                        visualDensity: VisualDensity.compact,
-                        onPressed: state.sending
-                            ? null
-                            : () => _pickAndSendImage(notifier),
-                        icon: const Icon(Icons.photo_camera),
-                      ),
-                      IconButton(
-                        tooltip: 'Más',
-                        iconSize: 20,
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _openMoreMenu,
-                        icon: const Icon(Icons.add),
-                      ),
-                      IconButton(
                         tooltip: 'Plantillas',
                         iconSize: 20,
                         visualDensity: VisualDensity.compact,
@@ -666,7 +629,8 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
     }
 
     final selected = text.substring(start, end);
-    final newText = text.replaceRange(start, end, '$left$selected$right');
+    final wrapped = '$left$selected$right';
+    final newText = text.replaceRange(start, end, wrapped);
     _textCtrl.value = v.copyWith(
       text: newText,
       selection: TextSelection(
@@ -678,456 +642,20 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
   }
 
   Future<void> _sendText(dynamic notifier) async {
-    final text = _textCtrl.text;
+    final text = _textCtrl.text.trim();
+    if (text.isEmpty) return;
+
     _textCtrl.clear();
-
-    if (kDebugMode) {
-      debugPrint(
-        '[CRM_UI] Sending text: threadId=${widget.threadId} waId=$_cachedWaId phone=$_cachedPhone text=${text.length} chars',
-      );
-    }
-
-    unawaited(
-      notifier
-          .sendText(text, toWaId: _cachedWaId, toPhone: _cachedPhone)
-          .catchError((e) {
-            if (kDebugMode) {
-              debugPrint('[CRM_UI] Send text error: $e');
-            }
-          }),
+    await notifier.sendText(
+      text,
+      toWaId: _cachedWaId,
+      toPhone: _cachedPhone,
     );
+
     unawaited(
-      ref
-          .read(crmThreadsControllerProvider.notifier)
-          .refresh()
-          .catchError((_) {}),
+      ref.read(crmThreadsControllerProvider.notifier).refresh().catchError((_) {}),
     );
     _scrollToBottom();
-  }
-
-  // Future<void> _pickAndSendMedia(dynamic notifier) async {
-  //   final res = await FilePicker.platform.pickFiles(
-  //     type: FileType.any,
-  //     withData: kIsWeb,
-  //   );
-  //   final file = res?.files.firstOrNull;
-  //   if (file == null) return;
-
-  //   await notifier.sendMedia(file);
-  //   await ref.read(crmThreadsControllerProvider.notifier).refresh();
-  //   _scrollToBottom();
-  // }
-
-  Future<void> _pickAndSendAudio(dynamic notifier) async {
-    final res = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus'],
-      withData: kIsWeb,
-    );
-    final file = res?.files.firstOrNull;
-    if (file == null) return;
-
-    // Get thread info for proper phone/waId
-    final threadsState = ref.read(crmThreadsControllerProvider);
-    final thread = threadsState.items
-        .where((t) => t.id == widget.threadId)
-        .cast<CrmThread?>()
-        .firstOrNull;
-
-    unawaited(
-      notifier
-          .sendMedia(
-            file,
-            type: 'audio',
-            toWaId: thread?.waId,
-            toPhone: thread?.phone,
-          )
-          .catchError((_) {}),
-    );
-    unawaited(
-      ref
-          .read(crmThreadsControllerProvider.notifier)
-          .refresh()
-          .catchError((_) {}),
-    );
-    _scrollToBottom();
-  }
-
-  Future<void> _recordAndSendAudio(dynamic notifier) async {
-    // Web: recording support depends on extra setup; keep a safe fallback.
-    if (kIsWeb) {
-      await _pickAndSendAudio(notifier);
-      return;
-    }
-
-    try {
-      final hasPerm = await _recorder.hasPermission();
-      if (!hasPerm) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Permiso de micrófono no concedido.')),
-        );
-        return;
-      }
-    } catch (_) {
-      // If plugin isn't available, fall back to picking a file.
-      await _pickAndSendAudio(notifier);
-      return;
-    }
-
-    final tempDir = await getTemporaryDirectory();
-    final fileName = 'crm_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    final targetPath = p.join(tempDir.path, fileName);
-
-    if (!mounted) return;
-    final recordedPath = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        bool recording = false;
-        bool busy = false;
-        final sw = Stopwatch();
-        Timer? timer;
-        Duration elapsed = Duration.zero;
-
-        Future<void> stopTimer() async {
-          timer?.cancel();
-          timer = null;
-        }
-
-        String fmt(Duration d) {
-          final m = d.inMinutes.toString().padLeft(2, '0');
-          final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-          return '$m:$s';
-        }
-
-        return StatefulBuilder(
-          builder: (context, setLocal) {
-            Future<void> start() async {
-              if (busy) return;
-              setLocal(() => busy = true);
-              try {
-                await _recorder.start(
-                  const RecordConfig(
-                    encoder: AudioEncoder.aacLc,
-                    bitRate: 128000,
-                    sampleRate: 44100,
-                  ),
-                  path: targetPath,
-                );
-                sw.reset();
-                sw.start();
-                timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
-                  setLocal(() => elapsed = sw.elapsed);
-                });
-                setLocal(() => recording = true);
-              } catch (_) {
-                // If start fails, fall back safely.
-                Navigator.pop(context, null);
-              } finally {
-                setLocal(() => busy = false);
-              }
-            }
-
-            Future<void> stopAndSend() async {
-              if (busy) return;
-              setLocal(() => busy = true);
-              try {
-                await stopTimer();
-                sw.stop();
-                final path = await _recorder.stop();
-                Navigator.pop(context, path);
-              } catch (_) {
-                Navigator.pop(context, null);
-              }
-            }
-
-            Future<void> cancel() async {
-              if (busy) return;
-              setLocal(() => busy = true);
-              try {
-                await stopTimer();
-                sw.stop();
-                try {
-                  await _recorder.stop();
-                } catch (_) {}
-                try {
-                  final f = File(targetPath);
-                  if (await f.exists()) await f.delete();
-                } catch (_) {}
-              } finally {
-                Navigator.pop(context, null);
-              }
-            }
-
-            return AlertDialog(
-              title: const Text('Grabar audio'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(recording ? 'Grabando…' : 'Listo para grabar'),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.mic),
-                      const SizedBox(width: 10),
-                      Text(
-                        fmt(elapsed),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (busy) ...[
-                        const SizedBox(width: 12),
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: cancel, child: const Text('Cancelar')),
-                if (!recording)
-                  FilledButton.icon(
-                    onPressed: start,
-                    icon: const Icon(Icons.fiber_manual_record),
-                    label: const Text('Grabar'),
-                  )
-                else
-                  FilledButton.icon(
-                    onPressed: stopAndSend,
-                    icon: const Icon(Icons.stop),
-                    label: const Text('Detener y enviar'),
-                  ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (recordedPath == null || recordedPath.trim().isEmpty) {
-      // Dialog cancelled or recording failed.
-      return;
-    }
-
-    try {
-      final f = File(recordedPath);
-      final size = await f.length();
-      final platformFile = PlatformFile(
-        name: p.basename(recordedPath),
-        path: recordedPath,
-        size: size,
-      );
-
-      // Get thread info for proper phone/waId
-      final threadsState = ref.read(crmThreadsControllerProvider);
-      final thread = threadsState.items
-          .where((t) => t.id == widget.threadId)
-          .cast<CrmThread?>()
-          .firstOrNull;
-
-      unawaited(
-        notifier
-            .sendMedia(
-              platformFile,
-              type: 'audio',
-              toWaId: thread?.waId,
-              toPhone: thread?.phone,
-            )
-            .catchError((_) {}),
-      );
-      unawaited(
-        ref
-            .read(crmThreadsControllerProvider.notifier)
-            .refresh()
-            .catchError((_) {}),
-      );
-      _scrollToBottom();
-    } catch (_) {
-      // If anything goes wrong, keep a safe fallback.
-      await _pickAndSendAudio(notifier);
-    }
-  }
-
-  Future<void> _pickAndSendImage(dynamic notifier) async {
-    final res = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
-    final file = res?.files.firstOrNull;
-    if (file == null) return;
-
-    final bytes = file.bytes;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Enviar imagen'),
-          content: SizedBox(
-            width: 520,
-            child: bytes == null
-                ? Text('Imagen: ${file.name}')
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.memory(bytes, fit: BoxFit.contain),
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Enviar'),
-            ),
-          ],
-        );
-      },
-    );
-    if (ok != true) return;
-
-    // Get thread info for proper phone/waId
-    final threadsState = ref.read(crmThreadsControllerProvider);
-    final thread = threadsState.items
-        .where((t) => t.id == widget.threadId)
-        .cast<CrmThread?>()
-        .firstOrNull;
-
-    unawaited(
-      notifier
-          .sendMedia(
-            file,
-            type: 'image',
-            toWaId: thread?.waId,
-            toPhone: thread?.phone,
-          )
-          .catchError((_) {}),
-    );
-    unawaited(
-      ref
-          .read(crmThreadsControllerProvider.notifier)
-          .refresh()
-          .catchError((_) {}),
-    );
-    _scrollToBottom();
-  }
-
-  Future<void> _pickAndSendVideo(dynamic notifier) async {
-    final res = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-      withData: kIsWeb,
-    );
-    final file = res?.files.firstOrNull;
-    if (file == null) return;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Enviar video'),
-          content: SizedBox(width: 520, child: Text('Video: ${file.name}')),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Enviar'),
-            ),
-          ],
-        );
-      },
-    );
-    if (ok != true) return;
-
-    // Get thread info for proper phone/waId
-    final threadsState = ref.read(crmThreadsControllerProvider);
-    final thread = threadsState.items
-        .where((t) => t.id == widget.threadId)
-        .cast<CrmThread?>()
-        .firstOrNull;
-
-    unawaited(
-      notifier
-          .sendMedia(
-            file,
-            type: 'video',
-            toWaId: thread?.waId,
-            toPhone: thread?.phone,
-          )
-          .catchError((_) {}),
-    );
-    unawaited(
-      ref
-          .read(crmThreadsControllerProvider.notifier)
-          .refresh()
-          .catchError((_) {}),
-    );
-    _scrollToBottom();
-  }
-
-  void _openMoreMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.videocam),
-                title: const Text('Video'),
-                onTap: () {
-                  Navigator.pop(context);
-                  final notifier = ref.read(
-                    crmMessagesControllerProvider(widget.threadId).notifier,
-                  );
-                  // ignore: unawaited_futures
-                  _pickAndSendVideo(notifier);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file),
-                title: const Text('Documento'),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(content: Text('Documento: próximamente')),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.location_on),
-                title: const Text('Ubicación'),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(content: Text('Ubicación: próximamente')),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.person),
-                title: const Text('Contacto'),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(content: Text('Contacto: próximamente')),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _openQuickReplies() async {

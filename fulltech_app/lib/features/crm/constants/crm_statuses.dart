@@ -11,6 +11,8 @@ class CrmStatuses {
   static const String servicioReservado = 'servicio_reservado';
   static const String noInteresado = 'no_interesado';
   static const String porLevantamiento = 'por_levantamiento';
+  static const String mantenimiento = 'mantenimiento';
+  static const String instalacion = 'instalacion';
   static const String pendientePago = 'pendiente_pago';
   static const String garantia = 'garantia';
   // Legacy-compatible (some existing data uses it)
@@ -28,6 +30,8 @@ class CrmStatuses {
     compraFinalizada: 'Compra finalizada',
     noInteresado: 'No interesado',
     porLevantamiento: 'Por levantamiento',
+    mantenimiento: 'Mantenimiento',
+    instalacion: 'Instalación',
     pendientePago: 'Pendiente de pago',
     garantia: 'Garantía',
     enGarantia: 'En garantía',
@@ -44,6 +48,8 @@ class CrmStatuses {
     agendado,
     pendientePago,
     porLevantamiento,
+    mantenimiento,
+    instalacion,
     garantia,
     solucionGarantia,
     compro,
@@ -56,6 +62,8 @@ class CrmStatuses {
     reserva,
     agendado,
     porLevantamiento,
+    mantenimiento,
+    instalacion,
   };
 
   /// Statuses that trigger automatic client creation
@@ -71,11 +79,13 @@ class CrmStatuses {
 
   /// Normalize legacy/mixed values into the canonical set used by the app.
   static String normalizeValue(String raw) {
-    final v = raw.trim();
+    final v = raw.trim().toLowerCase();
     if (v.isEmpty) return primerContacto;
 
     // Backend alias inputs: these normalize to servicio_reservado on the server.
     if (v == 'agendado' || v == 'reservado') return agendado;
+
+    if (v == 'instalación') return instalacion;
 
     // Legacy/deprecated CRM statuses still present in older data.
     if (v == 'compra_finalizada') return compro;

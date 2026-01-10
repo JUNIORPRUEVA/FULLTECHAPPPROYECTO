@@ -41,22 +41,37 @@ class ChatListItemPro extends StatelessWidget {
     // Format date/time
     final timeStr = _formatChatTime();
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
       decoration: BoxDecoration(
         color: isSelected
-            ? theme.colorScheme.primary.withOpacity(0.08)
+            ? theme.colorScheme.primaryContainer.withOpacity(0.55)
             : Colors.transparent,
         border: Border(
+          left: BorderSide(
+            color:
+                isSelected ? theme.colorScheme.primary : Colors.transparent,
+            width: 3,
+          ),
           bottom: BorderSide(
             color: theme.colorScheme.outlineVariant.withOpacity(0.3),
           ),
         ),
+        boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: theme.shadowColor.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : const [],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(

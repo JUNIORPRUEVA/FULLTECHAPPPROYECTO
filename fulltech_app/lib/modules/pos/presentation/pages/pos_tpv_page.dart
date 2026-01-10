@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../core/services/app_config.dart';
 import '../../../../core/widgets/module_page.dart';
+import '../../../../core/widgets/adaptive_image.dart';
 import '../../../../features/auth/state/auth_providers.dart';
 import '../../../../features/auth/state/auth_state.dart';
 import '../../../../features/catalogo/models/producto.dart';
@@ -836,9 +837,21 @@ class _PosSalePane extends ConsumerWidget {
     return '$base/$v';
   }
 
-  String? _imageUrlFor(PosSaleItemDraft it) {
+  bool _isLikelyLocalPath(String value) {
+    // Treat backend-served paths like /uploads/... as remote (not local).
+    if (value.startsWith('/uploads/')) return false;
+
+    // Windows: C:\... or C:/...
+    if (RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(value)) return true;
+    // file://...
+    if (value.startsWith('file://')) return true;
+    return false;
+  }
+
+  String? _imageSourceFor(PosSaleItemDraft it) {
     final raw = (it.product.imagenUrl ?? '').trim();
     if (raw.isEmpty) return null;
+    if (_isLikelyLocalPath(raw)) return raw;
     return _publicUrlFromMaybeRelative(raw);
   }
 
@@ -870,7 +883,7 @@ class _PosSalePane extends ConsumerWidget {
                 height: 34,
                 child: ClipOval(
                   child: (imageUrl != null && imageUrl.trim().isNotEmpty)
-                      ? Image.network(
+                      ? adaptiveImage(
                           imageUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
@@ -1321,7 +1334,7 @@ class _PosSalePane extends ConsumerWidget {
                         context: context,
                         it: it,
                         canSeeCost: canSeeCost,
-                        imageUrl: _imageUrlFor(it),
+                        imageUrl: _imageSourceFor(it),
                         onEdit: () => onEditLine(it),
                       ),
                   ],

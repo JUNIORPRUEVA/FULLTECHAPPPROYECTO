@@ -738,6 +738,29 @@ class CatalogController extends StateNotifier<CatalogState> {
     }
   }
 
+  Future<bool> adjustStock(
+    String productId, {
+    required int delta,
+    String? note,
+  }) async {
+    if (delta == 0) return true;
+    state = state.copyWith(error: null);
+    try {
+      await _inventory.adjustStock(
+        productId: productId,
+        qtyChange: delta.toDouble(),
+        note: note,
+      );
+
+      final refreshed = await _api.getProducto(productId);
+      await _patchProductoInCache(refreshed);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+      return false;
+    }
+  }
+
   Future<MarcaProducto?> createMarca(String nombre) async {
     final name = nombre.trim();
     if (name.isEmpty) return null;
