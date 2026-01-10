@@ -2,26 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../../modules/rules/presentation/utils/rules_ui.dart';
 import '../../../../services/providers/services_provider.dart';
 import '../../../state/crm_providers.dart';
 
 class RequiredScheduleFormResult {
   final DateTime scheduledAt;
-  final String locationText;
+  final String? locationText;
   final double latitude;
   final double longitude;
+  final String? note;
   final String assignedTechnicianId;
   final String serviceId;
-  final String assignedType;
 
   const RequiredScheduleFormResult({
     required this.scheduledAt,
     required this.locationText,
     required this.latitude,
     required this.longitude,
+    required this.note,
     required this.assignedTechnicianId,
     required this.serviceId,
-    required this.assignedType,
   });
 
   Map<String, dynamic> toJson() {
@@ -30,10 +31,42 @@ class RequiredScheduleFormResult {
       'locationText': locationText,
       'latitude': latitude,
       'longitude': longitude,
+      'note': note,
       'assignedTechnicianId': assignedTechnicianId,
       'serviceId': serviceId,
-      'assignedType': assignedType,
     };
+  }
+}
+
+class _InlineLoadError extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _InlineLoadError({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(message, style: TextStyle(color: cs.error)),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -55,14 +88,15 @@ class RequiredScheduleFormDialog extends ConsumerStatefulWidget {
 class _RequiredScheduleFormDialogState
     extends ConsumerState<RequiredScheduleFormDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _technicianFieldKey = GlobalKey<FormFieldState<String>>();
+  final _serviceFieldKey = GlobalKey<FormFieldState<String>>();
 
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
 
-  final _locationCtrl = TextEditingController();
   final _latCtrl = TextEditingController();
   final _lngCtrl = TextEditingController();
-  final _assignedTypeCtrl = TextEditingController();
+  final _noteCtrl = TextEditingController();
 
   String? _technicianId;
   String? _serviceId;
@@ -76,24 +110,20 @@ class _RequiredScheduleFormDialogState
     _selectedDate = DateTime(initial.year, initial.month, initial.day);
     _selectedTime = TimeOfDay(hour: initial.hour, minute: initial.minute);
 
-    _locationCtrl.addListener(_recomputeCanSubmit);
     _latCtrl.addListener(_recomputeCanSubmit);
     _lngCtrl.addListener(_recomputeCanSubmit);
-    _assignedTypeCtrl.addListener(_recomputeCanSubmit);
+    _noteCtrl.addListener(_recomputeCanSubmit);
   }
 
   @override
   void dispose() {
-    _locationCtrl
-      ..removeListener(_recomputeCanSubmit)
-      ..dispose();
     _latCtrl
       ..removeListener(_recomputeCanSubmit)
       ..dispose();
     _lngCtrl
       ..removeListener(_recomputeCanSubmit)
       ..dispose();
-    _assignedTypeCtrl
+    _noteCtrl
       ..removeListener(_recomputeCanSubmit)
       ..dispose();
     super.dispose();
@@ -136,9 +166,23 @@ class _RequiredScheduleFormDialogState
     return double.tryParse(v);
   }
 
-  String? _requiredTextValidator(String? v) {
-    if (v == null || v.trim().isEmpty) return 'Este campo es requerido';
-    return null;
+  Future<void> _pickService() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (_) => _ServicePickerDialog(initialSelectedId: _serviceId),
+    );
+    if (selected == null) return;
+    if (!mounted) return;
+    setState(() => _serviceId = selected);
+    _serviceFieldKey.currentState?.didChange(selected);
+    _recomputeCanSubmit();
+  }
+
+  void _clearServiceSelection() {
+    if (_serviceId == null) return;
+    setState(() => _serviceId = null);
+    _serviceFieldKey.currentState?.didChange(null);
+    _recomputeCanSubmit();
   }
 
   String? _latitudeValidator(String? v) {
@@ -176,12 +220,12 @@ class _RequiredScheduleFormDialogState
     Navigator.of(context).pop(
       RequiredScheduleFormResult(
         scheduledAt: scheduledAt,
-        locationText: _locationCtrl.text.trim(),
+        locationText: null,
         latitude: latitude,
         longitude: longitude,
+        note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         assignedTechnicianId: _technicianId!,
         serviceId: _serviceId!,
-        assignedType: _assignedTypeCtrl.text.trim(),
       ),
     );
   }
@@ -208,9 +252,10 @@ class _RequiredScheduleFormDialogState
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Fecha y hora *',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  'Fecha y hora (Agenda) *',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -241,15 +286,6 @@ class _RequiredScheduleFormDialogState
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _locationCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Ubicación *',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: _requiredTextValidator,
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -288,69 +324,126 @@ class _RequiredScheduleFormDialogState
                 const SizedBox(height: 16),
                 techniciansAsync.when(
                   data: (techs) {
-                    return DropdownButtonFormField<String>(
-                      value: _technicianId,
-                      decoration: const InputDecoration(
-                        labelText: 'Técnico asignado *',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: techs
-                          .map(
-                            (t) => DropdownMenuItem<String>(
-                              value: t.id,
-                              child: Text(t.nombreCompleto),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (v) {
-                        setState(() => _technicianId = v);
-                        _recomputeCanSubmit();
-                      },
+                    return FormField<String>(
+                      key: _technicianFieldKey,
+                      initialValue: _technicianId,
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'Este campo es requerido'
                           : null,
+                      builder: (field) {
+                        return InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Técnico asignado *',
+                            border: const OutlineInputBorder(),
+                            errorText: field.errorText,
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              value: _technicianId,
+                              hint: const Text('Seleccione un técnico'),
+                              items: techs
+                                  .map(
+                                    (t) => DropdownMenuItem<String>(
+                                      value: t.id,
+                                      child: Text(
+                                        t.telefono.trim().isEmpty
+                                            ? '${t.nombreCompleto} • ${roleLabel(t.rol)}'
+                                            : '${t.nombreCompleto} • ${t.telefono.trim()} • ${roleLabel(t.rol)}',
+                                      ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                              onChanged: (v) {
+                                setState(() => _technicianId = v);
+                                field.didChange(v);
+                                _recomputeCanSubmit();
+                              },
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                   loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Error cargando técnicos: $e'),
+                  error: (e, st) {
+                    debugPrint('[CRM] technicians load failed: $e');
+                    debugPrintStack(stackTrace: st);
+                    return _InlineLoadError(
+                      message: 'No se pudieron cargar técnicos',
+                      onRetry: () => ref.invalidate(crmTechniciansProvider),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
-                servicesAsync.when(
-                  data: (services) {
-                    return DropdownButtonFormField<String>(
-                      value: _serviceId,
-                      decoration: const InputDecoration(
-                        labelText: 'Servicio *',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: services
-                          .map(
-                            (s) => DropdownMenuItem<String>(
-                              value: s.id,
-                              child: Text(s.name),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (v) {
-                        setState(() => _serviceId = v);
-                        _recomputeCanSubmit();
+                FormField<String>(
+                  key: _serviceFieldKey,
+                  initialValue: _serviceId,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Seleccione un servicio'
+                      : null,
+                  builder: (field) {
+                    return servicesAsync.when(
+                      data: (services) {
+                        final selectedName = _serviceId == null
+                            ? null
+                            : services
+                                  .where((s) => s.id == _serviceId)
+                                  .map((s) => s.name)
+                                  .cast<String?>()
+                                  .firstWhere((_) => true, orElse: () => null);
+
+                        return InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Servicio *',
+                            border: const OutlineInputBorder(),
+                            errorText: field.errorText,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  selectedName ?? 'Ninguno seleccionado',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton(
+                                onPressed: _pickService,
+                                child: const Text('Elegir'),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                tooltip: 'Quitar servicio',
+                                onPressed: _serviceId == null
+                                    ? null
+                                    : _clearServiceSelection,
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        );
                       },
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Este campo es requerido'
-                          : null,
+                      loading: () => const LinearProgressIndicator(),
+                      error: (e, st) {
+                        debugPrint('[CRM] services load failed: $e');
+                        debugPrintStack(stackTrace: st);
+                        return _InlineLoadError(
+                          message: 'No se pudieron cargar servicios',
+                          onRetry: () => ref.invalidate(activeServicesProvider),
+                        );
+                      },
                     );
                   },
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Error cargando servicios: $e'),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: _assignedTypeCtrl,
+                  controller: _noteCtrl,
+                  maxLines: 3,
                   decoration: const InputDecoration(
-                    labelText: 'Tipo asignado (producto/servicio) *',
+                    labelText: 'Nota (opcional)',
+                    hintText: 'Ej: referencia, acceso, indicaciones…',
                     border: OutlineInputBorder(),
                   ),
-                  validator: _requiredTextValidator,
                 ),
               ],
             ),
@@ -365,6 +458,221 @@ class _RequiredScheduleFormDialogState
         FilledButton(
           onPressed: _canSubmit ? _submit : null,
           child: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ServicePickerDialog extends ConsumerStatefulWidget {
+  final String? initialSelectedId;
+
+  const _ServicePickerDialog({this.initialSelectedId});
+
+  @override
+  ConsumerState<_ServicePickerDialog> createState() =>
+      _ServicePickerDialogState();
+}
+
+class _ServicePickerDialogState extends ConsumerState<_ServicePickerDialog> {
+  String? _selectedId;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedId = widget.initialSelectedId;
+  }
+
+  Future<void> _createService() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => const _CreateServiceDialog(),
+    );
+    if (name == null || name.trim().isEmpty) return;
+
+    setState(() => _busy = true);
+    try {
+      final repo = ref.read(servicesRepositoryProvider);
+      final created = await repo.createService(name: name.trim());
+      ref.invalidate(activeServicesProvider);
+      if (!mounted) return;
+      setState(() => _selectedId = created.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo crear el servicio: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteService(String id, String name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text('Eliminar servicio'),
+          content: Text('¿Eliminar "$name"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    setState(() => _busy = true);
+    try {
+      final repo = ref.read(servicesRepositoryProvider);
+      await repo.deleteService(id);
+      ref.invalidate(activeServicesProvider);
+      if (!mounted) return;
+      if (_selectedId == id) setState(() => _selectedId = null);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar el servicio: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final servicesAsync = ref.watch(activeServicesProvider);
+    return AlertDialog(
+      title: const Text('Servicios'),
+      content: SizedBox(
+        width: 520,
+        child: servicesAsync.when(
+          data: (services) {
+            if (services.isEmpty) {
+              return const Text('No hay servicios activos.');
+            }
+
+            return ListView.separated(
+              shrinkWrap: true,
+              itemCount: services.length,
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final s = services[index];
+                return ListTile(
+                  dense: true,
+                  leading: Radio<String>(
+                    value: s.id,
+                    groupValue: _selectedId,
+                    onChanged: _busy
+                        ? null
+                        : (v) => setState(() => _selectedId = v),
+                  ),
+                  title: Text(s.name),
+                  onTap: _busy
+                      ? null
+                      : () => setState(() => _selectedId = s.id),
+                  trailing: IconButton(
+                    tooltip: 'Eliminar servicio',
+                    onPressed: _busy
+                        ? null
+                        : () => _deleteService(s.id, s.name),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                );
+              },
+            );
+          },
+          loading: () => const LinearProgressIndicator(),
+          error: (e, st) {
+            debugPrint('[CRM] services load failed (picker): $e');
+            debugPrintStack(stackTrace: st);
+            return _InlineLoadError(
+              message: 'No se pudieron cargar servicios',
+              onRetry: () => ref.invalidate(activeServicesProvider),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        OutlinedButton(
+          onPressed: _busy ? null : _createService,
+          child: const Text('Crear'),
+        ),
+        FilledButton(
+          onPressed: (_busy || _selectedId == null)
+              ? null
+              : () => Navigator.of(context).pop(_selectedId),
+          child: const Text('Seleccionar'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CreateServiceDialog extends StatefulWidget {
+  const _CreateServiceDialog();
+
+  @override
+  State<_CreateServiceDialog> createState() => _CreateServiceDialogState();
+}
+
+class _CreateServiceDialogState extends State<_CreateServiceDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Crear servicio'),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: TextFormField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Nombre *',
+              border: OutlineInputBorder(),
+            ),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) {
+                return 'Este campo es requerido';
+              }
+              return null;
+            },
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            Navigator.of(context).pop(_nameCtrl.text.trim());
+          },
+          child: const Text('Crear'),
         ),
       ],
     );

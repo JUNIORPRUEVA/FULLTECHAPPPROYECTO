@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fulltech_app/core/utils/debouncer.dart';
 
 import '../data/repositories/customers_repository.dart';
+import '../constants/crm_statuses.dart';
 import 'customers_state.dart';
 
 class CustomersController extends StateNotifier<CustomersState> {
@@ -23,10 +24,13 @@ class CustomersController extends StateNotifier<CustomersState> {
   Future<void> refresh() async {
     state = state.copyWith(loading: true, error: null, offset: 0);
     try {
+      final status = state.status == CrmStatuses.agendado
+          ? CrmStatuses.servicioReservado
+          : state.status;
       final page = await _repo.listCustomers(
         search: state.search.isEmpty ? null : state.search,
         productId: state.productId,
-        status: state.status,
+        status: status,
         dateFrom: state.dateFrom,
         dateTo: state.dateTo,
         limit: state.limit,
@@ -50,10 +54,13 @@ class CustomersController extends StateNotifier<CustomersState> {
 
     state = state.copyWith(loading: true, error: null);
     try {
+      final status = state.status == CrmStatuses.agendado
+          ? CrmStatuses.servicioReservado
+          : state.status;
       final page = await _repo.listCustomers(
         search: state.search.isEmpty ? null : state.search,
         productId: state.productId,
-        status: state.status,
+        status: status,
         dateFrom: state.dateFrom,
         dateTo: state.dateTo,
         limit: state.limit,

@@ -235,6 +235,7 @@ class _StatusChip extends StatelessWidget {
         fg = theme.colorScheme.onSecondaryContainer;
         break;
       case 'reserva':
+      case 'agendado':
         bg = theme.colorScheme.tertiaryContainer;
         fg = theme.colorScheme.onTertiaryContainer;
         break;

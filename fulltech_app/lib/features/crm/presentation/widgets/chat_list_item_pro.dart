@@ -383,6 +383,8 @@ class _StatusChipMini extends StatelessWidget {
         return 'Int.';
       case CrmStatuses.reserva:
         return 'Res.';
+      case CrmStatuses.agendado:
+        return 'Ag.';
       case CrmStatuses.porLevantamiento:
         return 'Lev.';
       case CrmStatuses.garantia:
@@ -413,6 +415,8 @@ class _StatusChipMini extends StatelessWidget {
       case CrmStatuses.interesado:
         return Colors.blue;
       case CrmStatuses.reserva:
+        return Colors.purple;
+      case CrmStatuses.agendado:
         return Colors.purple;
       case CrmStatuses.porLevantamiento:
       case CrmStatuses.pendientePago:

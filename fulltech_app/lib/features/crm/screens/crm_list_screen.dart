@@ -86,6 +86,7 @@ class _CrmListScreenState extends State<CrmListScreen> {
                     ),
                     DropdownMenuItem(value: 'interesado', child: Text('Interesado')),
                     DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
+                    DropdownMenuItem(value: 'agendado', child: Text('Agendado')),
                     DropdownMenuItem(
                       value: 'por_levantamiento',
                       child: Text('Por levantamiento'),

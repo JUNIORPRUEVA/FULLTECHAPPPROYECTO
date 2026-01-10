@@ -73,7 +73,9 @@ final crmRepositoryProvider = Provider<CrmRepository>((ref) {
   );
 });
 
-final crmStatusDataRepositoryProvider = Provider<CrmStatusDataRepository>((ref) {
+final crmStatusDataRepositoryProvider = Provider<CrmStatusDataRepository>((
+  ref,
+) {
   return CrmStatusDataRepository();
 });
 
@@ -149,28 +151,15 @@ final crmProductsProvider = StreamProvider<List<Producto>>((ref) async* {
 final crmTechniciansProvider = FutureProvider<List<RegisteredUserSummary>>((
   ref,
 ) async {
-  // Best-effort: fetch a single page per role and merge.
-  // NOTE: Uses /users because this is already a dependency for multiple modules.
+  // Fetch users once and filter client-side.
+  // This avoids backend 400s for unsupported role values.
   final api = ref.watch(usersApiProvider);
+  final page = await api.listUsers(page: 1, pageSize: 200, estado: 'activo');
 
-  Future<List<RegisteredUserSummary>> listByRole(String rol) async {
-    final page = await api.listUsers(page: 1, pageSize: 200, rol: rol);
-    return page.items;
-  }
-
-  final pages = await Future.wait([
-    listByRole('tecnico'),
-    listByRole('tecnico_fijo'),
-    listByRole('contratista'),
-  ]);
-
-  final byId = <String, RegisteredUserSummary>{};
-  for (final list in pages) {
-    for (final u in list) {
-      byId[u.id] = u;
-    }
-  }
-  final out = byId.values.toList(growable: false);
+  final allowed = <String>{'tecnico', 'tecnico_fijo', 'contratista'};
+  final out = page.items
+      .where((u) => allowed.contains(u.rol.toLowerCase().trim()))
+      .toList(growable: false);
   out.sort((a, b) => a.nombreCompleto.compareTo(b.nombreCompleto));
   return out;
 });

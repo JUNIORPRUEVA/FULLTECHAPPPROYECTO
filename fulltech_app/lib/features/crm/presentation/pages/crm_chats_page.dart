@@ -289,8 +289,8 @@ class _ThreadsList extends ConsumerWidget {
 
                     final hasDivider = postSale.isNotEmpty && normal.isNotEmpty;
                     final listLength =
-                        1 + postSale.length + (hasDivider ? 1 : 0) + normal.length;
-                    final dividerIndex = 1 + postSale.length;
+                        postSale.length + (hasDivider ? 1 : 0) + normal.length;
+                    final dividerIndex = postSale.length;
 
                     return ListView.builder(
                       padding: const EdgeInsets.only(bottom: 72),
@@ -313,39 +313,6 @@ class _ThreadsList extends ConsumerWidget {
                           );
                         }
 
-                        if (index == 0) {
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-                            child: Card(
-                              margin: EdgeInsets.zero,
-                              child: Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.support_agent, size: 18),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Mensajes de cliente activo',
-                                        style: textTheme.titleSmall?.copyWith(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${postSale.length}',
-                                      style: textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.w900,
-                                        color: colorScheme.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-
                         if (hasDivider && index == dividerIndex) {
                           return const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 10),
@@ -355,11 +322,11 @@ class _ThreadsList extends ConsumerWidget {
 
                         // Map list index -> correct thread list.
                         CrmThread t;
-                        if (index > 0 && index <= postSale.length) {
-                          t = postSale[index - 1];
+                        if (index >= 0 && index < postSale.length) {
+                          t = postSale[index];
                         } else {
                           final normalOffset =
-                              index - 1 - postSale.length - (hasDivider ? 1 : 0);
+                              index - postSale.length - (hasDivider ? 1 : 0);
                           t = normal[normalOffset];
                         }
 

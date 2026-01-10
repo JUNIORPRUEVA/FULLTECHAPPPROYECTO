@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/routing/app_routes.dart';
 import '../../../core/widgets/module_page.dart';
@@ -125,6 +126,45 @@ class OperacionesDetailScreen extends ConsumerWidget {
     }
   }
 
+  String _fmtDateTime(BuildContext context, DateTime dt) {
+    final d = MaterialLocalizations.of(context).formatCompactDate(dt.toLocal());
+    final t = MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(dt.toLocal()),
+      alwaysUse24HourFormat: false,
+    );
+    return '$d $t';
+  }
+
+  Future<void> _openMaps({
+    required BuildContext context,
+    required double? lat,
+    required double? lng,
+    required String? address,
+  }) async {
+    Uri? uri;
+    if (lat != null && lng != null) {
+      uri = Uri.parse('https://www.google.com/maps?q=$lat,$lng');
+    } else if (address != null && address.trim().isNotEmpty) {
+      uri = Uri.parse(
+        'https://www.google.com/maps?q=${Uri.encodeComponent(address.trim())}',
+      );
+    }
+
+    if (uri == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ubicación no disponible')));
+      return;
+    }
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir Google Maps')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final jobId = GoRouterState.of(context).pathParameters['id'];
@@ -157,12 +197,39 @@ class OperacionesDetailScreen extends ConsumerWidget {
       ],
       child: jobAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, st) {
+          debugPrint('[OPS] job detail load failed: $e');
+          debugPrintStack(stackTrace: st);
+          return const Center(child: Text('No se pudo cargar el detalle'));
+        },
         data: (job) {
           final scheduleLabel = job.scheduledDate == null
               ? 'Sin fecha programada'
               : '${job.scheduledDate!.toLocal().toString().split(' ').first}'
-                  '${job.preferredTime != null ? ' ${job.preferredTime}' : ''}';
+                    '${job.preferredTime != null ? ' ${job.preferredTime}' : ''}';
+
+          final techsAsync = ref.watch(operationsTechniciansProvider);
+          String? techName;
+          final techId = job.assignedTechId;
+          if (techId != null && techId.trim().isNotEmpty) {
+            techName = techsAsync.when(
+              data: (techs) {
+                for (final t in techs) {
+                  if (t.id == techId) {
+                    return t.telefono.trim().isEmpty
+                        ? t.nombreCompleto
+                        : '${t.nombreCompleto} • ${t.telefono.trim()}';
+                  }
+                }
+                return techId;
+              },
+              loading: () => techId,
+              error: (_, __) => techId,
+            );
+          }
+
+          final locationText = (job.locationText ?? job.customerAddress)
+              ?.trim();
 
           return ListView(
             children: [
@@ -176,25 +243,30 @@ class OperacionesDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         job.customerName,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       if (job.customerPhone != null &&
                           job.customerPhone!.trim().isNotEmpty)
                         Text(job.customerPhone!),
+                      if (job.crmChatId != null &&
+                          job.crmChatId!.trim().isNotEmpty)
+                        Text('Chat ID: ${job.crmChatId!.trim()}'),
+                      Text('Creado: ${_fmtDateTime(context, job.createdAt)}'),
                       const SizedBox(width: 12),
                       Chip(
                         label: Text(_statusLabel(job.status)),
-                        backgroundColor: _statusColor(context, job.status)
-                            .withValues(alpha: 0.12),
-                        side: BorderSide(color: _statusColor(context, job.status)),
+                        backgroundColor: _statusColor(
+                          context,
+                          job.status,
+                        ).withValues(alpha: 0.12),
+                        side: BorderSide(
+                          color: _statusColor(context, job.status),
+                        ),
                       ),
                       const SizedBox(width: 12),
-                      Chip(
-                        label: Text(job.serviceType),
-                      ),
+                      Chip(label: Text(job.serviceType)),
                       const SizedBox(width: 12),
                       Chip(label: Text('Prioridad: ${job.priority}')),
                     ],
@@ -209,13 +281,40 @@ class OperacionesDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         'Programación',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
+                        style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       Text(scheduleLabel),
+                      if (techName != null) ...[
+                        const SizedBox(height: 8),
+                        Text('Técnico: $techName'),
+                      ],
+                      if (locationText != null && locationText.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text('Ubicación: $locationText'),
+                      ],
+                      if (job.locationLat != null &&
+                          job.locationLng != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Coordenadas: ${job.locationLat}, ${job.locationLng}',
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _openMaps(
+                            context: context,
+                            lat: job.locationLat,
+                            lng: job.locationLng,
+                            address: locationText,
+                          ),
+                          icon: const Icon(Icons.map_outlined),
+                          label: const Text('Abrir en Google Maps'),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       if (job.crmChatId != null &&
                           job.crmChatId!.trim().isNotEmpty)
@@ -242,9 +341,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
                       children: [
                         Text(
                           'Notas (vendedor)',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
@@ -263,9 +360,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
                       children: [
                         Text(
                           'Notas (técnico)',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
@@ -284,8 +379,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
                       children: [
                         FilledButton.icon(
                           onPressed: () async {
-                            final repo =
-                                ref.read(operationsRepositoryProvider);
+                            final repo = ref.read(operationsRepositoryProvider);
                             await repo.updateJobStatus(
                               jobId: job.id,
                               status: 'EN_PROCESO',
@@ -310,8 +404,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
                               label: 'Resumen / resultado *',
                             );
                             if (note == null) return;
-                            final repo =
-                                ref.read(operationsRepositoryProvider);
+                            final repo = ref.read(operationsRepositoryProvider);
                             await repo.updateJobStatus(
                               jobId: job.id,
                               status: 'TERMINADO',
@@ -335,8 +428,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
                               label: 'Motivo de cancelación *',
                             );
                             if (reason == null) return;
-                            final repo =
-                                ref.read(operationsRepositoryProvider);
+                            final repo = ref.read(operationsRepositoryProvider);
                             await repo.updateJobStatus(
                               jobId: job.id,
                               status: 'CANCELADO',
@@ -371,9 +463,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         'Historial',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
+                        style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
@@ -396,11 +486,13 @@ class OperacionesDetailScreen extends ConsumerWidget {
                                   ),
                                   subtitle: Text(
                                     [
-                                      if (it['created_at'] != null)
-                                        it['created_at'].toString(),
-                                      if (it['note'] != null)
-                                        it['note'].toString(),
-                                    ].where((s) => s.trim().isNotEmpty).join(' • '),
+                                          if (it['created_at'] != null)
+                                            it['created_at'].toString(),
+                                          if (it['note'] != null)
+                                            it['note'].toString(),
+                                        ]
+                                        .where((s) => s.trim().isNotEmpty)
+                                        .join(' • '),
                                   ),
                                 ),
                             ],
@@ -451,10 +543,9 @@ class _AssignSectionState extends ConsumerState<_AssignSection> {
       children: [
         Text(
           'Asignación (vendedor/admin)',
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.w600),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
@@ -476,7 +567,9 @@ class _AssignSectionState extends ConsumerState<_AssignSection> {
           error: (e, _) => Text('Error cargando técnicos: $e'),
           data: (techs) {
             return DropdownButtonFormField<String?>(
-              value: (_techId != null && _techId!.trim().isEmpty) ? null : _techId,
+              value: (_techId != null && _techId!.trim().isEmpty)
+                  ? null
+                  : _techId,
               decoration: const InputDecoration(
                 labelText: 'Técnico asignado',
                 border: OutlineInputBorder(),

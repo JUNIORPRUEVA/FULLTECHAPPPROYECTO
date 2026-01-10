@@ -4,6 +4,7 @@ class CrmStatuses {
   static const String primerContacto = 'primer_contacto';
   static const String interesado = 'interesado';
   static const String reserva = 'reserva';
+  static const String agendado = 'agendado';
   static const String compro = 'compro';
   static const String compraFinalizada = 'compra_finalizada';
   // Legacy status value (deprecated in UI; treated as RESERVA).
@@ -22,6 +23,7 @@ class CrmStatuses {
     primerContacto: 'Primer contacto',
     interesado: 'Interesado',
     reserva: 'Reserva',
+    agendado: 'Agendado',
     compro: 'Compró',
     compraFinalizada: 'Compra finalizada',
     noInteresado: 'No interesado',
@@ -39,6 +41,7 @@ class CrmStatuses {
     primerContacto,
     interesado,
     reserva,
+    agendado,
     pendientePago,
     porLevantamiento,
     garantia,
@@ -51,6 +54,7 @@ class CrmStatuses {
   /// Statuses that require a form dialog
   static const Set<String> requiresDialog = {
     reserva,
+    agendado,
     porLevantamiento,
   };
 
@@ -70,6 +74,9 @@ class CrmStatuses {
     final v = raw.trim();
     if (v.isEmpty) return primerContacto;
 
+    // Backend alias inputs: these normalize to servicio_reservado on the server.
+    if (v == 'agendado' || v == 'reservado') return agendado;
+
     // Legacy/deprecated CRM statuses still present in older data.
     if (v == 'compra_finalizada') return compro;
     if (v == 'servicio_finalizado') return compro;
@@ -80,11 +87,11 @@ class CrmStatuses {
     if (v == 'solucionGarantia') return solucionGarantia;
     if (v == 'pendientePago') return pendientePago;
     if (v == 'porLevantamiento') return porLevantamiento;
-    if (v == 'servicioReservado') return reserva;
+    if (v == 'servicioReservado') return agendado;
     if (v == 'enGarantia') return garantia;
 
     // Deprecated UI status (legacy): treat as RESERVA.
-    if (v == servicioReservado) return reserva;
+    if (v == servicioReservado) return agendado;
 
     // Legacy CRM status.
     if (v == enGarantia) return garantia;

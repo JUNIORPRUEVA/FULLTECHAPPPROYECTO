@@ -72,7 +72,10 @@ class _ServicioReservadoDialogState
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _selectedTime);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
     if (picked == null) return;
     setState(() => _selectedTime = picked);
   }
@@ -114,6 +117,33 @@ class _ServicioReservadoDialogState
     final productsAsync = ref.watch(crmProductsProvider);
     final servicesAsync = ref.watch(activeServicesProvider);
     final techniciansAsync = ref.watch(crmTechniciansProvider);
+
+    Widget inlineError({
+      required String message,
+      required VoidCallback onRetry,
+    }) {
+      final cs = theme.colorScheme;
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: cs.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(message, style: TextStyle(color: cs.error)),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
 
     return AlertDialog(
       title: const Text('Servicio reservado'),
@@ -202,7 +232,14 @@ class _ServicioReservadoDialogState
                     );
                   },
                   loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Error cargando productos: $e'),
+                  error: (e, st) {
+                    debugPrint('[CRM] products load failed: $e');
+                    debugPrintStack(stackTrace: st);
+                    return inlineError(
+                      message: 'No se pudieron cargar productos',
+                      onRetry: () => ref.invalidate(crmProductsProvider),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 servicesAsync.when(
@@ -229,7 +266,14 @@ class _ServicioReservadoDialogState
                     );
                   },
                   loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Error cargando servicios: $e'),
+                  error: (e, st) {
+                    debugPrint('[CRM] services load failed: $e');
+                    debugPrintStack(stackTrace: st);
+                    return inlineError(
+                      message: 'No se pudieron cargar servicios',
+                      onRetry: () => ref.invalidate(activeServicesProvider),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 techniciansAsync.when(
@@ -248,7 +292,11 @@ class _ServicioReservadoDialogState
                         ...techs.map(
                           (t) => DropdownMenuItem<String?>(
                             value: t.id,
-                            child: Text(t.nombreCompleto),
+                            child: Text(
+                              t.telefono.trim().isEmpty
+                                  ? t.nombreCompleto
+                                  : '${t.nombreCompleto} • ${t.telefono.trim()}',
+                            ),
                           ),
                         ),
                       ],
@@ -256,7 +304,14 @@ class _ServicioReservadoDialogState
                     );
                   },
                   loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Error cargando técnicos: $e'),
+                  error: (e, st) {
+                    debugPrint('[CRM] technicians load failed: $e');
+                    debugPrintStack(stackTrace: st);
+                    return inlineError(
+                      message: 'No se pudieron cargar técnicos',
+                      onRetry: () => ref.invalidate(crmTechniciansProvider),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -283,12 +338,8 @@ class _ServicioReservadoDialogState
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('Guardar'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('Guardar')),
       ],
     );
   }
 }
-

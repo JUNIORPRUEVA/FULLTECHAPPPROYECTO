@@ -59,11 +59,25 @@ class CrmImageCache {
       final uri = Uri.tryParse(url);
       final path = uri?.path ?? url;
       final ext = p.extension(path).toLowerCase();
-      if (ext == '.jpg' || ext == '.jpeg' || ext == '.png' || ext == '.webp') {
+      if (ext == '.jpg' ||
+          ext == '.jpeg' ||
+          ext == '.png' ||
+          ext == '.webp' ||
+          ext == '.gif') {
         return ext;
       }
     } catch (_) {}
     return '.jpg';
+  }
+
+  bool _looksEncrypted(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      final path = (uri?.path ?? url).toLowerCase();
+      return path.endsWith('.enc');
+    } catch (_) {
+      return url.toLowerCase().trim().endsWith('.enc');
+    }
   }
 
   String _resolvePublicUrl(String raw) {
@@ -141,6 +155,8 @@ class CrmImageCache {
     }
 
     final url = _resolvePublicUrl(raw);
+    if (_looksEncrypted(url)) return null;
+
     final root = await _rootDir();
     final ext = _extFromUrl(url);
     final key = _fnv1a64Hex(url);
@@ -171,6 +187,12 @@ class CrmImageCache {
       );
 
       final res = await dio.get<List<int>>(url);
+      final contentType = res.headers.value('content-type')?.toLowerCase();
+      if (contentType != null &&
+          contentType.isNotEmpty &&
+          !contentType.startsWith('image/')) {
+        return null;
+      }
       final bytes = res.data;
       if (bytes == null || bytes.isEmpty) return null;
 

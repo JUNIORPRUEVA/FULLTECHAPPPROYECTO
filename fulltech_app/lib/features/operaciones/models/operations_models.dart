@@ -11,6 +11,9 @@ class OperationsJob {
   final String customerName;
   final String? customerPhone;
   final String? customerAddress;
+  final String? locationText;
+  final double? locationLat;
+  final double? locationLng;
   final String serviceType;
   final String priority;
   final String status;
@@ -44,6 +47,9 @@ class OperationsJob {
     this.serviceId,
     this.customerPhone,
     this.customerAddress,
+    this.locationText,
+    this.locationLat,
+    this.locationLng,
     this.notes,
     this.technicianNotes,
     this.cancelReason,
@@ -81,6 +87,9 @@ class OperationsJob {
     DateTime? scheduledDate;
     String? preferredTime;
     final schedule = json['schedule'];
+    String? locationText;
+    double? locationLat;
+    double? locationLng;
     if (schedule is Map) {
       final sc = schedule.cast<String, dynamic>();
       final rawDate = (sc['scheduled_date'] ?? sc['scheduledDate'])?.toString();
@@ -89,7 +98,23 @@ class OperationsJob {
       }
       preferredTime = (sc['preferred_time'] ?? sc['preferredTime'])?.toString();
       if (preferredTime != null && preferredTime.trim().isEmpty) preferredTime = null;
+
+      locationText = (sc['location_text'] ?? sc['locationText'] ?? sc['location'])?.toString();
+      if (locationText != null && locationText.trim().isEmpty) locationText = null;
+
+      final rawLat = sc['lat'] ?? sc['latitude'] ?? sc['location_lat'] ?? sc['locationLat'];
+      final rawLng = sc['lng'] ?? sc['longitude'] ?? sc['location_lng'] ?? sc['locationLng'];
+      if (rawLat is num) locationLat = rawLat.toDouble();
+      if (rawLng is num) locationLng = rawLng.toDouble();
     }
+
+    // Some backends may expose location fields at the job level.
+    locationText ??= (json['location_text'] ?? json['locationText'] ?? json['location'])?.toString();
+    if (locationText != null && locationText!.trim().isEmpty) locationText = null;
+    final rawLat2 = json['lat'] ?? json['latitude'] ?? json['location_lat'] ?? json['locationLat'];
+    final rawLng2 = json['lng'] ?? json['longitude'] ?? json['location_lng'] ?? json['locationLng'];
+    if (locationLat == null && rawLat2 is num) locationLat = rawLat2.toDouble();
+    if (locationLng == null && rawLng2 is num) locationLng = rawLng2.toDouble();
 
     return OperationsJob(
       id: s('id'),
@@ -102,6 +127,9 @@ class OperationsJob {
       customerName: s('customer_name', 'customerName'),
       customerPhone: so('customer_phone', 'customerPhone'),
       customerAddress: so('customer_address', 'customerAddress'),
+      locationText: locationText,
+      locationLat: locationLat,
+      locationLng: locationLng,
       serviceType: s('service_type', 'serviceType'),
       priority: so('priority') ?? 'normal',
       status: so('status') ?? 'pending_survey',
@@ -145,6 +173,9 @@ class OperationsJob {
       customerName: (row['customer_name'] ?? '').toString(),
       customerPhone: (row['customer_phone'] as String?),
       customerAddress: (row['customer_address'] as String?),
+      locationText: null,
+      locationLat: null,
+      locationLng: null,
       serviceType: (row['service_type'] ?? '').toString(),
       priority: (row['priority'] ?? 'normal').toString(),
       status: (row['status'] ?? 'pending_survey').toString(),

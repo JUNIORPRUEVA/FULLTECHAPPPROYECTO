@@ -11,6 +11,8 @@ class OperationsJobsState {
 
   final String search;
   final String? status;
+  final String? assignedTechId;
+  final String? serviceId;
 
   const OperationsJobsState({
     required this.loading,
@@ -21,6 +23,8 @@ class OperationsJobsState {
     required this.hasMore,
     required this.search,
     required this.status,
+    required this.assignedTechId,
+    required this.serviceId,
   });
 
   factory OperationsJobsState.initial() {
@@ -33,6 +37,8 @@ class OperationsJobsState {
       hasMore: true,
       search: '',
       status: null,
+      assignedTechId: null,
+      serviceId: null,
     );
   }
 
@@ -45,6 +51,8 @@ class OperationsJobsState {
     bool? hasMore,
     String? search,
     String? status,
+    String? assignedTechId,
+    String? serviceId,
   }) {
     return OperationsJobsState(
       loading: loading ?? this.loading,
@@ -55,6 +63,8 @@ class OperationsJobsState {
       hasMore: hasMore ?? this.hasMore,
       search: search ?? this.search,
       status: status ?? this.status,
+      assignedTechId: assignedTechId ?? this.assignedTechId,
+      serviceId: serviceId ?? this.serviceId,
     );
   }
 }

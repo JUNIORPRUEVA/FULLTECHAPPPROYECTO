@@ -6,6 +6,7 @@ import '../../../core/routing/app_routes.dart';
 import '../../../core/widgets/module_page.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
+import '../../services/providers/services_provider.dart';
 import '../models/operations_models.dart';
 import '../state/operations_providers.dart';
 
@@ -88,7 +89,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   String _typeLabelFor(int tabIndex, OperationsJob job) {
     if (tabIndex == 1) return 'Por levantamiento';
     if (_isWarranty(job)) return 'Solución garantía';
-    return 'Reserva';
+    return 'Agendar';
   }
 
   String _techNameById(List<dynamic> techs, String id) {
@@ -208,7 +209,8 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final role = (auth is AuthAuthenticated) ? auth.user.role : '';
-    final isTech = _isTechnician(role) || role == 'admin' || role == 'administrador';
+    final isTech =
+        _isTechnician(role) || role == 'admin' || role == 'administrador';
 
     final state = ref.watch(operationsJobsControllerProvider);
 
@@ -309,6 +311,88 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                             .setStatus(v),
                       ),
                     ),
+                    SizedBox(
+                      width: 320,
+                      child: techsAsync.when(
+                        data: (techs) {
+                          return DropdownButtonFormField<String?>(
+                            initialValue: state.assignedTechId,
+                            decoration: const InputDecoration(
+                              labelText: 'Técnico',
+                              prefixIcon: Icon(Icons.person_outline),
+                            ),
+                            isExpanded: true,
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Todos'),
+                              ),
+                              ...techs.map(
+                                (t) => DropdownMenuItem<String?>(
+                                  value: t.id,
+                                  child: Text(
+                                    t.telefono.trim().isEmpty
+                                        ? t.nombreCompleto
+                                        : '${t.nombreCompleto} • ${t.telefono.trim()}',
+                                  ),
+                                ),
+                              ),
+                            ],
+                            onChanged: (v) => ref
+                                .read(operationsJobsControllerProvider.notifier)
+                                .setAssignedTechId(v),
+                          );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (e, st) {
+                          debugPrint('[OPS] technicians load failed: $e');
+                          debugPrintStack(stackTrace: st);
+                          return const Text('No se pudieron cargar técnicos');
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: 320,
+                      child: ref
+                          .watch(activeServicesProvider)
+                          .when(
+                            data: (services) {
+                              return DropdownButtonFormField<String?>(
+                                initialValue: state.serviceId,
+                                decoration: const InputDecoration(
+                                  labelText: 'Servicio',
+                                  prefixIcon: Icon(Icons.build_outlined),
+                                ),
+                                isExpanded: true,
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('Todos'),
+                                  ),
+                                  ...services.map(
+                                    (s) => DropdownMenuItem<String?>(
+                                      value: s.id,
+                                      child: Text(s.name),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (v) => ref
+                                    .read(
+                                      operationsJobsControllerProvider.notifier,
+                                    )
+                                    .setServiceId(v),
+                              );
+                            },
+                            loading: () => const LinearProgressIndicator(),
+                            error: (e, st) {
+                              debugPrint('[OPS] services load failed: $e');
+                              debugPrintStack(stackTrace: st);
+                              return const Text(
+                                'No se pudieron cargar servicios',
+                              );
+                            },
+                          ),
+                    ),
                     if (state.error != null)
                       Text(
                         state.error!,
@@ -323,216 +407,391 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
             const SizedBox(height: 8),
             TabBar(
               isScrollable: true,
-              tabs: List.generate(
-                2,
-                (i) => Tab(text: _tabLabel(i)),
-              ),
+              tabs: List.generate(2, (i) => Tab(text: _tabLabel(i))),
             ),
             const SizedBox(height: 8),
             Expanded(
               child: TabBarView(
-                children: List.generate(
-                  2,
-                  (tabIndex) {
-                    final filtered =
-                        state.items.where((j) => _matchesTab(tabIndex, j)).toList();
+                children: List.generate(2, (tabIndex) {
+                  final filtered = state.items
+                      .where((j) => _matchesTab(tabIndex, j))
+                      .toList();
 
-                    final groups = <DateTime?, List<OperationsJob>>{};
+                  // Group Agenda tab by Today / Upcoming (and keep a fallback for items with no date).
+                  final today = DateTime.now();
+                  final todayDay = DateTime(today.year, today.month, today.day);
+
+                  final groups = <String, List<OperationsJob>>{
+                    'Hoy': <OperationsJob>[],
+                    'Próximos': <OperationsJob>[],
+                    'Sin fecha': <OperationsJob>[],
+                  };
+                  if (tabIndex == 0) {
                     for (final j in filtered) {
                       final day = _effectiveDay(j);
-                      groups.putIfAbsent(day, () => []).add(j);
+                      if (day == null) {
+                        groups['Sin fecha']!.add(j);
+                      } else if (day == todayDay) {
+                        groups['Hoy']!.add(j);
+                      } else {
+                        groups['Próximos']!.add(j);
+                      }
                     }
+                  }
 
-                    final groupKeys = groups.keys.toList()
-                      ..sort((a, b) {
-                        if (a == null && b == null) return 0;
-                        if (a == null) return 1;
-                        if (b == null) return -1;
-                        return a.compareTo(b);
-                      });
+                  if (state.loading && state.items.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                    for (final k in groupKeys) {
-                      groups[k]!.sort((a, b) {
-                        final da = _effectiveDate(a) ?? a.createdAt;
-                        final db = _effectiveDate(b) ?? b.createdAt;
-                        return da.compareTo(db);
-                      });
-                    }
+                  if (filtered.isEmpty) {
+                    return const Center(child: Text('Sin tareas'));
+                  }
 
-                    if (state.loading && state.items.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    if (filtered.isEmpty) {
-                      return const Center(child: Text('Sin tareas'));
-                    }
-
-                    return ListView(
-                      padding: const EdgeInsets.all(12),
-                      children: [
-                        for (final day in groupKeys) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8, top: 8),
-                            child: Text(
-                              day == null
-                                  ? 'Sin fecha'
-                                  : MaterialLocalizations.of(context)
-                                      .formatFullDate(day),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          ...groups[day]!.map((job) {
-                            final typeLabel = _typeLabelFor(tabIndex, job);
-                            final statusLabel = _statusLabel(job.status);
-                            final statusColor = _statusColor(context, job.status);
-                            final localDate = job.scheduledDate?.toLocal();
-                            final dateStr = (localDate == null)
-                                ? null
-                                : MaterialLocalizations.of(context)
-                                    .formatCompactDate(localDate);
-                            final timeStr = (job.preferredTime != null &&
-                                    job.preferredTime!.trim().isNotEmpty)
-                                ? job.preferredTime!.trim()
-                                : null;
-
-                            String? techLine;
-                            if (job.assignedTechId != null &&
-                                job.assignedTechId!.trim().isNotEmpty) {
-                              techLine = techsAsync.when(
-                                data: (techs) =>
-                                    _techNameById(techs, job.assignedTechId!),
-                                loading: () => job.assignedTechId,
-                                error: (_, __) => job.assignedTechId,
-                              );
-                            }
-
-                            final subtitleParts = <String>[];
-                            if (job.serviceType.trim().isNotEmpty) {
-                              subtitleParts.add(job.serviceType.trim());
-                            }
-                            if (job.customerAddress != null &&
-                                job.customerAddress!.trim().isNotEmpty) {
-                              subtitleParts.add(job.customerAddress!.trim());
-                            }
-                            if (dateStr != null) subtitleParts.add(dateStr);
-                            if (timeStr != null) subtitleParts.add(timeStr);
-                            if (techLine != null) subtitleParts.add('Téc: $techLine');
-
-                            return Card(
-                              child: ListTile(
-                                leading: Icon(
-                                  tabIndex == 1
-                                      ? Icons.assignment_turned_in_outlined
-                                      : Icons.event_outlined,
-                                  color: statusColor,
-                                ),
-                                title: Text(job.customerName.trim().isNotEmpty
-                                    ? job.customerName.trim()
-                                    : 'Cliente'),
-                                subtitle: Text(subtitleParts.join(' • ')),
-                                trailing: Wrap(
-                                  spacing: 8,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Chip(label: Text(typeLabel)),
-                                    Chip(
-                                      label: Text(statusLabel),
-                                      backgroundColor:
-                                          statusColor.withValues(alpha: 0.12),
-                                      side: BorderSide(color: statusColor),
-                                    ),
-                                    if (job.crmChatId != null &&
-                                        job.crmChatId!.trim().isNotEmpty)
-                                      IconButton(
-                                        tooltip: 'Abrir chat',
-                                        onPressed: () => context.go(
-                                          '${AppRoutes.crm}/chats/${job.crmChatId}',
-                                        ),
-                                        icon: const Icon(
-                                          Icons.chat_bubble_outline,
-                                        ),
-                                      ),
-                                    if (isTech)
-                                      PopupMenuButton<String>(
-                                        tooltip: 'Acciones',
-                                        onSelected: (action) async {
-                                          final repo =
-                                              ref.read(operationsRepositoryProvider);
-                                          if (action == 'start') {
-                                            await repo.updateJobStatus(
-                                              jobId: job.id,
-                                              status: 'EN_PROCESO',
-                                              technicianNotes: 'Iniciado',
-                                            );
-                                          } else if (action == 'done') {
-                                            final note = await _promptRequiredText(
-                                              context: context,
-                                              title: 'Terminar',
-                                              label: 'Resumen / resultado *',
-                                            );
-                                            if (note == null) return;
-                                            await repo.updateJobStatus(
-                                              jobId: job.id,
-                                              status: 'TERMINADO',
-                                              technicianNotes: note,
-                                            );
-                                          } else if (action == 'cancel') {
-                                            final reason = await _promptRequiredText(
-                                              context: context,
-                                              title: 'Cancelar',
-                                              label: 'Motivo de cancelación *',
-                                            );
-                                            if (reason == null) return;
-                                            await repo.updateJobStatus(
-                                              jobId: job.id,
-                                              status: 'CANCELADO',
-                                              cancelReason: reason,
-                                            );
-                                          }
-                                          if (!mounted) return;
-                                          await ref
-                                              .read(
-                                                operationsJobsControllerProvider.notifier,
-                                              )
-                                              .refresh();
-                                        },
-                                        itemBuilder: (context) => const [
-                                          PopupMenuItem(
-                                            value: 'start',
-                                            child: Text('Iniciar (En proceso)'),
-                                          ),
-                                          PopupMenuItem(
-                                            value: 'done',
-                                            child: Text('Terminar'),
-                                          ),
-                                          PopupMenuItem(
-                                            value: 'cancel',
-                                            child: Text('Cancelar'),
-                                          ),
-                                        ],
-                                      ),
-                                    IconButton(
-                                      tooltip: 'Abrir',
-                                      onPressed: () => context.go(
-                                        AppRoutes.operacionesDetail(job.id),
-                                      ),
-                                      icon: const Icon(Icons.chevron_right),
-                                    ),
-                                  ],
-                                ),
-                                onTap: () =>
-                                    context.go(AppRoutes.operacionesDetail(job.id)),
+                  return ListView(
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      if (tabIndex == 0) ...[
+                        for (final section in const [
+                          'Hoy',
+                          'Próximos',
+                          'Sin fecha',
+                        ]) ...[
+                          if (groups[section]!.isNotEmpty) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8, top: 8),
+                              child: Text(
+                                section,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
-                            );
-                          }),
+                            ),
+                            ...(() {
+                              final list = groups[section]!
+                                ..sort((a, b) {
+                                  final da = _effectiveDate(a) ?? a.createdAt;
+                                  final db = _effectiveDate(b) ?? b.createdAt;
+                                  return da.compareTo(db);
+                                });
+                              return list;
+                            })().map((job) {
+                              final typeLabel = _typeLabelFor(tabIndex, job);
+                              final statusLabel = _statusLabel(job.status);
+                              final statusColor = _statusColor(
+                                context,
+                                job.status,
+                              );
+                              final localDate = job.scheduledDate?.toLocal();
+                              final dateStr = (localDate == null)
+                                  ? null
+                                  : MaterialLocalizations.of(
+                                      context,
+                                    ).formatCompactDate(localDate);
+                              final timeStr =
+                                  (job.preferredTime != null &&
+                                      job.preferredTime!.trim().isNotEmpty)
+                                  ? job.preferredTime!.trim()
+                                  : null;
+
+                              String? techLine;
+                              if (job.assignedTechId != null &&
+                                  job.assignedTechId!.trim().isNotEmpty) {
+                                techLine = techsAsync.when(
+                                  data: (techs) =>
+                                      _techNameById(techs, job.assignedTechId!),
+                                  loading: () => job.assignedTechId,
+                                  error: (_, __) => job.assignedTechId,
+                                );
+                              }
+
+                              final subtitleParts = <String>[];
+                              if (job.customerPhone != null &&
+                                  job.customerPhone!.trim().isNotEmpty) {
+                                subtitleParts.add(job.customerPhone!.trim());
+                              }
+                              if (job.crmChatId != null &&
+                                  job.crmChatId!.trim().isNotEmpty) {
+                                subtitleParts.add(
+                                  'Chat: ${job.crmChatId!.trim()}',
+                                );
+                              }
+                              if (job.serviceType.trim().isNotEmpty) {
+                                subtitleParts.add(
+                                  'Servicio: ${job.serviceType.trim()}',
+                                );
+                              }
+                              if (dateStr != null)
+                                subtitleParts.add('Agenda: $dateStr');
+                              if (timeStr != null) subtitleParts.add(timeStr);
+                              if (techLine != null)
+                                subtitleParts.add('Téc: $techLine');
+                              if (job.notes != null &&
+                                  job.notes!.trim().isNotEmpty) {
+                                subtitleParts.add('Nota: ${job.notes!.trim()}');
+                              }
+                              if (job.customerAddress != null &&
+                                  job.customerAddress!.trim().isNotEmpty) {
+                                subtitleParts.add(job.customerAddress!.trim());
+                              }
+
+                              return Card(
+                                child: ListTile(
+                                  leading: Icon(
+                                    Icons.event_outlined,
+                                    color: statusColor,
+                                  ),
+                                  title: Text(
+                                    job.customerName.trim().isNotEmpty
+                                        ? job.customerName.trim()
+                                        : 'Cliente',
+                                  ),
+                                  subtitle: Text(subtitleParts.join(' • ')),
+                                  trailing: Wrap(
+                                    spacing: 8,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Chip(label: Text(typeLabel)),
+                                      Chip(
+                                        label: Text(statusLabel),
+                                        backgroundColor: statusColor.withValues(
+                                          alpha: 0.12,
+                                        ),
+                                        side: BorderSide(color: statusColor),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Abrir',
+                                        onPressed: () => context.go(
+                                          AppRoutes.operacionesDetail(job.id),
+                                        ),
+                                        icon: const Icon(Icons.chevron_right),
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () => context.go(
+                                    AppRoutes.operacionesDetail(job.id),
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
                         ],
+                      ] else ...[
+                        // Keep existing per-day grouping for other tabs.
+                        ...(() {
+                          final map = <DateTime?, List<OperationsJob>>{};
+                          for (final j in filtered) {
+                            final day = _effectiveDay(j);
+                            map.putIfAbsent(day, () => []).add(j);
+                          }
+                          final keys = map.keys.toList()
+                            ..sort((a, b) {
+                              if (a == null && b == null) return 0;
+                              if (a == null) return 1;
+                              if (b == null) return -1;
+                              return a.compareTo(b);
+                            });
+                          for (final k in keys) {
+                            map[k]!.sort((a, b) {
+                              final da = _effectiveDate(a) ?? a.createdAt;
+                              final db = _effectiveDate(b) ?? b.createdAt;
+                              return da.compareTo(db);
+                            });
+                          }
+
+                          return <Widget>[
+                            for (final day in keys) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: 8,
+                                  top: 8,
+                                ),
+                                child: Text(
+                                  day == null
+                                      ? 'Sin fecha'
+                                      : MaterialLocalizations.of(
+                                          context,
+                                        ).formatFullDate(day),
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              ...map[day]!.map((job) {
+                                final typeLabel = _typeLabelFor(tabIndex, job);
+                                final statusLabel = _statusLabel(job.status);
+                                final statusColor = _statusColor(
+                                  context,
+                                  job.status,
+                                );
+                                final localDate = job.scheduledDate?.toLocal();
+                                final dateStr = (localDate == null)
+                                    ? null
+                                    : MaterialLocalizations.of(
+                                        context,
+                                      ).formatCompactDate(localDate);
+                                final timeStr =
+                                    (job.preferredTime != null &&
+                                        job.preferredTime!.trim().isNotEmpty)
+                                    ? job.preferredTime!.trim()
+                                    : null;
+
+                                String? techLine;
+                                if (job.assignedTechId != null &&
+                                    job.assignedTechId!.trim().isNotEmpty) {
+                                  techLine = techsAsync.when(
+                                    data: (techs) => _techNameById(
+                                      techs,
+                                      job.assignedTechId!,
+                                    ),
+                                    loading: () => job.assignedTechId,
+                                    error: (_, __) => job.assignedTechId,
+                                  );
+                                }
+
+                                final subtitleParts = <String>[];
+                                if (job.serviceType.trim().isNotEmpty) {
+                                  subtitleParts.add(job.serviceType.trim());
+                                }
+                                if (job.customerPhone != null &&
+                                    job.customerPhone!.trim().isNotEmpty) {
+                                  subtitleParts.add(job.customerPhone!.trim());
+                                }
+                                if (job.customerAddress != null &&
+                                    job.customerAddress!.trim().isNotEmpty) {
+                                  subtitleParts.add(
+                                    job.customerAddress!.trim(),
+                                  );
+                                }
+                                if (dateStr != null) subtitleParts.add(dateStr);
+                                if (timeStr != null) subtitleParts.add(timeStr);
+                                if (techLine != null)
+                                  subtitleParts.add('Téc: $techLine');
+
+                                return Card(
+                                  child: ListTile(
+                                    leading: Icon(
+                                      tabIndex == 1
+                                          ? Icons.assignment_turned_in_outlined
+                                          : Icons.event_outlined,
+                                      color: statusColor,
+                                    ),
+                                    title: Text(
+                                      job.customerName.trim().isNotEmpty
+                                          ? job.customerName.trim()
+                                          : 'Cliente',
+                                    ),
+                                    subtitle: Text(subtitleParts.join(' • ')),
+                                    trailing: Wrap(
+                                      spacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        Chip(label: Text(typeLabel)),
+                                        Chip(
+                                          label: Text(statusLabel),
+                                          backgroundColor: statusColor
+                                              .withValues(alpha: 0.12),
+                                          side: BorderSide(color: statusColor),
+                                        ),
+                                        if (job.crmChatId != null &&
+                                            job.crmChatId!.trim().isNotEmpty)
+                                          IconButton(
+                                            tooltip: 'Abrir chat',
+                                            onPressed: () => context.go(
+                                              '${AppRoutes.crm}/chats/${job.crmChatId}',
+                                            ),
+                                            icon: const Icon(
+                                              Icons.chat_bubble_outline,
+                                            ),
+                                          ),
+                                        if (isTech)
+                                          PopupMenuButton<String>(
+                                            tooltip: 'Acciones',
+                                            onSelected: (action) async {
+                                              final repo = ref.read(
+                                                operationsRepositoryProvider,
+                                              );
+                                              if (action == 'start') {
+                                                await repo.updateJobStatus(
+                                                  jobId: job.id,
+                                                  status: 'EN_PROCESO',
+                                                  technicianNotes: 'Iniciado',
+                                                );
+                                              } else if (action == 'done') {
+                                                final note =
+                                                    await _promptRequiredText(
+                                                      context: context,
+                                                      title: 'Terminar',
+                                                      label:
+                                                          'Resumen / resultado *',
+                                                    );
+                                                if (note == null) return;
+                                                await repo.updateJobStatus(
+                                                  jobId: job.id,
+                                                  status: 'TERMINADO',
+                                                  technicianNotes: note,
+                                                );
+                                              } else if (action == 'cancel') {
+                                                final reason =
+                                                    await _promptRequiredText(
+                                                      context: context,
+                                                      title: 'Cancelar',
+                                                      label:
+                                                          'Motivo de cancelación *',
+                                                    );
+                                                if (reason == null) return;
+                                                await repo.updateJobStatus(
+                                                  jobId: job.id,
+                                                  status: 'CANCELADO',
+                                                  cancelReason: reason,
+                                                );
+                                              }
+                                              if (!mounted) return;
+                                              await ref
+                                                  .read(
+                                                    operationsJobsControllerProvider
+                                                        .notifier,
+                                                  )
+                                                  .refresh();
+                                            },
+                                            itemBuilder: (context) => const [
+                                              PopupMenuItem(
+                                                value: 'start',
+                                                child: Text(
+                                                  'Iniciar (En proceso)',
+                                                ),
+                                              ),
+                                              PopupMenuItem(
+                                                value: 'done',
+                                                child: Text('Terminar'),
+                                              ),
+                                              PopupMenuItem(
+                                                value: 'cancel',
+                                                child: Text('Cancelar'),
+                                              ),
+                                            ],
+                                          ),
+                                        IconButton(
+                                          tooltip: 'Abrir',
+                                          onPressed: () => context.go(
+                                            AppRoutes.operacionesDetail(job.id),
+                                          ),
+                                          icon: const Icon(Icons.chevron_right),
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () => context.go(
+                                      AppRoutes.operacionesDetail(job.id),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ];
+                        })(),
                       ],
-                    );
-                  },
-                ),
+                    ],
+                  );
+                }),
               ),
             ),
           ],

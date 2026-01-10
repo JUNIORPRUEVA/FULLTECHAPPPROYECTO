@@ -153,11 +153,18 @@ class MessageBubble extends StatelessWidget {
                         ),
                       if (hasMedia) ...[
                         if (message.type == 'image')
-                          _ImageThumb(
-                            url: mediaUrl,
-                            labelStyle: theme.textTheme.bodySmall,
-                            showUrl: false,
-                          )
+                          _looksEncryptedMedia(mediaUrl)
+                              ? _AttachmentCard(
+                                  url: mediaUrl,
+                                  type: 'document',
+                                  fg: fg,
+                                )
+                              : _ImageThumb(
+                                  url: mediaUrl,
+                                  labelStyle: theme.textTheme.bodySmall,
+                                  showUrl: false,
+                                  fg: fg,
+                                )
                         else if (message.type == 'audio' ||
                             message.type == 'ptt')
                           _AudioPlayerBubble(
@@ -552,16 +559,43 @@ Future<void> _openUrl(BuildContext context, String url) async {
   }
 }
 
-class _ImageThumb extends StatelessWidget {
+bool _looksEncryptedMedia(String url) {
+  final v = url.trim();
+  if (v.isEmpty) return false;
+  try {
+    final uri = Uri.tryParse(v);
+    final path = (uri?.path ?? v).toLowerCase();
+    return path.endsWith('.enc');
+  } catch (_) {
+    return v.toLowerCase().endsWith('.enc');
+  }
+}
+
+class _ImageThumb extends StatefulWidget {
   final String url;
   final TextStyle? labelStyle;
   final bool showUrl;
+  final Color fg;
 
   const _ImageThumb({
     required this.url,
     required this.labelStyle,
     required this.showUrl,
+    required this.fg,
   });
+
+  @override
+  State<_ImageThumb> createState() => _ImageThumbState();
+}
+
+class _ImageThumbState extends State<_ImageThumb> {
+  late final Future<String?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = CrmImageCache.instance.getOrFetchLocalPath(widget.url);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -576,17 +610,107 @@ class _ImageThumb extends StatelessWidget {
           children: [
             const Icon(Icons.broken_image),
             const SizedBox(width: 8),
-            Flexible(child: SelectableText(url, style: labelStyle)),
+            Flexible(child: SelectableText(widget.url, style: widget.labelStyle)),
           ],
         ),
       );
     }
 
+    if (_looksEncryptedMedia(widget.url)) {
+      return _AttachmentCard(url: widget.url, type: 'document', fg: widget.fg);
+    }
+
+    if (kIsWeb) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              showDialog<void>(
+                context: context,
+                builder: (context) {
+                  return Dialog(
+                    child: InteractiveViewer(
+                      child: adaptiveImage(
+                        widget.url,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stack) {
+                          return fallback(error);
+                        },
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 260,
+                  maxHeight: 220,
+                ),
+                child: adaptiveImage(
+                  widget.url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stack) {
+                    return fallback(error);
+                  },
+                ),
+              ),
+            ),
+          ),
+          if (widget.showUrl) ...[
+            const SizedBox(height: 6),
+            SelectableText(widget.url, style: widget.labelStyle),
+          ],
+        ],
+      );
+    }
+
     return FutureBuilder<String?>(
-      future: CrmImageCache.instance.getOrFetchLocalPath(url),
+      future: _future,
       builder: (context, snap) {
         final resolved = (snap.data ?? '').trim();
-        final source = resolved.isNotEmpty ? resolved : url;
+        final canShowImage = resolved.isNotEmpty;
+
+        if (snap.connectionState != ConnectionState.done) {
+          return Container(
+            constraints: const BoxConstraints(maxWidth: 260, maxHeight: 220),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: widget.fg.withOpacity(0.85),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    'Cargando imagen...',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: widget.labelStyle,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (!canShowImage) {
+          return _AttachmentCard(url: widget.url, type: 'document', fg: widget.fg);
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -599,7 +723,7 @@ class _ImageThumb extends StatelessWidget {
                     return Dialog(
                       child: InteractiveViewer(
                         child: adaptiveImage(
-                          source,
+                          resolved,
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stack) {
                             return fallback(error);
@@ -618,7 +742,7 @@ class _ImageThumb extends StatelessWidget {
                     maxHeight: 220,
                   ),
                   child: adaptiveImage(
-                    source,
+                    resolved,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stack) {
                       return fallback(error);
@@ -627,9 +751,9 @@ class _ImageThumb extends StatelessWidget {
                 ),
               ),
             ),
-            if (showUrl) ...[
+            if (widget.showUrl) ...[
               const SizedBox(height: 6),
-              SelectableText(url, style: labelStyle),
+              SelectableText(widget.url, style: widget.labelStyle),
             ],
           ],
         );

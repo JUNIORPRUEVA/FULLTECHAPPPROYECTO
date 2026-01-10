@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import '../data/repositories/crm_repository.dart';
 import '../data/models/crm_thread.dart';
+import '../constants/crm_statuses.dart';
 import 'crm_threads_state.dart';
 
 class CrmThreadsController extends StateNotifier<CrmThreadsState> {
@@ -56,9 +57,15 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
     }
 
     try {
+      final estado = state.estado == 'todos'
+          ? null
+          : (state.estado == CrmStatuses.agendado
+              ? CrmStatuses.servicioReservado
+              : state.estado);
+
       final page = await _repo.listThreads(
         search: state.search.isEmpty ? null : state.search,
-        estado: state.estado == 'todos' ? null : state.estado,
+        estado: estado,
         productId: state.productId,
         limit: state.limit,
         offset: 0,
@@ -88,9 +95,15 @@ class CrmThreadsController extends StateNotifier<CrmThreadsState> {
 
     state = state.copyWith(loading: true, clearError: true);
     try {
+      final estado = state.estado == 'todos'
+          ? null
+          : (state.estado == CrmStatuses.agendado
+              ? CrmStatuses.servicioReservado
+              : state.estado);
+
       final page = await _repo.listThreads(
         search: state.search.isEmpty ? null : state.search,
-        estado: state.estado == 'todos' ? null : state.estado,
+        estado: estado,
         productId: state.productId,
         limit: state.limit,
         offset: nextOffset,
