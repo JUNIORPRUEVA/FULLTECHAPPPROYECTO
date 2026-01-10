@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -61,7 +61,6 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   String _typeLabelFor(int tabIndex, OperationsJob job) {
     final tab = OperationsTab.values[tabIndex];
     if (tab == OperationsTab.levantamientos) return 'Por levantamiento';
-    if (tab == OperationsTab.mantenimiento) return 'Mantenimiento';
     if (tab == OperationsTab.instalaciones) return 'Instalación';
     if (isWarranty(job)) return 'Solución garantía';
     return 'Agendar';
@@ -196,6 +195,11 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
       child: ModulePage(
         title: 'Operaciones',
         actions: [
+          IconButton(
+            tooltip: 'Agenda / Levantamientos (CRM)',
+            onPressed: () => context.go(AppRoutes.operacionesAgenda),
+            icon: const Icon(Icons.event_note),
+          ),
           IconButton(
             tooltip: 'Refrescar',
             onPressed: () =>

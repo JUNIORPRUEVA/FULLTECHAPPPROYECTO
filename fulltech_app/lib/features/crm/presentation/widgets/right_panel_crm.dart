@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/crm_thread.dart';
+import '../../data/models/crm_instance_directory_item.dart';
 import '../../state/crm_providers.dart';
 import '../../constants/crm_statuses.dart';
 import '../../../catalogo/models/producto.dart';
@@ -59,6 +60,31 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: () async {
+              final ok = await _showTransferDialog(
+                context,
+                ref,
+                currentChatId: thread.id,
+              );
+              if (ok == true && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Chat transferido'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                await ref.read(crmThreadsControllerProvider.notifier).refresh();
+                ref.read(selectedThreadIdProvider.notifier).state = null;
+              }
+            },
+            icon: const Icon(Icons.swap_horiz),
+            label: const Text('Transferir conversación'),
+          ),
+        ),
+        const SizedBox(height: 8),
         // Encabezado
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -368,10 +394,6 @@ class _ActionsSection extends ConsumerWidget {
                 child: Text('Por levantamiento'),
               ),
               DropdownMenuItem(
-                value: 'mantenimiento',
-                child: Text('Mantenimiento'),
-              ),
-              DropdownMenuItem(
                 value: 'instalacion',
                 child: Text('Instalación'),
               ),
@@ -399,7 +421,6 @@ class _ActionsSection extends ConsumerWidget {
                     if (nextStatus == CrmStatuses.reserva ||
                         nextStatus == CrmStatuses.agendado ||
                         nextStatus == CrmStatuses.porLevantamiento ||
-                        nextStatus == CrmStatuses.mantenimiento ||
                         nextStatus == CrmStatuses.instalacion) {
                       final title = nextStatus == CrmStatuses.reserva
                           ? 'Reserva'
@@ -407,9 +428,7 @@ class _ActionsSection extends ConsumerWidget {
                                 ? 'Agendado'
                                 : (nextStatus == CrmStatuses.porLevantamiento
                                       ? 'Por levantamiento'
-                                      : (nextStatus == CrmStatuses.mantenimiento
-                                            ? 'Mantenimiento'
-                                            : 'Instalación')));
+                                      : 'Instalación'));
 
                       String? phoneOverride;
                       final hasPhone =
@@ -797,6 +816,131 @@ class _CreateProductDialog extends ConsumerStatefulWidget {
   @override
   ConsumerState<_CreateProductDialog> createState() =>
       _CreateProductDialogState();
+}
+
+Future<bool?> _showTransferDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  required String currentChatId,
+}) async {
+  final repo = ref.read(crmRepositoryProvider);
+  List<CrmInstanceDirectoryItem> instances = [];
+  String? selectedId;
+  String? error;
+  bool loading = true;
+  final noteCtrl = TextEditingController();
+
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogCtx) {
+      return StatefulBuilder(builder: (dialogCtx, setState) {
+        Future<void> load() async {
+          setState(() {
+            loading = true;
+            error = null;
+          });
+          try {
+            instances = await repo.listInstances();
+            if (instances.isNotEmpty) selectedId = instances.first.id;
+          } catch (e) {
+            error = e.toString();
+          } finally {
+            setState(() => loading = false);
+          }
+        }
+
+        if (loading && instances.isEmpty && error == null) {
+          load();
+        }
+
+        return AlertDialog(
+          title: const Text('Transferir conversación'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (loading) const LinearProgressIndicator(),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                DropdownButtonFormField<String>(
+                  value: selectedId,
+                  decoration: const InputDecoration(
+                    labelText: 'Instancia destino',
+                    isDense: true,
+                  ),
+                  items: instances
+                      .map(
+                        (i) => DropdownMenuItem<String>(
+                          value: i.id,
+                          child: Text(
+                            [
+                              (i.label ?? i.instanceName).trim(),
+                              (i.phoneE164 ?? '').trim(),
+                            ].where((s) => s.isNotEmpty).join(' • '),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: loading
+                      ? null
+                      : (v) => setState(() => selectedId = v),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nota (opcional)',
+                    isDense: true,
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: loading || selectedId == null
+                  ? null
+                  : () async {
+                      try {
+                        await repo.transferChat(
+                          chatId: currentChatId,
+                          toInstanceId: selectedId,
+                          note: noteCtrl.text.trim().isEmpty
+                              ? null
+                              : noteCtrl.text.trim(),
+                        );
+                        if (dialogCtx.mounted) {
+                          Navigator.of(dialogCtx).pop(true);
+                        }
+                      } catch (e) {
+                        setState(() => error = e.toString());
+                      }
+                    },
+              child: const Text('Transferir'),
+            ),
+          ],
+        );
+      });
+    },
+  );
+
+  noteCtrl.dispose();
+  return result;
 }
 
 class _CreateProductDialogState extends ConsumerState<_CreateProductDialog> {

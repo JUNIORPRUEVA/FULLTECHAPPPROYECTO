@@ -1,4 +1,4 @@
-/// CRM Chat Status Constants and Labels
+﻿/// CRM Chat Status Constants and Labels
 class CrmStatuses {
   // Status values
   static const String primerContacto = 'primer_contacto';
@@ -11,7 +11,6 @@ class CrmStatuses {
   static const String servicioReservado = 'servicio_reservado';
   static const String noInteresado = 'no_interesado';
   static const String porLevantamiento = 'por_levantamiento';
-  static const String mantenimiento = 'mantenimiento';
   static const String instalacion = 'instalacion';
   static const String pendientePago = 'pendiente_pago';
   static const String garantia = 'garantia';
@@ -30,7 +29,6 @@ class CrmStatuses {
     compraFinalizada: 'Compra finalizada',
     noInteresado: 'No interesado',
     porLevantamiento: 'Por levantamiento',
-    mantenimiento: 'Mantenimiento',
     instalacion: 'Instalación',
     pendientePago: 'Pendiente de pago',
     garantia: 'Garantía',
@@ -48,7 +46,6 @@ class CrmStatuses {
     agendado,
     pendientePago,
     porLevantamiento,
-    mantenimiento,
     instalacion,
     garantia,
     solucionGarantia,
@@ -62,7 +59,6 @@ class CrmStatuses {
     reserva,
     agendado,
     porLevantamiento,
-    mantenimiento,
     instalacion,
   };
 
@@ -98,6 +94,7 @@ class CrmStatuses {
     if (v == 'pendientePago') return pendientePago;
     if (v == 'porLevantamiento') return porLevantamiento;
     if (v == 'servicioReservado') return agendado;
+    if (v == 'mantenimiento') return agendado;
     if (v == 'enGarantia') return garantia;
 
     // Deprecated UI status (legacy): treat as RESERVA.

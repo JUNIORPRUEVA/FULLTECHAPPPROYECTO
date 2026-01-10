@@ -19,6 +19,8 @@ import '../data/repositories/crm_repository.dart';
 import '../data/repositories/crm_status_data_repository.dart';
 import '../data/repositories/customers_repository.dart';
 import '../data/services/crm_sse_client.dart';
+import '../data/services/sse_service.dart';
+import '../data/models/crm_operations_item.dart';
 import 'crm_chat_filters_controller.dart';
 import 'crm_chat_filters_state.dart';
 import 'crm_chat_stats_controller.dart';
@@ -173,8 +175,18 @@ final crmTechniciansProvider = FutureProvider<List<RegisteredUserSummary>>((
   return out;
 });
 
+final crmOperationsItemsProvider =
+    FutureProvider<CrmOperationsItemsResponse>((ref) async {
+      final repo = ref.watch(crmRepositoryProvider);
+      return repo.listOperationsItems();
+    });
+
 final crmSseClientProvider = Provider<CrmSseClient>((ref) {
   return CrmSseClient(ref.watch(crmApiClientProvider).dio);
+});
+
+final crmSseServiceProvider = Provider<SseService>((ref) {
+  return SseService(ref.watch(crmApiClientProvider).dio);
 });
 
 final crmRealtimeProvider = Provider<void>((ref) {
@@ -184,9 +196,10 @@ final crmRealtimeProvider = Provider<void>((ref) {
     return;
   }
 
-  final client = ref.watch(crmSseClientProvider);
+  final client = ref.watch(crmSseServiceProvider);
 
   final pendingChatIds = <String>{};
+  var operationsDirty = false;
   Timer? timer;
   bool isRefreshing = false;
 
@@ -211,6 +224,12 @@ final crmRealtimeProvider = Provider<void>((ref) {
           isRefreshing = false;
         });
 
+    if (operationsDirty) {
+      // Backend filters by logged-in user; invalidate so screens reload when open.
+      ref.invalidate(crmOperationsItemsProvider);
+      operationsDirty = false;
+    }
+
     final selected = ref.read(selectedThreadIdProvider);
     if (selected != null && pendingChatIds.contains(selected)) {
       // ignore: unawaited_futures
@@ -226,23 +245,35 @@ final crmRealtimeProvider = Provider<void>((ref) {
 
   final sub = client.stream().listen(
     (evt) {
-      if (evt.type == 'message.new' && evt.chatId != null) {
+      if (evt.type == 'crm.message.created' && evt.chatId != null) {
         pendingChatIds.add(evt.chatId!);
+        operationsDirty = true;
         scheduleFlush();
         return;
       }
-      if (evt.type == 'message.updated' && evt.chatId != null) {
+      if (evt.type == 'crm.chat.updated' && evt.chatId != null) {
         pendingChatIds.add(evt.chatId!);
+        operationsDirty = true;
         scheduleFlush();
         return;
       }
-      if (evt.type == 'chat.updated' && evt.chatId != null) {
+      if (evt.type == 'crm.chat.removed' && evt.chatId != null) {
+        final selected = ref.read(selectedThreadIdProvider);
+        if (selected == evt.chatId) {
+          ref.read(selectedThreadIdProvider.notifier).state = null;
+        }
+        ref.read(crmThreadsControllerProvider.notifier).refresh();
+        operationsDirty = true;
+        return;
+      }
+      if (evt.type == 'crm.chat.assigned' && evt.chatId != null) {
         pendingChatIds.add(evt.chatId!);
+        operationsDirty = true;
         scheduleFlush();
         return;
       }
-      if (evt.type == 'message.status' && evt.chatId != null) {
-        pendingChatIds.add(evt.chatId!);
+      if (evt.type == 'operations.item.updated') {
+        operationsDirty = true;
         scheduleFlush();
         return;
       }

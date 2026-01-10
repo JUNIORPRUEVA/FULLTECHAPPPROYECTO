@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/crm_providers.dart';
 import '../../data/datasources/evolution_direct_settings.dart';
 import '../../data/datasources/evolution_direct_client.dart';
+import '../../data/models/crm_instance_settings.dart';
 import 'crm_keyboard_shortcuts.dart';
 
 class EvolutionConfigDialog extends ConsumerStatefulWidget {
@@ -16,9 +17,9 @@ class EvolutionConfigDialog extends ConsumerStatefulWidget {
 
 class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
   late TextEditingController _instanceNameCtrl;
-  late TextEditingController _baseUrlCtrl;
   late TextEditingController _apiKeyCtrl;
-  late TextEditingController _expectedPhoneCtrl;
+  late TextEditingController _phoneCtrl;
+  late TextEditingController _displayNameCtrl;
 
   late TextEditingController _directBaseUrlCtrl;
   late TextEditingController _directInstanceCtrl;
@@ -35,9 +36,9 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
   void initState() {
     super.initState();
     _instanceNameCtrl = TextEditingController();
-    _baseUrlCtrl = TextEditingController();
     _apiKeyCtrl = TextEditingController();
-    _expectedPhoneCtrl = TextEditingController();
+    _phoneCtrl = TextEditingController();
+    _displayNameCtrl = TextEditingController();
 
     _directBaseUrlCtrl = TextEditingController();
     _directInstanceCtrl = TextEditingController();
@@ -49,9 +50,9 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
   @override
   void dispose() {
     _instanceNameCtrl.dispose();
-    _baseUrlCtrl.dispose();
     _apiKeyCtrl.dispose();
-    _expectedPhoneCtrl.dispose();
+    _phoneCtrl.dispose();
+    _displayNameCtrl.dispose();
 
     _directBaseUrlCtrl.dispose();
     _directInstanceCtrl.dispose();
@@ -65,6 +66,7 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
     try {
       final repo = ref.read(crmRepositoryProvider);
       final config = await repo.getEvolutionConfig();
+      final inst = await repo.getUserInstanceSettings();
       final status = await repo.getEvolutionStatus();
 
       final direct = await EvolutionDirectSettings.load();
@@ -72,15 +74,20 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
       if (mounted) {
         setState(() {
           _status = status;
-          _instanceNameCtrl.text = config['instanceName'] ?? '';
-          _baseUrlCtrl.text = config['evolutionBaseUrl'] ?? '';
-          _expectedPhoneCtrl.text = config['expectedPhoneNumber'] ?? '';
+          _instanceNameCtrl.text =
+              inst?.instanceName ?? config['instanceName'] ?? '';
+          _apiKeyCtrl.text = inst?.apiKey ?? '';
+
+          _phoneCtrl.text = inst?.phoneE164 ?? '';
+          _displayNameCtrl.text = inst?.displayName ?? '';
 
           _directEnabled = direct.enabled;
           _directBaseUrlCtrl.text = direct.baseUrl.trim().isNotEmpty
               ? direct.baseUrl
               : (config['evolutionBaseUrl'] ?? '');
-          _apiKeyCtrl.text = direct.apiKey;
+          if (_apiKeyCtrl.text.isEmpty) {
+            _apiKeyCtrl.text = direct.apiKey;
+          }
           _directInstanceCtrl.text = direct.instance.trim().isNotEmpty
               ? direct.instance
               : (config['instanceName'] ?? '');
@@ -200,11 +207,14 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
     setState(() => _isLoading = true);
     try {
       final repo = ref.read(crmRepositoryProvider);
-      await repo.saveEvolutionConfig({
-        'instanceName': _instanceNameCtrl.text.trim(),
-        'evolutionBaseUrl': _baseUrlCtrl.text.trim(),
-        'expectedPhoneNumber': _expectedPhoneCtrl.text.trim(),
-      });
+      await repo.saveUserInstanceSettings(
+        CrmInstanceSettings(
+          instanceName: _instanceNameCtrl.text.trim(),
+          apiKey: _apiKeyCtrl.text.trim(),
+          phoneE164: _phoneCtrl.text.trim(),
+          displayName: _displayNameCtrl.text.trim(),
+        ),
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -302,7 +312,7 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
 
     final isConnected = _status?['connected'] == true;
     final connectedPhone = _status?['phoneNumber'] as String?;
-    final expectedPhone = _expectedPhoneCtrl.text.trim();
+    final expectedPhone = _phoneCtrl.text.trim();
     final phoneMatches =
         connectedPhone != null &&
         expectedPhone.isNotEmpty &&
@@ -509,7 +519,7 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
               ],
             ),
           )
-        else if (connectedPhone != null && _expectedPhoneCtrl.text.isNotEmpty)
+        else if (connectedPhone != null && _phoneCtrl.text.isNotEmpty)
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -523,7 +533,7 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Número conectado NO coincide con el esperado',
+                    'N�mero conectado NO coincide con el esperado',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.amber,
                       fontWeight: FontWeight.w600,
@@ -553,8 +563,8 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
         const SizedBox(height: 8),
         _InfoRow(
           label: 'Número Esperado',
-          value: _expectedPhoneCtrl.text.isNotEmpty
-              ? _expectedPhoneCtrl.text
+          value: _phoneCtrl.text.isNotEmpty
+              ? _phoneCtrl.text
               : 'No configurado',
           theme: theme,
         ),
@@ -631,33 +641,40 @@ class _EvolutionConfigDialogState extends ConsumerState<EvolutionConfigDialog> {
         TextField(
           controller: _instanceNameCtrl,
           decoration: const InputDecoration(
-            labelText: 'Nombre de Instancia',
-            hintText: 'ej: Fulltech-Main',
+            labelText: "Nombre de Instancia",
+            hintText: "ej: Fulltech-Main",
             isDense: true,
           ),
         ),
         const SizedBox(height: 12),
         TextField(
-          controller: _baseUrlCtrl,
-          readOnly: true,
+          controller: _apiKeyCtrl,
           decoration: const InputDecoration(
-            labelText: 'Evolution Base URL',
-            hintText: '(desde variables de entorno)',
+            labelText: "API Key (Evolution)",
             isDense: true,
           ),
         ),
         const SizedBox(height: 12),
         TextField(
-          controller: _expectedPhoneCtrl,
+          controller: _phoneCtrl,
           decoration: const InputDecoration(
-            labelText: 'Número Esperado',
-            hintText: 'ej: +1829531942 o 1-829-531-9442',
+            labelText: "Número Esperado (E.164)",
+            hintText: "ej: 18295319442",
+            isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _displayNameCtrl,
+          decoration: const InputDecoration(
+            labelText: "Alias / Etiqueta",
+            hintText: "ej: Fulltech - Ventas",
             isDense: true,
           ),
         ),
         const SizedBox(height: 12),
         Text(
-          'Nota: La URL de Evolution y la API Key se configuran vía variables de entorno.',
+          "Nota: La URL de Evolution se configura vía variables de entorno.",
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontStyle: FontStyle.italic,

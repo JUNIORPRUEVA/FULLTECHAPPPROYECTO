@@ -50,48 +50,51 @@ class CrmThread {
 
   static DateTime _dt(dynamic v) {
     final parsed = _dtOrNull(v);
-    if (parsed == null) throw Exception('Invalid datetime: $v');
-    return parsed;
+    if (parsed != null) return parsed;
+    // Be permissive: backend fields can be missing during migrations.
+    // Avoid throwing here (Flutter debugger may pause on exceptions).
+    return DateTime.now();
   }
 
   factory CrmThread.fromJson(Map<String, dynamic> json) {
-    final waId = (json['wa_id'] ?? json['waId'] ?? '') as String;
-    final phone =
-        (json['phone_e164'] ?? json['phoneE164'] ?? json['phone']) as String?;
+    final waId = (json['wa_id'] ?? json['waId'] ?? '').toString();
+    final phoneRaw = (json['phone_e164'] ?? json['phoneE164'] ?? json['phone']);
+    final phone = phoneRaw == null ? null : phoneRaw.toString();
 
     final rawFollowUp =
-      json['follow_up'] ?? json['followUp'] ?? json['seguimiento'];
+        json['follow_up'] ?? json['followUp'] ?? json['seguimiento'];
     final followUp = rawFollowUp == true;
 
-    final rawStatus = (json['status'] ?? 'primer_contacto') as String;
+    final rawStatus = (json['status'] ?? 'primer_contacto').toString();
     final normalizedStatus = CrmStatuses.normalizeValue(rawStatus);
 
+    final rawFromMe = json['last_message_from_me'] ?? json['lastMessageFromMe'];
+    final rawImportant = json['important'];
+
     return CrmThread(
-      id: (json['id'] ?? '') as String,
+      id: (json['id'] ?? '').toString(),
       waId: waId,
       phone: phone,
-      displayName: (json['display_name'] ?? json['displayName']) as String?,
+      displayName: (json['display_name'] ?? json['displayName'])?.toString(),
       lastMessagePreview:
           (json['last_message_preview'] ?? json['lastMessagePreview'])
-              as String?,
-      lastMessageType:
-          (json['last_message_type'] ?? json['lastMessageType']) as String?,
+              ?.toString(),
+      lastMessageType: (json['last_message_type'] ?? json['lastMessageType'])
+          ?.toString(),
       lastMessageAt: _dtOrNull(
         json['last_message_at'] ?? json['lastMessageAt'],
       ),
-      lastMessageFromMe:
-          (json['last_message_from_me'] ??
-              json['lastMessageFromMe'] as bool?) ??
-          false,
+      lastMessageFromMe: rawFromMe == true,
       lastMessageStatus:
-          (json['last_message_status'] ?? json['lastMessageStatus']) as String?,
+          (json['last_message_status'] ?? json['lastMessageStatus'])
+              ?.toString(),
       createdAt: _dt(json['created_at'] ?? json['createdAt']),
       updatedAt: _dt(json['updated_at'] ?? json['updatedAt']),
       unreadCount: ((json['unread_count'] ?? json['unreadCount']) as num? ?? 0)
           .toInt(),
       status: normalizedStatus,
-      important: (json['important'] as bool?) ?? false,
-        followUp: followUp,
+      important: rawImportant == true,
+      followUp: followUp,
       productId: (json['product_id'] ?? json['productId']) as String?,
       internalNote: (json['internal_note'] ?? json['internalNote']) as String?,
       assignedUserId:

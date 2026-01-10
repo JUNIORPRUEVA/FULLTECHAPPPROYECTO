@@ -8,6 +8,9 @@ import '../models/crm_quick_reply.dart';
 import '../models/ai_settings.dart';
 import '../models/ai_suggestion.dart';
 import '../models/customer.dart';
+import '../models/crm_instance_settings.dart';
+import '../models/crm_instance_directory_item.dart';
+import '../models/crm_operations_item.dart';
 
 import '../../../../core/storage/local_db_interface.dart';
 import '../../../../core/storage/db_write_queue.dart';
@@ -273,8 +276,33 @@ class CrmRepository {
   Future<Map<String, dynamic>> getEvolutionConfig() =>
       _remote.getEvolutionConfig();
 
+  Future<CrmInstanceSettings?> getUserInstanceSettings() =>
+      _remote.getUserInstanceSettings();
+
+  Future<CrmInstanceSettings> saveUserInstanceSettings(
+    CrmInstanceSettings settings,
+  ) => _remote.saveUserInstanceSettings(settings);
+
   Future<Map<String, dynamic>> getEvolutionStatus() =>
       _remote.getEvolutionStatus();
+
+  Future<List<CrmInstanceDirectoryItem>> listInstances() => _remote.listInstances();
+
+  Future<void> transferChat({
+    required String chatId,
+    String? toInstanceId,
+    String? toInstanceName,
+    String? note,
+  }) =>
+      _remote.transferChat(
+        chatId: chatId,
+        toInstanceId: toInstanceId,
+        toInstanceName: toInstanceName,
+        note: note,
+      );
+
+  Future<CrmOperationsItemsResponse> listOperationsItems() =>
+      _remote.listOperationsItems();
 
   Future<Map<String, dynamic>> testEvolutionPing() =>
       _remote.testEvolutionPing();

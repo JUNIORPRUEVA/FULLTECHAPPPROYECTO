@@ -13,6 +13,7 @@ import '../../features/auth/screens/splash_screen.dart';
 import '../../features/crm/presentation/pages/crm_home_page.dart';
 import '../../features/crm/presentation/pages/thread_chat_page.dart';
 import '../../features/crm/presentation/pages/customer_detail_page.dart';
+import '../../features/crm/presentation/pages/crm_instance_settings_page.dart';
 import '../../features/customers/presentation/pages/customers_page.dart';
 import '../../features/presupuesto/screens/presupuesto_detail_screen.dart';
 import '../../features/cotizaciones/screens/cotizaciones_list_screen.dart';
@@ -123,6 +124,10 @@ GoRouter createRouter(Ref ref) {
             path: 'customers/:id',
             builder: (c, s) =>
                 CustomerDetailPage(customerId: s.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: 'settings/instance',
+            builder: (c, s) => const CrmInstanceSettingsPage(),
           ),
         ],
       ),

@@ -4,6 +4,7 @@ class CrmStreamEvent {
   final String? messageId;
   final String? remoteMessageId;
   final String? status;
+  final String? targetUserId;
 
   const CrmStreamEvent({
     required this.type,
@@ -11,6 +12,7 @@ class CrmStreamEvent {
     this.messageId,
     this.remoteMessageId,
     this.status,
+    this.targetUserId,
   });
 
   factory CrmStreamEvent.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class CrmStreamEvent {
       messageId: json['messageId']?.toString(),
       remoteMessageId: json['remoteMessageId']?.toString(),
       status: json['status']?.toString(),
+      targetUserId: json['targetUserId']?.toString(),
     );
   }
 }

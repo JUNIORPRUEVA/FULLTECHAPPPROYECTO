@@ -10,6 +10,9 @@ import '../models/crm_message.dart';
 import '../models/crm_chat_stats.dart';
 import '../models/crm_thread.dart';
 import '../models/crm_quick_reply.dart';
+import '../models/crm_instance_settings.dart';
+import '../models/crm_instance_directory_item.dart';
+import '../models/crm_operations_item.dart';
 import '../models/ai_settings.dart';
 import '../models/ai_suggestion.dart';
 import '../models/customer.dart';
@@ -49,6 +52,44 @@ class CrmRemoteDataSource {
     throw Exception(
       '[CRM][$op] HTTP $status ${msg ?? ''} ${data ?? ''}'.trim(),
     );
+  }
+
+  Never _rethrowAsFriendly(Object error, {String? op}) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      final data = error.response?.data;
+
+      String message = error.message ?? 'Network error';
+      if (data is Map<String, dynamic>) {
+        final serverMsg = (data['error'] ?? data['message'])?.toString();
+        if (serverMsg != null && serverMsg.trim().isNotEmpty) {
+          message = serverMsg.trim();
+        }
+
+        final details = data['details'];
+        if (details is Map<String, dynamic>) {
+          final fieldErrors = details['fieldErrors'];
+          if (fieldErrors is Map<String, dynamic>) {
+            final firstKey = fieldErrors.keys.cast<String?>().firstWhere(
+                  (k) => k != null,
+                  orElse: () => null,
+                );
+            if (firstKey != null) {
+              final v = fieldErrors[firstKey];
+              if (v is List && v.isNotEmpty) {
+                message = '$message ($firstKey: ${v.first})';
+              }
+            }
+          }
+        }
+      }
+
+      final prefix = status != null ? 'HTTP $status' : 'HTTP error';
+      final where = op != null ? '[CRM][$op] ' : '';
+      throw Exception('$where$prefix: $message');
+    }
+
+    throw error;
   }
 
   Future<Map<String, dynamic>> _uploadCrmFile(PlatformFile file) async {
@@ -970,6 +1011,48 @@ class CrmRemoteDataSource {
     }
   }
 
+  Future<CrmInstanceSettings?> getUserInstanceSettings() async {
+    if (kDebugMode) {
+      debugPrint('[CRM][HTTP] GET /crm/settings/instance');
+    }
+    try {
+      final res = await _dio.get('/crm/settings/instance');
+      final data = res.data;
+      if (data is Map<String, dynamic>) {
+        final item = data['item'];
+        if (item is Map) {
+          return CrmInstanceSettings.fromJson(item.cast<String, dynamic>());
+        }
+      }
+      return null;
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'GET_INSTANCE_SETTINGS');
+    }
+  }
+
+  Future<CrmInstanceSettings> saveUserInstanceSettings(
+    CrmInstanceSettings settings,
+  ) async {
+    if (kDebugMode) {
+      debugPrint('[CRM][HTTP] PUT /crm/settings/instance');
+    }
+    try {
+      final res = await _dio.put(
+        '/crm/settings/instance',
+        data: settings.toUpsertJson(),
+      );
+      final data = res.data;
+      if (data is Map<String, dynamic> && data['item'] is Map) {
+        return CrmInstanceSettings.fromJson(
+          (data['item'] as Map).cast<String, dynamic>(),
+        );
+      }
+      return settings;
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'PUT_INSTANCE_SETTINGS');
+    }
+  }
+
   Future<Map<String, dynamic>> getEvolutionStatus() async {
     if (kDebugMode) {
       debugPrint('[CRM][HTTP] GET /integrations/evolution/status');
@@ -980,6 +1063,64 @@ class CrmRemoteDataSource {
     } catch (e) {
       if (kDebugMode) debugPrint('[CRM] Error getting status: $e');
       rethrow;
+    }
+  }
+
+  Future<List<CrmInstanceDirectoryItem>> listInstances() async {
+    if (kDebugMode) debugPrint('[CRM][HTTP] GET /crm/instances');
+    try {
+      final res = await _dio.get('/crm/instances');
+      final data = res.data;
+      if (data is! Map<String, dynamic>) return const [];
+      final raw = (data['items'] as List<dynamic>? ?? const <dynamic>[]);
+      return raw
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .map(CrmInstanceDirectoryItem.fromJson)
+          .toList(growable: false);
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'LIST_INSTANCES');
+    }
+  }
+
+  Future<void> transferChat({
+    required String chatId,
+    String? toInstanceId,
+    String? toInstanceName,
+    String? note,
+  }) async {
+    if (kDebugMode) debugPrint('[CRM][HTTP] POST /crm/chats/$chatId/transfer');
+    final id = (toInstanceId ?? '').trim();
+    final name = (toInstanceName ?? '').trim();
+    if (id.isEmpty && name.isEmpty) {
+      throw Exception('Debe seleccionar una instancia destino');
+    }
+
+    try {
+      await _dio.post('/crm/chats/$chatId/transfer', data: {
+        if (id.isNotEmpty) 'to_instance_id': id,
+        if (name.isNotEmpty) 'to_instance_name': name,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      });
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'TRANSFER_CHAT');
+    }
+  }
+
+  Future<CrmOperationsItemsResponse> listOperationsItems() async {
+    if (kDebugMode) debugPrint('[CRM][HTTP] GET /crm/operations/items');
+    try {
+      final res = await _dio.get('/crm/operations/items');
+      final data = res.data;
+      if (data is! Map<String, dynamic>) {
+        return const CrmOperationsItemsResponse(
+          agenda: [],
+          levantamientos: [],
+        );
+      }
+      return CrmOperationsItemsResponse.fromJson(data);
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'LIST_OPERATIONS_ITEMS');
     }
   }
 

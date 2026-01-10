@@ -5,6 +5,7 @@ class AppRoutes {
   static const accessRevoked = '/access-revoked';
 
   static const crm = '/crm';
+  static const crmInstanceSettings = '/crm/settings/instance';
   static const customers = '/customers';
   static const presupuesto = '/presupuesto';
   static const cotizaciones = '/cotizaciones';
