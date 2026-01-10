@@ -9,10 +9,10 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/services/app_config.dart';
 import '../../../core/widgets/module_page.dart';
 import '../models/categoria_producto.dart';
+import '../models/marca_producto.dart';
 import '../models/producto.dart';
 import '../state/catalog_providers.dart';
-import '../../../modules/pos/models/pos_models.dart';
-import '../../../modules/pos/state/pos_providers.dart';
+import '../../../modules/inventory/state/inventory_providers.dart';
 
 String _catalogPublicBase() {
   final base = AppConfig.apiBaseUrl;
@@ -53,31 +53,13 @@ class CatalogoScreen extends ConsumerStatefulWidget {
 class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
   final _searchCtrl = TextEditingController();
 
-  Map<String, PosProduct> _posStockIndex = const {};
-
   @override
   void initState() {
     super.initState();
     // Kick off offline-first bootstrap.
-    Future.microtask(
-      () => ref.read(catalogControllerProvider.notifier).bootstrap(),
-    );
-
-    // Best-effort stock snapshot (from POS cache). If missing, fetch once.
-    Future.microtask(() async {
-      try {
-        final repo = ref.read(posRepositoryProvider);
-        var items = await repo.readCachedProducts();
-        if (items.isEmpty) {
-          items = await repo.listAllProducts();
-        }
-        if (!mounted) return;
-        setState(() {
-          _posStockIndex = {for (final p in items) p.id: p};
-        });
-      } catch (_) {
-        // Ignore stock load errors; catalog should still work.
-      }
+    // Avoid touching providers during initState (Riverpod best-practice).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(catalogControllerProvider.notifier).bootstrap();
     });
   }
 
@@ -94,27 +76,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
 
     final isMobile = MediaQuery.of(context).size.width < 900;
 
-    final title = 'Productos';
-    final actions = <Widget>[
-      IconButton(
-        tooltip: 'Refrescar',
-        onPressed: state.isLoading ? null : () => controller.loadProductos(),
-        icon: const Icon(Icons.refresh),
-      ),
-      const SizedBox(width: 8),
-      FilledButton.icon(
-        onPressed: state.isLoading
-            ? null
-            : () => _openProductoDialog(context, categorias: state.categorias),
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo'),
-      ),
-    ];
-
     return ModulePage(
-      title: title,
+      title: '',
       denseHeader: true,
-      actions: actions,
+      actions: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -124,6 +89,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
             selectedCategoriaId: state.selectedCategoriaId,
             includeInactive: state.includeInactive,
             isOnline: state.isOnline,
+            isLoading: state.isLoading,
             onChangedQuery: (v) {
               controller.setQuery(v);
               controller.loadProductos();
@@ -136,7 +102,12 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
               controller.setIncludeInactive(v);
               controller.loadProductos();
             },
-            onCreateCategoria: () => _openCategoriaDialog(context),
+            onSync: () => controller.syncAll(),
+            onCreateProducto: () =>
+                _openProductoDialog(context, categorias: state.categorias),
+            onManageCategorias: () => _openCategoriasManagerDialog(context),
+            onAdjustStock: () => _openStockAdjustmentDialog(context),
+            onManageMarcas: () => _openMarcasManagerDialog(context),
           ),
           if (state.error != null)
             Padding(
@@ -191,7 +162,6 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                         _ProductsGrid(
                           productos: state.productos,
                           isMobile: isMobile,
-                          posStockIndex: _posStockIndex,
                           onOpen: (p) async {
                             // Best-effort increment.
                             await controller.incrementSearch(p.id);
@@ -326,6 +296,767 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     return resultado;
   }
 
+  Future<void> _openCategoriasManagerDialog(BuildContext context) async {
+    final ctrl = ref.read(catalogControllerProvider.notifier);
+    final nameCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final screenW = MediaQuery.of(dialogContext).size.width;
+        final maxW = screenW < 860 ? screenW - 24 : 860.0;
+
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 18,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxW, maxHeight: 620),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final st = ref.watch(catalogControllerProvider);
+                  final cats = st.categorias;
+                  final cs = Theme.of(context).colorScheme;
+
+                  Future<void> create() async {
+                    final nombre = nameCtrl.text.trim();
+                    final descripcion = descCtrl.text.trim().isEmpty
+                        ? null
+                        : descCtrl.text.trim();
+                    if (nombre.isEmpty) return;
+                    await ctrl.createCategoria(
+                      nombre: nombre,
+                      descripcion: descripcion,
+                    );
+                    nameCtrl.clear();
+                    descCtrl.clear();
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Categorías',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Material(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              TextField(
+                                controller: nameCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Nueva categoría',
+                                  prefixIcon: Icon(Icons.category_outlined),
+                                ),
+                                onSubmitted: (_) => create(),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: descCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Descripción (opcional)',
+                                  prefixIcon: Icon(Icons.notes_outlined),
+                                ),
+                                maxLines: 2,
+                              ),
+                              const SizedBox(height: 12),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: FilledButton.icon(
+                                  onPressed: st.isLoading ? null : create,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Crear'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: cats.isEmpty
+                            ? const Center(child: Text('No hay categorías'))
+                            : ListView.separated(
+                                itemCount: cats.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, i) {
+                                  final c = cats[i];
+                                  return ListTile(
+                                    dense: true,
+                                    leading: Icon(
+                                      c.isActive
+                                          ? Icons.category_outlined
+                                          : Icons.category,
+                                      color: c.isActive
+                                          ? cs.primary
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                    title: Text(c.nombre),
+                                    subtitle:
+                                        c.descripcion != null &&
+                                            c.descripcion!.trim().isNotEmpty
+                                        ? Text(
+                                            c.descripcion!,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          )
+                                        : null,
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Editar',
+                                          onPressed: st.isLoading
+                                              ? null
+                                              : () async {
+                                                  final editName =
+                                                      TextEditingController(
+                                                        text: c.nombre,
+                                                      );
+                                                  final editDesc =
+                                                      TextEditingController(
+                                                        text:
+                                                            c.descripcion ?? '',
+                                                      );
+                                                  final ok = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (_) => AlertDialog(
+                                                      title: const Text(
+                                                        'Editar categoría',
+                                                      ),
+                                                      content: SizedBox(
+                                                        width: 520,
+                                                        child: Column(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            TextField(
+                                                              controller:
+                                                                  editName,
+                                                              decoration:
+                                                                  const InputDecoration(
+                                                                    labelText:
+                                                                        'Nombre',
+                                                                  ),
+                                                              autofocus: true,
+                                                            ),
+                                                            const SizedBox(
+                                                              height: 12,
+                                                            ),
+                                                            TextField(
+                                                              controller:
+                                                                  editDesc,
+                                                              decoration:
+                                                                  const InputDecoration(
+                                                                    labelText:
+                                                                        'Descripción (opcional)',
+                                                                  ),
+                                                              maxLines: 2,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(false),
+                                                          child: const Text(
+                                                            'Cancelar',
+                                                          ),
+                                                        ),
+                                                        FilledButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(true),
+                                                          child: const Text(
+                                                            'Guardar',
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (ok != true) return;
+                                                  final nombre = editName.text
+                                                      .trim();
+                                                  if (nombre.isEmpty) return;
+                                                  await ctrl.updateCategoria(
+                                                    c.id,
+                                                    nombre: nombre,
+                                                    descripcion: editDesc.text
+                                                        .trim(),
+                                                  );
+                                                },
+                                          icon: const Icon(Icons.edit_outlined),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Eliminar',
+                                          onPressed:
+                                              (!c.isActive || st.isLoading)
+                                              ? null
+                                              : () async {
+                                                  final ok = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (_) => AlertDialog(
+                                                      title: const Text(
+                                                        'Eliminar categoría',
+                                                      ),
+                                                      content: Text(
+                                                        '¿Seguro que deseas eliminar “${c.nombre}”?',
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(false),
+                                                          child: const Text(
+                                                            'Cancelar',
+                                                          ),
+                                                        ),
+                                                        FilledButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(true),
+                                                          child: const Text(
+                                                            'Eliminar',
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (ok != true) return;
+                                                  final okDelete = await ctrl
+                                                      .deleteCategoria(c.id);
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          okDelete
+                                                              ? 'Categoría eliminada'
+                                                              : (ref
+                                                                        .read(
+                                                                          catalogControllerProvider,
+                                                                        )
+                                                                        .error ??
+                                                                    'No se pudo eliminar'),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                            color: Colors.red,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      if (st.error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Text(
+                            st.error!,
+                            style: TextStyle(
+                              color: cs.error,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openMarcasManagerDialog(BuildContext context) async {
+    final ctrl = ref.read(catalogControllerProvider.notifier);
+    final nameCtrl = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final screenW = MediaQuery.of(dialogContext).size.width;
+        final maxW = screenW < 760 ? screenW - 24 : 760.0;
+
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 18,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxW, maxHeight: 600),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final st = ref.watch(catalogControllerProvider);
+                  final marcas = st.marcas;
+                  final cs = Theme.of(context).colorScheme;
+
+                  Future<void> create() async {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) return;
+                    await ctrl.createMarca(name);
+                    nameCtrl.clear();
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Marcas',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Material(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: nameCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Nueva marca',
+                                    prefixIcon: Icon(Icons.sell_outlined),
+                                  ),
+                                  onSubmitted: (_) => create(),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              FilledButton.icon(
+                                onPressed: st.isLoading ? null : create,
+                                icon: const Icon(Icons.add),
+                                label: const Text('Crear'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: marcas.isEmpty
+                            ? const Center(child: Text('No hay marcas'))
+                            : ListView.separated(
+                                itemCount: marcas.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, i) {
+                                  final m = marcas[i];
+                                  return ListTile(
+                                    dense: true,
+                                    leading: const Icon(Icons.sell_outlined),
+                                    title: Text(m.nombre),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Editar',
+                                          onPressed: st.isLoading
+                                              ? null
+                                              : () async {
+                                                  final editCtrl =
+                                                      TextEditingController(
+                                                        text: m.nombre,
+                                                      );
+                                                  final ok = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (_) => AlertDialog(
+                                                      title: const Text(
+                                                        'Editar marca',
+                                                      ),
+                                                      content: SizedBox(
+                                                        width: 480,
+                                                        child: TextField(
+                                                          controller: editCtrl,
+                                                          decoration:
+                                                              const InputDecoration(
+                                                                labelText:
+                                                                    'Nombre',
+                                                              ),
+                                                          autofocus: true,
+                                                        ),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(false),
+                                                          child: const Text(
+                                                            'Cancelar',
+                                                          ),
+                                                        ),
+                                                        FilledButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(true),
+                                                          child: const Text(
+                                                            'Guardar',
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (ok != true) return;
+                                                  final nextName = editCtrl.text
+                                                      .trim();
+                                                  if (nextName.isEmpty) return;
+                                                  final okRename = await ctrl
+                                                      .renameMarca(
+                                                        m.id,
+                                                        nextName,
+                                                      );
+                                                  if (context.mounted &&
+                                                      !okRename) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          ref
+                                                                  .read(
+                                                                    catalogControllerProvider,
+                                                                  )
+                                                                  .error ??
+                                                              'No se pudo actualizar',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                          icon: const Icon(Icons.edit_outlined),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Eliminar',
+                                          onPressed: st.isLoading
+                                              ? null
+                                              : () async {
+                                                  final ok = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (_) => AlertDialog(
+                                                      title: const Text(
+                                                        'Eliminar marca',
+                                                      ),
+                                                      content: Text(
+                                                        '¿Seguro que deseas eliminar “${m.nombre}”?\n\nEsto quitará la marca de los productos que la usan.',
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(false),
+                                                          child: const Text(
+                                                            'Cancelar',
+                                                          ),
+                                                        ),
+                                                        FilledButton(
+                                                          onPressed: () =>
+                                                              Navigator.of(
+                                                                context,
+                                                              ).pop(true),
+                                                          child: const Text(
+                                                            'Eliminar',
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (ok != true) return;
+                                                  final okDelete = await ctrl
+                                                      .deleteMarca(m.id);
+                                                  if (context.mounted &&
+                                                      !okDelete) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          ref
+                                                                  .read(
+                                                                    catalogControllerProvider,
+                                                                  )
+                                                                  .error ??
+                                                              'No se pudo eliminar',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                            color: Colors.red,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      if (st.error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Text(
+                            st.error!,
+                            style: TextStyle(
+                              color: cs.error,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openStockAdjustmentDialog(BuildContext context) async {
+    final ctrl = ref.read(catalogControllerProvider.notifier);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final cs = Theme.of(dialogContext).colorScheme;
+        final products = ref.read(catalogControllerProvider).productos;
+
+        Producto? selected;
+        final qtyCtrl = TextEditingController();
+        final noteCtrl = TextEditingController();
+        var isSubmitting = false;
+
+        bool validQty(String raw) {
+          final v = raw.trim();
+          if (v.isEmpty) return false;
+          final n = int.tryParse(v);
+          return n != null && n > 0;
+        }
+
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            Future<void> submit() async {
+              final p = selected;
+              final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+              if (p == null || qty <= 0) return;
+              if (isSubmitting) return;
+
+              setLocalState(() => isSubmitting = true);
+              final ok = await ctrl.addStock(
+                p.id,
+                qty: qty,
+                note: noteCtrl.text.trim().isEmpty
+                    ? null
+                    : noteCtrl.text.trim(),
+              );
+              setLocalState(() => isSubmitting = false);
+
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ok
+                        ? 'Stock actualizado'
+                        : (ref.read(catalogControllerProvider).error ??
+                              'No se pudo actualizar el stock'),
+                  ),
+                ),
+              );
+              if (ok) Navigator.of(dialogContext).pop();
+            }
+
+            final canSubmit =
+                selected != null && validQty(qtyCtrl.text) && !isSubmitting;
+
+            final screenW = MediaQuery.of(dialogContext).size.width;
+            final maxW = screenW < 720 ? screenW - 24 : 720.0;
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 18,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxW),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Ajuste de stock',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cerrar',
+                            onPressed: isSubmitting
+                                ? null
+                                : () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Autocomplete<Producto>(
+                        optionsBuilder: (textEditingValue) {
+                          final q = textEditingValue.text.trim().toLowerCase();
+                          if (q.isEmpty)
+                            return const Iterable<Producto>.empty();
+                          return products
+                              .where((p) => p.nombre.toLowerCase().contains(q))
+                              .take(20);
+                        },
+                        displayStringForOption: (p) => p.nombre,
+                        onSelected: (p) => setLocalState(() => selected = p),
+                        fieldViewBuilder:
+                            (context, textCtrl, focusNode, onFieldSubmitted) {
+                              return TextField(
+                                controller: textCtrl,
+                                focusNode: focusNode,
+                                decoration: InputDecoration(
+                                  labelText: 'Producto',
+                                  prefixIcon: const Icon(
+                                    Icons.inventory_2_outlined,
+                                  ),
+                                  helperText: selected == null
+                                      ? 'Busca y selecciona un producto'
+                                      : null,
+                                ),
+                              );
+                            },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: qtyCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Cantidad a agregar',
+                          prefixIcon: Icon(Icons.add_circle_outline),
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        onChanged: (_) => setLocalState(() {}),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: noteCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Motivo / nota (opcional)',
+                          prefixIcon: Icon(Icons.notes_outlined),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: canSubmit ? submit : null,
+                              icon: isSubmitting
+                                  ? SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: cs.onPrimary,
+                                      ),
+                                    )
+                                  : const Icon(Icons.check),
+                              label: const Text('Confirmar'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _openCategoriaDialog(BuildContext context) async {
     final controller = ref.read(catalogControllerProvider.notifier);
     final nameCtrl = TextEditingController();
@@ -386,6 +1117,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     Producto? initial,
   }) async {
     final controller = ref.read(catalogControllerProvider.notifier);
+    final marcas = ref.read(catalogControllerProvider).marcas;
+    final suppliersFuture = ref
+        .read(inventoryRepositoryProvider)
+        .listSuppliers();
 
     final formKey = GlobalKey<FormState>();
     final nombreCtrl = TextEditingController(text: initial?.nombre ?? '');
@@ -396,6 +1131,20 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
       text: initial != null ? initial.precioVenta.toStringAsFixed(2) : '',
     );
     final imagenCtrl = TextEditingController(text: initial?.imagenUrl ?? '');
+
+    final stockCtrl = TextEditingController(
+      text: (initial?.stock ?? 0).toString(),
+    );
+    final minStockCtrl = TextEditingController(
+      text: (initial?.minStock ?? 0).toString(),
+    );
+    String? selectedMarca = (initial?.brandId ?? '').trim().isEmpty
+        ? null
+        : initial!.brandId;
+    String? selectedSupplierId = (initial?.supplier ?? '').trim().isEmpty
+        ? null
+        : initial!.supplier;
+    final supplierTextCtrl = TextEditingController();
 
     String? categoriaId = initial?.categoriaId;
 
@@ -579,6 +1328,193 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: stockCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Stock',
+                                  prefixIcon: Icon(Icons.inventory_outlined),
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                validator: (v) {
+                                  final raw = (v ?? '').trim();
+                                  if (raw.isEmpty) return 'Requerido';
+                                  final n = int.tryParse(raw);
+                                  if (n == null) return 'Solo números';
+                                  if (n < 0) return 'No puede ser negativo';
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: minStockCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Mínimo stock',
+                                  prefixIcon: Icon(
+                                    Icons.warning_amber_outlined,
+                                  ),
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                validator: (v) {
+                                  final raw = (v ?? '').trim();
+                                  if (raw.isEmpty) return 'Requerido';
+                                  final n = int.tryParse(raw);
+                                  if (n == null) return 'Solo números';
+                                  if (n < 0) return 'No puede ser negativo';
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: selectedMarca,
+                                items: [
+                                  const DropdownMenuItem<String>(
+                                    value: null,
+                                    child: Text('(Sin marca)'),
+                                  ),
+                                  for (final m in marcas)
+                                    DropdownMenuItem<String>(
+                                      value: m.nombre,
+                                      child: Text(
+                                        m.nombre,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) =>
+                                    setLocalState(() => selectedMarca = v),
+                                decoration: const InputDecoration(
+                                  labelText: 'Marca (opcional)',
+                                  prefixIcon: Icon(Icons.sell_outlined),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FutureBuilder<List<Map<String, dynamic>>>(
+                                future: suppliersFuture,
+                                builder: (context, snap) {
+                                  final suppliers =
+                                      snap.data ??
+                                      const <Map<String, dynamic>>[];
+                                  if (supplierTextCtrl.text.trim().isEmpty &&
+                                      selectedSupplierId != null) {
+                                    final match = suppliers
+                                        .where(
+                                          (s) =>
+                                              (s['id'] ?? '').toString() ==
+                                              selectedSupplierId,
+                                        )
+                                        .firstWhere(
+                                          (_) => true,
+                                          orElse: () =>
+                                              const <String, dynamic>{},
+                                        );
+                                    final name = (match['name'] ?? '')
+                                        .toString();
+                                    if (name.trim().isNotEmpty)
+                                      supplierTextCtrl.text = name;
+                                  }
+
+                                  return Autocomplete<Map<String, dynamic>>(
+                                    optionsBuilder: (textEditingValue) {
+                                      final q = textEditingValue.text
+                                          .trim()
+                                          .toLowerCase();
+                                      if (q.isEmpty)
+                                        return const Iterable<
+                                          Map<String, dynamic>
+                                        >.empty();
+                                      return suppliers
+                                          .where((s) {
+                                            final name = (s['name'] ?? '')
+                                                .toString()
+                                                .toLowerCase();
+                                            return name.contains(q);
+                                          })
+                                          .take(20);
+                                    },
+                                    displayStringForOption: (s) =>
+                                        (s['name'] ?? '').toString(),
+                                    onSelected: (s) {
+                                      final id = (s['id'] ?? '')
+                                          .toString()
+                                          .trim();
+                                      final name = (s['name'] ?? '').toString();
+                                      setLocalState(() {
+                                        selectedSupplierId = id.isEmpty
+                                            ? null
+                                            : id;
+                                        supplierTextCtrl.text = name;
+                                      });
+                                    },
+                                    fieldViewBuilder:
+                                        (
+                                          context,
+                                          textCtrl,
+                                          focusNode,
+                                          onFieldSubmitted,
+                                        ) {
+                                          if (textCtrl.text.isEmpty &&
+                                              supplierTextCtrl
+                                                  .text
+                                                  .isNotEmpty) {
+                                            textCtrl.text =
+                                                supplierTextCtrl.text;
+                                          }
+                                          return TextFormField(
+                                            controller: textCtrl,
+                                            focusNode: focusNode,
+                                            decoration: InputDecoration(
+                                              labelText: 'Proveedor (opcional)',
+                                              prefixIcon: const Icon(
+                                                Icons.local_shipping_outlined,
+                                              ),
+                                              suffixIcon:
+                                                  selectedSupplierId == null
+                                                  ? null
+                                                  : IconButton(
+                                                      tooltip:
+                                                          'Quitar proveedor',
+                                                      onPressed: () =>
+                                                          setLocalState(() {
+                                                            selectedSupplierId =
+                                                                null;
+                                                            supplierTextCtrl
+                                                                .clear();
+                                                            textCtrl.clear();
+                                                          }),
+                                                      icon: const Icon(
+                                                        Icons.clear,
+                                                      ),
+                                                    ),
+                                            ),
+                                          );
+                                        },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
                         TextFormField(
                           controller: imagenCtrl,
                           decoration: InputDecoration(
@@ -635,6 +1571,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     final costo = parseMoney(costoCtrl.text) ?? 0;
     final precio = parseMoney(precioCtrl.text) ?? 0;
     final catId = categoriaId?.trim();
+    final stock = int.tryParse(stockCtrl.text.trim()) ?? 0;
+    final minStock = int.tryParse(minStockCtrl.text.trim()) ?? 0;
     if (catId == null || catId.isEmpty) return;
 
     if (initial == null) {
@@ -644,6 +1582,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
         precioVenta: precio,
         imagenUrl: imagenUrl,
         categoriaId: catId,
+        stock: stock,
+        minStock: minStock,
+        brandId: selectedMarca,
+        supplierId: selectedSupplierId,
       );
     } else {
       await controller.updateProducto(
@@ -653,6 +1595,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
         precioVenta: precio,
         imagenUrl: imagenUrl,
         categoriaId: catId,
+        stock: stock,
+        minStock: minStock,
+        brandId: selectedMarca,
+        supplierId: selectedSupplierId,
       );
     }
   }
@@ -999,11 +1945,16 @@ class _FiltersBar extends StatelessWidget {
   final String? selectedCategoriaId;
   final bool includeInactive;
   final bool isOnline;
+  final bool isLoading;
 
   final ValueChanged<String> onChangedQuery;
   final ValueChanged<String?> onChangedCategoria;
   final ValueChanged<bool> onChangedIncludeInactive;
-  final VoidCallback onCreateCategoria;
+  final VoidCallback onSync;
+  final VoidCallback onCreateProducto;
+  final VoidCallback onManageCategorias;
+  final VoidCallback onAdjustStock;
+  final VoidCallback onManageMarcas;
 
   const _FiltersBar({
     required this.searchCtrl,
@@ -1011,10 +1962,15 @@ class _FiltersBar extends StatelessWidget {
     required this.selectedCategoriaId,
     required this.includeInactive,
     required this.isOnline,
+    required this.isLoading,
     required this.onChangedQuery,
     required this.onChangedCategoria,
     required this.onChangedIncludeInactive,
-    required this.onCreateCategoria,
+    required this.onSync,
+    required this.onCreateProducto,
+    required this.onManageCategorias,
+    required this.onAdjustStock,
+    required this.onManageMarcas,
   });
 
   @override
@@ -1024,87 +1980,116 @@ class _FiltersBar extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(
-              width: isMobile ? 320 : 420,
-              child: TextField(
-                controller: searchCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Buscar producto',
-                  prefixIcon: Icon(Icons.search),
-                ),
-                onChanged: onChangedQuery,
-              ),
-            ),
-            SizedBox(
-              width: 260,
-              child: DropdownButtonFormField<String>(
-                initialValue: selectedCategoriaId,
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('Todas las categorías'),
-                  ),
-                  for (final c in categorias)
-                    DropdownMenuItem<String>(
-                      value: c.id,
-                      child: Text(
-                        c.nombre,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: onChangedCategoria,
-                decoration: const InputDecoration(
-                  labelText: 'Categoría',
-                  prefixIcon: Icon(Icons.category_outlined),
-                ),
-              ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Switch(
-                  value: includeInactive,
-                  onChanged: onChangedIncludeInactive,
-                ),
-                const SizedBox(width: 6),
-                const Text('Incluir inactivos'),
-              ],
-            ),
-            OutlinedButton.icon(
-              onPressed: onCreateCategoria,
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Categoría'),
-            ),
-            if (!isOnline)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: constraints.maxWidth),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.wifi_off,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Offline',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontWeight: FontWeight.w700,
+                    SizedBox(
+                      width: isMobile ? 320 : 420,
+                      child: TextField(
+                        controller: searchCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Buscar producto',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: onChangedQuery,
                       ),
                     ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 260,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: selectedCategoriaId,
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('Todas las categorías'),
+                          ),
+                          for (final c in categorias)
+                            DropdownMenuItem<String>(
+                              value: c.id,
+                              child: Text(
+                                c.nombre,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: onChangedCategoria,
+                        decoration: const InputDecoration(
+                          labelText: 'Categoría',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Switch(
+                          value: includeInactive,
+                          onChanged: onChangedIncludeInactive,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text('Incluir inactivos'),
+                      ],
+                    ),
+                    const Spacer(),
+                    OutlinedButton.icon(
+                      onPressed: isLoading ? null : onManageCategorias,
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('+ Categoría'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: isLoading ? null : onAdjustStock,
+                      icon: const Icon(Icons.playlist_add_outlined),
+                      label: const Text('Ajuste de stock'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: isLoading ? null : onManageMarcas,
+                      icon: const Icon(Icons.sell_outlined),
+                      label: const Text('Marca'),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Sincronizar',
+                      onPressed: isLoading ? null : onSync,
+                      icon: const Icon(Icons.sync),
+                    ),
+                    const SizedBox(width: 4),
+                    FilledButton.icon(
+                      onPressed: isLoading ? null : onCreateProducto,
+                      icon: const Icon(Icons.add),
+                      label: const Text('+ Nuevo'),
+                    ),
+                    if (!isOnline) ...[
+                      const SizedBox(width: 10),
+                      Icon(
+                        Icons.wifi_off,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Offline',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -1114,7 +2099,6 @@ class _FiltersBar extends StatelessWidget {
 class _ProductsGrid extends StatelessWidget {
   final List<Producto> productos;
   final bool isMobile;
-  final Map<String, PosProduct> posStockIndex;
   final ValueChanged<Producto> onOpen;
   final ValueChanged<Producto> onEdit;
   final ValueChanged<Producto> onDelete;
@@ -1122,7 +2106,6 @@ class _ProductsGrid extends StatelessWidget {
   const _ProductsGrid({
     required this.productos,
     required this.isMobile,
-    required this.posStockIndex,
     required this.onOpen,
     required this.onEdit,
     required this.onDelete,
@@ -1145,11 +2128,8 @@ class _ProductsGrid extends StatelessWidget {
       itemCount: productos.length,
       itemBuilder: (context, i) {
         final p = productos[i];
-        final pos = posStockIndex[p.id];
         return _ProductCard(
           producto: p,
-          stockQty: pos?.stockQty,
-          minStock: pos?.minStock,
           onTap: () => onOpen(p),
           onEdit: () => onEdit(p),
           onDelete: () => onDelete(p),
@@ -1161,28 +2141,23 @@ class _ProductsGrid extends StatelessWidget {
 
 class _ProductCard extends StatelessWidget {
   final Producto producto;
-  final double? stockQty;
-  final double? minStock;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _ProductCard({
     required this.producto,
-    required this.stockQty,
-    required this.minStock,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
   });
 
   Color _stockColor(ColorScheme cs) {
-    final qty = stockQty;
-    if (qty == null) return cs.onSurfaceVariant;
-    final min = minStock ?? 0;
+    final qty = producto.stock;
+    final min = producto.minStock;
     if (qty <= 0) return cs.error;
-    if (qty <= min) return cs.tertiary;
-    return cs.primary;
+    if (qty <= min) return Colors.amber.shade800;
+    return Colors.green.shade700;
   }
 
   @override
@@ -1395,7 +2370,7 @@ class _ProductCard extends StatelessWidget {
                             Expanded(
                               child: _PriceChip(
                                 label: 'Stock',
-                                value: (stockQty ?? 0).toStringAsFixed(0),
+                                value: producto.stock.toString(),
                                 color: _stockColor(cs),
                               ),
                             ),

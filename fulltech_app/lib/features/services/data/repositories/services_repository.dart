@@ -39,8 +39,11 @@ class ServicesRepository {
         }
 
         return services;
-      } catch (e) {
+      } catch (e, st) {
         print('Error fetching services remotely: $e');
+        // Best-effort diagnostics (helps identify bad payloads / type issues).
+        // ignore: avoid_print
+        print(st);
         // Fallback to local
       }
     }

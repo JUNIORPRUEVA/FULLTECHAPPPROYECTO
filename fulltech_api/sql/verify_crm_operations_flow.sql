@@ -1,0 +1,412 @@
+-- ============================================================================
+-- Script SQL: Verificación de Flujo CRM → Operaciones
+-- ============================================================================
+-- Este script verifica que al marcar un chat con estado "agendado" o 
+-- "por_levantamiento", toda la información se crea correctamente en el
+-- módulo de operaciones en la sesión correcta.
+-- ============================================================================
+
+-- Configuración: Reemplaza estos valores con tus datos de prueba
+-- \set chat_id 'tu-chat-id-aqui'
+-- \set empresa_id 'tu-empresa-id-aqui'
+
+\echo '╔═══════════════════════════════════════════════════════════════════════╗'
+\echo '║  VERIFICACIÓN: FLUJO CRM → OPERACIONES                                ║'
+\echo '╚═══════════════════════════════════════════════════════════════════════╝'
+\echo ''
+
+-- ============================================================================
+-- 1. VERIFICAR CHAT Y SU ESTADO
+-- ============================================================================
+\echo '1️⃣  CHAT SELECCIONADO'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  id,
+  empresa_id,
+  wa_id,
+  phone,
+  display_name,
+  status,
+  scheduled_at,
+  location_text,
+  assigned_tech_id,
+  service_id,
+  updated_at
+FROM crm_chat
+WHERE id = :'chat_id'
+\gx
+
+-- ============================================================================
+-- 2. VERIFICAR CLIENTE CREADO
+-- ============================================================================
+\echo ''
+\echo '2️⃣  CLIENTE ASOCIADO'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+-- Buscar cliente por teléfono del chat
+WITH chat_info AS (
+  SELECT 
+    id,
+    empresa_id,
+    phone,
+    COALESCE(phone, '+' || wa_id) as phone_search
+  FROM crm_chat
+  WHERE id = :'chat_id'
+)
+SELECT 
+  c.id,
+  c.empresa_id,
+  c.nombre,
+  c.telefono,
+  c.origen,
+  c.direccion,
+  c.ubicacion_mapa,
+  c.created_at,
+  CASE 
+    WHEN c.empresa_id = ci.empresa_id THEN '✅ Correcto'
+    ELSE '❌ ERROR: empresa_id no coincide'
+  END as empresa_check
+FROM customer c
+CROSS JOIN chat_info ci
+WHERE c.telefono LIKE '%' || RIGHT(ci.phone_search, 10) || '%'
+  AND c.deleted_at IS NULL
+ORDER BY c.created_at DESC
+LIMIT 1
+\gx
+
+-- ============================================================================
+-- 3. VERIFICAR JOBS DE OPERACIONES
+-- ============================================================================
+\echo ''
+\echo '3️⃣  JOBS DE OPERACIONES'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  oj.id,
+  oj.empresa_id,
+  oj.crm_chat_id,
+  oj.crm_customer_id,
+  oj.crm_task_type,
+  oj.status,
+  oj.customer_name,
+  oj.customer_phone,
+  oj.service_type,
+  oj.scheduled_at,
+  oj.location_text,
+  oj.lat,
+  oj.lng,
+  oj.assigned_tech_id,
+  oj.service_id,
+  oj.notes,
+  oj.created_at,
+  oj.updated_at,
+  CASE 
+    WHEN oj.crm_chat_id = :'chat_id' THEN '✅ Correcto'
+    ELSE '❌ ERROR: chat_id no coincide'
+  END as chat_check,
+  CASE 
+    WHEN oj.empresa_id = :'empresa_id' THEN '✅ Correcto'
+    ELSE '❌ ERROR: empresa_id no coincide'
+  END as empresa_check
+FROM operations_jobs oj
+WHERE oj.crm_chat_id = :'chat_id'
+  AND oj.deleted_at IS NULL
+ORDER BY oj.created_at DESC
+\gx
+
+-- ============================================================================
+-- 4. CONTAR JOBS ACTIVOS (VERIFICAR NO HAY DUPLICADOS)
+-- ============================================================================
+\echo ''
+\echo '4️⃣  VERIFICACIÓN DE DUPLICADOS'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  crm_task_type,
+  COUNT(*) as cantidad,
+  CASE 
+    WHEN COUNT(*) = 1 THEN '✅ Correcto (sin duplicados)'
+    WHEN COUNT(*) > 1 THEN '❌ ERROR: Jobs duplicados!'
+    ELSE '⚠️  No hay jobs de este tipo'
+  END as estado
+FROM operations_jobs
+WHERE crm_chat_id = :'chat_id'
+  AND deleted_at IS NULL
+  AND status NOT IN ('completed', 'closed', 'cancelled')
+GROUP BY crm_task_type
+ORDER BY crm_task_type;
+
+-- ============================================================================
+-- 5. VERIFICAR SCHEDULE (PARA SERVICIOS AGENDADOS)
+-- ============================================================================
+\echo ''
+\echo '5️⃣  SCHEDULE DE OPERACIONES'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  os.id,
+  os.job_id,
+  os.scheduled_date,
+  os.preferred_time,
+  os.assigned_tech_id,
+  os.additional_tech_ids,
+  os.customer_availability_notes,
+  oj.crm_task_type,
+  CASE 
+    WHEN oj.crm_task_type IN ('LEVANTAMIENTO', 'SERVICIO_RESERVADO') 
+    THEN '✅ Tipo correcto para schedule'
+    ELSE '⚠️  Tipo inesperado'
+  END as tipo_check
+FROM operations_schedule os
+JOIN operations_jobs oj ON os.job_id = oj.id
+WHERE oj.crm_chat_id = :'chat_id'
+  AND oj.deleted_at IS NULL
+ORDER BY os.scheduled_date DESC
+\gx
+
+-- ============================================================================
+-- 6. VERIFICAR TÉCNICO ASIGNADO
+-- ============================================================================
+\echo ''
+\echo '6️⃣  TÉCNICO ASIGNADO'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  u.id,
+  u.empresa_id,
+  u.nombre_completo,
+  u.email,
+  u.rol,
+  u.telefono,
+  u.estado,
+  CASE 
+    WHEN u.estado = 'activo' THEN '✅ Activo'
+    ELSE '⚠️  Inactivo'
+  END as estado_check,
+  CASE 
+    WHEN u.empresa_id = :'empresa_id' THEN '✅ Empresa correcta'
+    ELSE '❌ ERROR: empresa_id no coincide'
+  END as empresa_check
+FROM usuario u
+WHERE u.id IN (
+  SELECT assigned_tech_id 
+  FROM operations_jobs 
+  WHERE crm_chat_id = :'chat_id' 
+    AND deleted_at IS NULL
+)
+\gx
+
+-- ============================================================================
+-- 7. VERIFICAR SERVICIO ASOCIADO
+-- ============================================================================
+\echo ''
+\echo '7️⃣  SERVICIO ASOCIADO'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  s.id,
+  s.empresa_id,
+  s.name,
+  s.descripcion,
+  s.precio_base,
+  s.duracion_estimada_horas,
+  s.is_active,
+  CASE 
+    WHEN s.is_active = true THEN '✅ Activo'
+    ELSE '⚠️  Inactivo'
+  END as estado_check,
+  CASE 
+    WHEN s.empresa_id = :'empresa_id' THEN '✅ Empresa correcta'
+    ELSE '❌ ERROR: empresa_id no coincide'
+  END as empresa_check
+FROM service s
+WHERE s.id IN (
+  SELECT service_id 
+  FROM operations_jobs 
+  WHERE crm_chat_id = :'chat_id' 
+    AND deleted_at IS NULL
+)
+\gx
+
+-- ============================================================================
+-- 8. HISTORIAL DE CAMBIOS
+-- ============================================================================
+\echo ''
+\echo '8️⃣  HISTORIAL DE CAMBIOS'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  ojh.id,
+  ojh.job_id,
+  ojh.action_type,
+  ojh.old_status,
+  ojh.new_status,
+  ojh.note,
+  ojh.created_at,
+  u.nombre_completo as created_by
+FROM operations_job_history ojh
+LEFT JOIN usuario u ON ojh.created_by_user_id = u.id
+WHERE ojh.job_id IN (
+  SELECT id 
+  FROM operations_jobs 
+  WHERE crm_chat_id = :'chat_id'
+)
+ORDER BY ojh.created_at DESC
+LIMIT 10
+\gx
+
+-- ============================================================================
+-- 9. VERIFICAR WARRANTY TICKETS (SI APLICA)
+-- ============================================================================
+\echo ''
+\echo '9️⃣  TICKETS DE GARANTÍA'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  owt.id,
+  owt.job_id,
+  owt.reason,
+  owt.status,
+  owt.assigned_tech_id,
+  owt.reported_at,
+  owt.resolved_at,
+  oj.crm_task_type,
+  CASE 
+    WHEN oj.crm_task_type = 'GARANTIA' THEN '✅ Tipo correcto'
+    ELSE '⚠️  Tipo no es garantía'
+  END as tipo_check
+FROM operations_warranty_tickets owt
+JOIN operations_jobs oj ON owt.job_id = oj.id
+WHERE oj.crm_chat_id = :'chat_id'
+ORDER BY owt.reported_at DESC
+\gx
+
+-- ============================================================================
+-- 10. RESUMEN GENERAL
+-- ============================================================================
+\echo ''
+\echo '🔟 RESUMEN GENERAL'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+WITH job_stats AS (
+  SELECT 
+    COUNT(*) as total_jobs,
+    COUNT(DISTINCT crm_customer_id) as unique_customers,
+    COUNT(DISTINCT crm_task_type) as unique_types,
+    COUNT(*) FILTER (WHERE status NOT IN ('completed', 'closed', 'cancelled')) as active_jobs,
+    COUNT(*) FILTER (WHERE crm_task_type = 'LEVANTAMIENTO') as levantamiento_jobs,
+    COUNT(*) FILTER (WHERE crm_task_type = 'SERVICIO_RESERVADO') as servicio_jobs,
+    COUNT(*) FILTER (WHERE crm_task_type = 'GARANTIA') as garantia_jobs,
+    MIN(created_at) as first_job_at,
+    MAX(updated_at) as last_update_at
+  FROM operations_jobs
+  WHERE crm_chat_id = :'chat_id'
+    AND deleted_at IS NULL
+),
+customer_info AS (
+  SELECT 
+    COUNT(*) as customer_count
+  FROM customer c
+  WHERE c.telefono IN (
+    SELECT COALESCE(phone, '+' || wa_id)
+    FROM crm_chat
+    WHERE id = :'chat_id'
+  )
+  AND c.deleted_at IS NULL
+)
+SELECT 
+  js.total_jobs as "Total Jobs",
+  js.active_jobs as "Jobs Activos",
+  js.unique_customers as "Clientes Únicos",
+  ci.customer_count as "Clientes en DB",
+  js.levantamiento_jobs as "Jobs Levantamiento",
+  js.servicio_jobs as "Jobs Servicio",
+  js.garantia_jobs as "Jobs Garantía",
+  js.first_job_at as "Primer Job",
+  js.last_update_at as "Última Actualización",
+  CASE 
+    WHEN js.active_jobs > 0 THEN '✅ Hay jobs activos'
+    ELSE '⚠️  No hay jobs activos'
+  END as "Estado",
+  CASE 
+    WHEN ci.customer_count > 0 THEN '✅ Cliente existe'
+    ELSE '❌ ERROR: Cliente no encontrado'
+  END as "Cliente Check"
+FROM job_stats js
+CROSS JOIN customer_info ci
+\gx
+
+-- ============================================================================
+-- 11. VERIFICACIÓN FINAL: CHECKLIST
+-- ============================================================================
+\echo ''
+\echo '✅ CHECKLIST DE VERIFICACIÓN'
+\echo '─────────────────────────────────────────────────────────────────────────'
+
+SELECT 
+  CASE WHEN EXISTS (
+    SELECT 1 FROM crm_chat WHERE id = :'chat_id'
+  ) THEN '✅' ELSE '❌' END || ' Chat existe' as check_1,
+  
+  CASE WHEN EXISTS (
+    SELECT 1 FROM customer c
+    WHERE c.telefono LIKE '%' || (
+      SELECT RIGHT(COALESCE(phone, '+' || wa_id), 10)
+      FROM crm_chat WHERE id = :'chat_id'
+    ) || '%'
+    AND c.deleted_at IS NULL
+  ) THEN '✅' ELSE '❌' END || ' Cliente fue creado' as check_2,
+  
+  CASE WHEN EXISTS (
+    SELECT 1 FROM operations_jobs
+    WHERE crm_chat_id = :'chat_id'
+      AND deleted_at IS NULL
+  ) THEN '✅' ELSE '❌' END || ' Job existe' as check_3,
+  
+  CASE WHEN (
+    SELECT COUNT(*) FROM operations_jobs
+    WHERE crm_chat_id = :'chat_id'
+      AND deleted_at IS NULL
+      AND status NOT IN ('completed', 'closed', 'cancelled')
+  ) <= 3 THEN '✅' ELSE '⚠️ ' END || ' Sin duplicados excesivos' as check_4,
+  
+  CASE WHEN EXISTS (
+    SELECT 1 FROM operations_jobs oj
+    JOIN crm_chat cc ON oj.crm_chat_id = cc.id
+    WHERE oj.crm_chat_id = :'chat_id'
+      AND oj.empresa_id = cc.empresa_id
+      AND oj.deleted_at IS NULL
+  ) THEN '✅' ELSE '❌' END || ' empresa_id correcto' as check_5,
+  
+  CASE WHEN EXISTS (
+    SELECT 1 FROM operations_jobs
+    WHERE crm_chat_id = :'chat_id'
+      AND assigned_tech_id IS NOT NULL
+      AND deleted_at IS NULL
+  ) THEN '✅' ELSE '⚠️ ' END || ' Técnico asignado' as check_6,
+  
+  CASE WHEN EXISTS (
+    SELECT 1 FROM operations_jobs
+    WHERE crm_chat_id = :'chat_id'
+      AND service_id IS NOT NULL
+      AND deleted_at IS NULL
+  ) THEN '✅' ELSE '⚠️ ' END || ' Servicio asociado' as check_7,
+  
+  CASE WHEN EXISTS (
+    SELECT 1 FROM operations_jobs
+    WHERE crm_chat_id = :'chat_id'
+      AND scheduled_at IS NOT NULL
+      AND deleted_at IS NULL
+  ) THEN '✅' ELSE '⚠️ ' END || ' Fecha programada' as check_8;
+
+\echo ''
+\echo '╔═══════════════════════════════════════════════════════════════════════╗'
+\echo '║  VERIFICACIÓN COMPLETADA                                              ║'
+\echo '╚═══════════════════════════════════════════════════════════════════════╝'
+\echo ''
+\echo 'Leyenda:'
+\echo '  ✅ = Verificado correctamente'
+\echo '  ❌ = Error encontrado'
+\echo '  ⚠️  = Advertencia (puede ser normal según el caso)'
+\echo ''

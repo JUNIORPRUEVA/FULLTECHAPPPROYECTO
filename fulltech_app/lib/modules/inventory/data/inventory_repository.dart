@@ -77,14 +77,18 @@ class InventoryRepository {
     required double minStock,
     required double maxStock,
     String? brand,
+    bool includeBrand = false,
     String? supplierId,
+    bool includeSupplier = false,
   }) {
     return api.updateMinMax(
       productId,
       minStock: minStock,
       maxStock: maxStock,
       brand: brand,
+      includeBrand: includeBrand,
       supplierId: supplierId,
+      includeSupplier: includeSupplier,
     );
   }
 

@@ -516,6 +516,69 @@ class _ActionsSection extends ConsumerWidget {
                       if (e is DioException) {
                         final status = e.response?.statusCode;
                         final data = e.response?.data;
+                        final code = (data is Map<String, dynamic>)
+                            ? (data['code']?.toString())
+                            : null;
+                        if (code == 'INVALID_PHONE') {
+                          // Offer to edit phone and retry later
+                          final ctrl = TextEditingController(
+                            text: thread.phone ?? '',
+                          );
+                          await showDialog<void>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Teléfono inválido'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Text(
+                                    'Este chat no tiene un número válido. Edita el teléfono del cliente para poder agendar o levantar.',
+                                  ),
+                                  const SizedBox(height: 10),
+                                  TextField(
+                                    controller: ctrl,
+                                    keyboardType: TextInputType.phone,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Teléfono (WhatsApp)',
+                                      hintText: '+1 809 555 1234',
+                                      isDense: true,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton(
+                                  onPressed: () async {
+                                    final v = ctrl.text.trim();
+                                    if (v.isEmpty) return;
+                                    try {
+                                      await ref
+                                          .read(crmRepositoryProvider)
+                                          .patchChat(thread.id, {'phone': v});
+                                      if (!context.mounted) return;
+                                      Navigator.of(context).pop();
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Teléfono actualizado. Vuelve a intentar guardar el estado.',
+                                          ),
+                                        ),
+                                      );
+                                    } catch (_) {}
+                                  },
+                                  child: const Text('Guardar teléfono'),
+                                ),
+                              ],
+                            ),
+                          );
+                          setState(() => isSaving = false);
+                          return;
+                        }
                         if (data != null) {
                           message = 'HTTP ${status ?? ''}: ${data.toString()}';
                         } else if (status != null) {

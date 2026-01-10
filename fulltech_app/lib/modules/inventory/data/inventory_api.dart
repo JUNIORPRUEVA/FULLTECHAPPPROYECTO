@@ -24,10 +24,7 @@ class InventoryKardexResult {
   final Map<String, dynamic> product;
   final List<InventoryMovement> movements;
 
-  const InventoryKardexResult({
-    required this.product,
-    required this.movements,
-  });
+  const InventoryKardexResult({required this.product, required this.movements});
 }
 
 class InventoryApi {
@@ -67,10 +64,13 @@ class InventoryApi {
       final res = await _dio.get(
         '/inventory/products',
         queryParameters: {
-          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
-          if (categoryId != null && categoryId.trim().isNotEmpty) 'category_id': categoryId.trim(),
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
+          if (categoryId != null && categoryId.trim().isNotEmpty)
+            'category_id': categoryId.trim(),
           if (brand != null && brand.trim().isNotEmpty) 'brand': brand.trim(),
-          if (supplierId != null && supplierId.trim().isNotEmpty) 'supplier_id': supplierId.trim(),
+          if (supplierId != null && supplierId.trim().isNotEmpty)
+            'supplier_id': supplierId.trim(),
           if (status.trim().isNotEmpty) 'status': status,
           if (sort.trim().isNotEmpty) 'sort': sort,
           'page': page,
@@ -123,7 +123,8 @@ class InventoryApi {
       final data = (root['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       final product =
           (data['product'] as Map?)?.cast<String, dynamic>() ?? const {};
-      final movementsRaw = (data['movements'] as List?)?.cast<Map>() ?? const [];
+      final movementsRaw =
+          (data['movements'] as List?)?.cast<Map>() ?? const [];
 
       return InventoryKardexResult(
         product: product,
@@ -141,7 +142,8 @@ class InventoryApi {
       final res = await _dio.get(
         'pos/suppliers',
         queryParameters: {
-          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
         },
       );
       final root = (res.data as Map?)?.cast<String, dynamic>() ?? const {};
@@ -210,7 +212,9 @@ class InventoryApi {
     required double minStock,
     required double maxStock,
     String? brand,
+    bool includeBrand = false,
     String? supplierId,
+    bool includeSupplier = false,
   }) async {
     try {
       await _dio.put(
@@ -218,8 +222,8 @@ class InventoryApi {
         data: {
           'min_stock': minStock,
           'max_stock': maxStock,
-          if (brand != null) 'brand': brand,
-          if (supplierId != null) 'supplier_id': supplierId,
+          if (includeBrand) 'brand': brand,
+          if (includeSupplier) 'supplier_id': supplierId,
         },
         options: Options(extra: {'offlineQueue': false}),
       );

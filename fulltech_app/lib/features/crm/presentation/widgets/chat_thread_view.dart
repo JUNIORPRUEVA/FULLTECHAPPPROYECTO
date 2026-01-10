@@ -534,7 +534,6 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final isNarrow = constraints.maxWidth < 420;
-
                     final iconButtons = <Widget>[
                       IconButton(
                         tooltip: 'Audio',
@@ -614,20 +613,19 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                             label: const Text('Enviar'),
                           );
 
-                    if (!isNarrow) {
-                      return Row(
-                        children: [
-                          ...iconButtons,
-                          inputField,
-                          const SizedBox(width: 10),
-                          sendButton,
-                        ],
-                      );
-                    }
-
+                    // Always use a 2-row layout to prevent overflows in
+                    // narrow/right-side panels (Windows desktop often constrains
+                    // the composer to ~200px).
                     return Column(
                       children: [
-                        Row(children: iconButtons),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 0,
+                            runSpacing: 0,
+                            children: iconButtons,
+                          ),
+                        ),
                         const SizedBox(height: 6),
                         Row(
                           children: [

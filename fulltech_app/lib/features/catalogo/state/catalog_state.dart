@@ -1,4 +1,5 @@
 import '../models/categoria_producto.dart';
+import '../models/marca_producto.dart';
 import '../models/producto.dart';
 
 class CatalogState {
@@ -8,6 +9,7 @@ class CatalogState {
   final bool isOnline;
 
   final List<CategoriaProducto> categorias;
+  final List<MarcaProducto> marcas;
   final List<Producto> productos;
 
   final String query;
@@ -19,6 +21,7 @@ class CatalogState {
     required this.error,
     required this.isOnline,
     required this.categorias,
+    required this.marcas,
     required this.productos,
     required this.query,
     required this.selectedCategoriaId,
@@ -31,6 +34,7 @@ class CatalogState {
       error: null,
       isOnline: true,
       categorias: [],
+      marcas: [],
       productos: [],
       query: '',
       selectedCategoriaId: null,
@@ -43,6 +47,7 @@ class CatalogState {
     String? error,
     bool? isOnline,
     List<CategoriaProducto>? categorias,
+    List<MarcaProducto>? marcas,
     List<Producto>? productos,
     String? query,
     String? selectedCategoriaId,
@@ -53,6 +58,7 @@ class CatalogState {
       error: error,
       isOnline: isOnline ?? this.isOnline,
       categorias: categorias ?? this.categorias,
+      marcas: marcas ?? this.marcas,
       productos: productos ?? this.productos,
       query: query ?? this.query,
       selectedCategoriaId: selectedCategoriaId ?? this.selectedCategoriaId,

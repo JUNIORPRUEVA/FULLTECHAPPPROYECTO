@@ -20,6 +20,25 @@ function safeJson(obj: unknown): string {
   }
 }
 
+// Normalize to E.164 digits (without '+').
+function digitsOnlyPhone(v: string | null | undefined): string {
+  return String(v ?? '').replace(/\D+/g, '');
+}
+
+function toPhoneE164(raw: string | null | undefined): string | null {
+  const d = digitsOnlyPhone(raw);
+  if (!d) return null;
+  // If already 11+ digits, keep as-is (assume includes country code)
+  if (d.length >= 11) return d;
+  // If 10 digits, prefix default CC (NANP) and DR area codes support
+  if (d.length === 10) {
+    const cc = digitsOnlyPhone(env.EVOLUTION_DEFAULT_COUNTRY_CODE ?? '1') || '1';
+    return `${cc}${d}`;
+  }
+  // Fallback: return digits
+  return d;
+}
+
 function monthFolder(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -351,9 +370,10 @@ async function processWebhookEvent(body: any, eventId: string | null) {
   }
 
   const waId = (parsed.waId ?? '').trim();
-  const phone = parsed.phoneNumber ?? null;
+  const phoneRaw = parsed.phoneNumber ?? null;
+  const phoneE164 = toPhoneE164(phoneRaw);
 
-  if (!waId && !phone) {
+  if (!waId && !phoneE164) {
     console.log('[WEBHOOK] Message ignored - missing waId and phone');
 
     if (eventId) {
@@ -370,7 +390,7 @@ async function processWebhookEvent(body: any, eventId: string | null) {
     return;
   }
 
-  const normalizedWaId = waId || `${phone}@s.whatsapp.net`;
+  const normalizedWaId = waId || (phoneE164 ? `${phoneE164}@s.whatsapp.net` : waId);
   const createdAt = parsed.timestamp ?? now;
 
   const hasText = typeof parsed.body === 'string' && parsed.body.trim().length > 0;
@@ -448,7 +468,7 @@ async function processWebhookEvent(body: any, eventId: string | null) {
       create: {
         wa_id: normalizedWaId,
         display_name: parsed.displayName?.trim() || null,
-        phone,
+        phone: phoneE164 ?? null,
         last_message_preview: preview,
         last_message_at: createdAt,
         unread_count: direction === 'in' ? 1 : 0,
@@ -459,7 +479,7 @@ async function processWebhookEvent(body: any, eventId: string | null) {
       },
       update: {
         ...(parsed.displayName?.trim() ? { display_name: parsed.displayName.trim() } : null),
-        ...(phone ? { phone } : null),
+        ...(phoneE164 ? { phone: phoneE164 } : null),
         last_message_preview: preview,
         last_message_at: createdAt,
         ...(direction === 'in' ? { unread_count: { increment: 1 } } : null),

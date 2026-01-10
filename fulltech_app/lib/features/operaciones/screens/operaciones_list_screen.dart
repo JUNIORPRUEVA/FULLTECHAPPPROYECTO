@@ -64,8 +64,12 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   bool _matchesTab(int index, OperationsJob job) {
     final t = (job.crmTaskType ?? '').toUpperCase();
     if (index == 0) {
-      // Agenda: solo RESERVA y SOLUCION_GARANTIA.
-      return _isReserva(job) || _isWarranty(job);
+      // Agenda: show anything that already has a schedule (and keep warranty).
+      // This ensures CRM -> (agendado/por_levantamiento) appears immediately.
+      final isScheduled = job.scheduledDate != null ||
+          job.status == 'pending_scheduling' ||
+          job.status == 'scheduled';
+      return isScheduled || _isReserva(job) || _isWarranty(job);
     }
     if (index == 1) {
       return t == 'LEVANTAMIENTO' ||

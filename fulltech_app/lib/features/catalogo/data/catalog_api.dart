@@ -78,6 +78,36 @@ class CatalogApi {
     }
   }
 
+  Future<CategoriaProducto> updateCategoria(
+    String id, {
+    String? nombre,
+    String? descripcion,
+    bool? isActive,
+  }) async {
+    try {
+      final res = await _dio.put(
+        '/catalog/categories/$id',
+        data: {
+          if (nombre != null) 'nombre': nombre,
+          if (descripcion != null) 'descripcion': descripcion,
+          if (isActive != null) 'is_active': isActive,
+        },
+      );
+
+      return CategoriaProducto.fromJson(res.data['item'] as Map<String, dynamic>);
+    } catch (e) {
+      _rethrowAsFriendly(e);
+    }
+  }
+
+  Future<void> deleteCategoria(String id) async {
+    try {
+      await _dio.delete('/catalog/categories/$id');
+    } catch (e) {
+      _rethrowAsFriendly(e);
+    }
+  }
+
   Future<List<Producto>> listProductos({
     String? q,
     String? categoryId,
@@ -107,6 +137,15 @@ class CatalogApi {
 
       final items = (res.data['items'] as List<dynamic>).cast<Map<String, dynamic>>();
       return items.map(Producto.fromJson).toList();
+    } catch (e) {
+      _rethrowAsFriendly(e);
+    }
+  }
+
+  Future<Producto> getProducto(String id) async {
+    try {
+      final res = await _dio.get('/catalog/products/$id');
+      return Producto.fromJson(res.data['item'] as Map<String, dynamic>);
     } catch (e) {
       _rethrowAsFriendly(e);
     }

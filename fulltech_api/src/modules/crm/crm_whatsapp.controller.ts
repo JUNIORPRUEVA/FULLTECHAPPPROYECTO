@@ -1445,7 +1445,7 @@ async function ensureCustomerForChat(params: {
 
   const phoneCandidate = chat.phone ?? phoneFromWaId(String(chat.wa_id ?? ''));
   const telefono = toPhoneE164(phoneCandidate);
-  if (!telefono) throw new ApiError(400, 'Chat has no valid phone; cannot create operations task');
+  if (!telefono) throw new ApiError(400, 'Chat has no valid phone; cannot create operations task', undefined, 'INVALID_PHONE');
 
   const name =
     chat.display_name && chat.display_name.trim().length > 0
@@ -1862,7 +1862,7 @@ export async function convertChatToCustomer(req: Request, res: Response) {
   const phoneCandidate = chat.phone ?? phoneFromWaId(String(chat.wa_id ?? ''));
   const telefono = toPhoneE164(phoneCandidate);
   if (!telefono) {
-    throw new ApiError(400, 'Chat has no valid phone; cannot create customer');
+    throw new ApiError(400, 'Chat has no valid phone; cannot create customer', undefined, 'INVALID_PHONE');
   }
 
   const name =
