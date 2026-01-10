@@ -13,7 +13,6 @@ import '../../../core/state/api_endpoint_settings_provider.dart';
 import '../../catalogo/state/catalog_providers.dart';
 import '../../catalogo/models/producto.dart';
 import '../../usuarios/models/registered_user.dart';
-import '../../usuarios/state/users_providers.dart';
 import '../data/datasources/crm_remote_datasource.dart';
 import '../data/datasources/customers_remote_datasource.dart';
 import '../data/repositories/crm_repository.dart';
@@ -151,13 +150,26 @@ final crmProductsProvider = StreamProvider<List<Producto>>((ref) async* {
 final crmTechniciansProvider = FutureProvider<List<RegisteredUserSummary>>((
   ref,
 ) async {
-  // Fetch users once and filter client-side.
-  // This avoids backend 400s for unsupported role values.
-  final api = ref.watch(usersApiProvider);
-  final page = await api.listUsers(page: 1, pageSize: 200, estado: 'activo');
+  // Use Operations endpoint so non-admin CRM users can still load technicians.
+  final dio = ref.watch(apiClientProvider).dio;
 
-  final allowed = <String>{'tecnico', 'tecnico_fijo', 'contratista'};
-  final out = page.items
+  final res = await dio.get('/operations/technicians');
+  final data = res.data as Map<String, dynamic>;
+  final items = (data['items'] as List<dynamic>? ?? const <dynamic>[])
+      .cast<Map<String, dynamic>>()
+      .map(RegisteredUserSummary.fromJson)
+      .toList(growable: false);
+
+  // Defensive: filter client-side too (backend already filters).
+  final allowed = <String>{
+    'tecnico',
+    'tecnico_fijo',
+    'technician',
+    'technical',
+    'contratista',
+    'contractor',
+  };
+  final out = items
       .where((u) => allowed.contains(u.rol.toLowerCase().trim()))
       .toList(growable: false);
   out.sort((a, b) => a.nombreCompleto.compareTo(b.nombreCompleto));

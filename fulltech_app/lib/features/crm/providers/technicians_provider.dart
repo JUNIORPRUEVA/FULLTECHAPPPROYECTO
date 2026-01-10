@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fulltech_app/core/providers/dio_provider.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 /// Technician model for dropdowns
 class TechnicianItem {
@@ -41,18 +42,11 @@ class TechniciansRepository {
 
   Future<List<TechnicianItem>> getTechnicians() async {
     try {
-      // Fetch users with technician roles
-      final response = await _dio.get(
-        '/users',
-        queryParameters: {
-          'page': 1,
-          'page_size': 100,
-          'estado': 'activo',
-        },
-      );
+      // Use Operations endpoint so non-admin users can load technicians too.
+      final response = await _dio.get('/operations/technicians');
 
       final data = response.data as Map<String, dynamic>;
-      final items = data['items'] as List<dynamic>;
+      final items = (data['items'] as List<dynamic>? ?? const <dynamic>[]);
 
       // Filter for technician roles
       final technicians = items
@@ -61,7 +55,10 @@ class TechniciansRepository {
         final role = tech.rol.toLowerCase();
         return role == 'tecnico_fijo' ||
             role == 'contratista' ||
-            role == 'tecnico';
+            role == 'tecnico' ||
+            role == 'technician' ||
+            role == 'technical' ||
+            role == 'contractor';
       }).toList();
 
       // Sort by name
@@ -69,7 +66,9 @@ class TechniciansRepository {
 
       return technicians;
     } catch (e) {
-      print('[Technicians] Error loading technicians: $e');
+      if (kDebugMode) {
+        debugPrint('[Technicians] Error loading technicians: $e');
+      }
       rethrow;
     }
   }

@@ -24,8 +24,8 @@ class ServicesRemoteDatasource {
     );
 
     final data = response.data as Map<String, dynamic>;
-    final services = data['services'] as List<dynamic>;
-    return services
+    final items = (data['items'] as List<dynamic>? ?? const <dynamic>[]);
+    return items
         .map((json) => ServiceModel.fromJson(json as Map<String, dynamic>))
         .toList();
   }
@@ -34,7 +34,7 @@ class ServicesRemoteDatasource {
     final response = await _apiClient.dio.get('/services/$id');
 
     final data = response.data as Map<String, dynamic>;
-    return ServiceModel.fromJson(data['service'] as Map<String, dynamic>);
+    return ServiceModel.fromJson(data['item'] as Map<String, dynamic>);
   }
 
   Future<ServiceModel> createService({
@@ -51,7 +51,7 @@ class ServicesRemoteDatasource {
     final response = await _apiClient.dio.post('/services', data: body);
 
     final data = response.data as Map<String, dynamic>;
-    return ServiceModel.fromJson(data['service'] as Map<String, dynamic>);
+    return ServiceModel.fromJson(data['item'] as Map<String, dynamic>);
   }
 
   Future<ServiceModel> updateService({
@@ -70,7 +70,7 @@ class ServicesRemoteDatasource {
     final response = await _apiClient.dio.put('/services/$id', data: body);
 
     final data = response.data as Map<String, dynamic>;
-    return ServiceModel.fromJson(data['service'] as Map<String, dynamic>);
+    return ServiceModel.fromJson(data['item'] as Map<String, dynamic>);
   }
 
   Future<void> deleteService(String id) async {

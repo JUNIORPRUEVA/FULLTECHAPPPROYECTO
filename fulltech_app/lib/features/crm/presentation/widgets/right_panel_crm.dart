@@ -6,6 +6,7 @@ import '../../constants/crm_statuses.dart';
 import '../../../catalogo/models/producto.dart';
 import '../../../catalogo/models/categoria_producto.dart';
 import '../../../catalogo/state/catalog_providers.dart';
+import '../../../operaciones/state/operations_providers.dart';
 import '../../../../core/services/app_config.dart';
 import 'status_dialogs/required_schedule_form_dialog.dart';
 
@@ -326,8 +327,9 @@ class _ActionsSection extends ConsumerWidget {
         // Cambiar Estado
         Builder(
           builder: (context) {
-            final isComproLocked = thread.status == CrmStatuses.compro;
-            var currentStatus = thread.status;
+            final normalizedThreadStatus = CrmStatuses.normalizeValue(thread.status);
+            final isComproLocked = normalizedThreadStatus == CrmStatuses.compro;
+            var currentStatus = normalizedThreadStatus;
             var isSaving = false;
 
             const items = [
@@ -337,6 +339,7 @@ class _ActionsSection extends ConsumerWidget {
               ),
               DropdownMenuItem(value: 'interesado', child: Text('Interesado')),
               DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
+              DropdownMenuItem(value: 'agendado', child: Text('Agendado')),
               DropdownMenuItem(
                 value: 'pendiente_pago',
                 child: Text('Pendiente de pago'),
@@ -365,12 +368,15 @@ class _ActionsSection extends ConsumerWidget {
 
                   setState(() => isSaving = true);
                   try {
-                    // Mandatory schedule form for RESERVA and POR_LEVANTAMIENTO.
+                    // Mandatory schedule form for specific statuses.
                     if (nextStatus == CrmStatuses.reserva ||
+                        nextStatus == CrmStatuses.agendado ||
                         nextStatus == CrmStatuses.porLevantamiento) {
                       final title = nextStatus == CrmStatuses.reserva
                           ? 'Reserva'
-                          : 'Por levantamiento';
+                          : (nextStatus == CrmStatuses.agendado
+                                ? 'Agendado'
+                                : 'Por levantamiento');
 
                       final result =
                           await showDialog<RequiredScheduleFormResult>(
@@ -391,6 +397,9 @@ class _ActionsSection extends ConsumerWidget {
                       await ref
                           .read(crmThreadsControllerProvider.notifier)
                           .refresh();
+                      // Also refresh Operations lists so the created/updated job appears immediately.
+                      // ignore: unawaited_futures
+                      ref.read(operationsJobsControllerProvider.notifier).refresh();
 
                       setState(() => currentStatus = nextStatus);
 

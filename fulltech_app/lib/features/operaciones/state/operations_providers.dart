@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/dio_provider.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../usuarios/models/registered_user.dart';
-import '../../usuarios/state/users_providers.dart';
 import '../data/operations_api.dart';
 import '../data/operations_repository.dart';
 import '../models/operations_models.dart';
@@ -48,26 +47,26 @@ final operationsJobHistoryProvider = FutureProvider.family<List<Map<String, dyna
 final operationsTechniciansProvider = FutureProvider<List<RegisteredUserSummary>>((
   ref,
 ) async {
-  final api = ref.watch(usersApiProvider);
+  final dio = ref.watch(dioProvider);
 
-  Future<List<RegisteredUserSummary>> listByRole(String rol) async {
-    final page = await api.listUsers(page: 1, pageSize: 200, rol: rol);
-    return page.items;
-  }
+  final res = await dio.get('/operations/technicians');
+  final data = res.data as Map<String, dynamic>;
+  final items = (data['items'] as List<dynamic>? ?? const <dynamic>[])
+      .cast<Map<String, dynamic>>()
+      .map(RegisteredUserSummary.fromJson)
+      .toList(growable: false);
 
-  final pages = await Future.wait([
-    listByRole('tecnico'),
-    listByRole('tecnico_fijo'),
-    listByRole('contratista'),
-  ]);
-
-  final byId = <String, RegisteredUserSummary>{};
-  for (final list in pages) {
-    for (final u in list) {
-      byId[u.id] = u;
-    }
-  }
-  final out = byId.values.toList(growable: false);
+  final allowed = <String>{
+    'tecnico',
+    'tecnico_fijo',
+    'technician',
+    'technical',
+    'contratista',
+    'contractor',
+  };
+  final out = items
+      .where((u) => allowed.contains(u.rol.toLowerCase().trim()))
+      .toList(growable: false);
   out.sort((a, b) => a.nombreCompleto.compareTo(b.nombreCompleto));
   return out;
 });
