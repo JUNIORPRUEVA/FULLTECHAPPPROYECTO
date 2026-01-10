@@ -91,6 +91,10 @@ export const crmChatStatusSchema = z.object({
   scheduledAt: z.string().optional().nullable(),
   scheduled_at: z.string().optional().nullable(),
 
+  // New field name used by newer dialogs (preferred).
+  address: z.string().max(2000).optional().nullable(),
+  direccion: z.string().max(2000).optional().nullable(),
+
   locationText: z.string().max(2000).optional().nullable(),
   location_text: z.string().max(2000).optional().nullable(),
 

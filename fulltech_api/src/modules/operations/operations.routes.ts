@@ -28,6 +28,9 @@ operationsRouter.patch('/jobs/:id', expressAsyncHandler(operationsController.pat
 operationsRouter.get('/jobs/:id/history', expressAsyncHandler(operationsController.listJobHistory));
 operationsRouter.patch('/jobs/:id/status', expressAsyncHandler(operationsController.patchJobStatus));
 
+// Technicians (for CRM scheduling dialogs, etc.)
+operationsRouter.get('/technicians', expressAsyncHandler(operationsController.listTechnicians));
+
 // Tasks alias (single-source entity is OperationsJob)
 operationsRouter.get('/tasks', expressAsyncHandler(operationsController.listJobs));
 operationsRouter.get('/tasks/:id', expressAsyncHandler(operationsController.getJob));

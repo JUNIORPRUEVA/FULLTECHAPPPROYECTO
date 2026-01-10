@@ -42,6 +42,49 @@ function isTechnicianRole(role: string): boolean {
   return role === 'tecnico' || role === 'tecnico_fijo' || role === 'contratista';
 }
 
+export async function listTechnicians(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+  // Keep compat roles for older DB rows / imports.
+  const roles = ['tecnico', 'tecnico_fijo', 'contratista', 'technician', 'technical', 'contractor'];
+
+  const where: any = {
+    empresa_id,
+    estado: 'activo',
+    rol: { in: roles as any },
+  };
+
+  if (q) {
+    where.OR = [
+      { nombre_completo: { contains: q, mode: 'insensitive' } },
+      { telefono: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+
+  const items = await prisma.usuario.findMany({
+    where,
+    orderBy: [{ nombre_completo: 'asc' }],
+    take: 200,
+    select: {
+      id: true,
+      empresa_id: true,
+      email: true,
+      nombre_completo: true,
+      rol: true,
+      posicion: true,
+      telefono: true,
+      estado: true,
+      foto_perfil_url: true,
+      updated_at: true,
+    },
+  });
+
+  res.json({ items });
+}
+
 function parseDateOnly(value: string): Date {
   // value: YYYY-MM-DD
   const [y, m, d] = value.split('-').map((v) => Number(v));
