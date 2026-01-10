@@ -303,12 +303,9 @@ class _PonchodoPageState extends ConsumerState<PonchodoPage> {
     super.initState();
     // Load initial data
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Best-effort: retry previously failed sync items whenever the module opens.
+      // Best-effort: sync queued attendance ops whenever the module opens.
       // ignore: unawaited_futures
-      ref.read(punchRepositoryProvider).retryFailed().then((_) {
-        // ignore: unawaited_futures
-        ref.read(punchRepositoryProvider).syncPending();
-      });
+      ref.read(punchRepositoryProvider).syncPending();
       ref.read(punchesControllerProvider.notifier).loadPunches(reset: true);
     });
   }
@@ -326,7 +323,6 @@ class _PonchodoPageState extends ConsumerState<PonchodoPage> {
             // Best-effort: if there are local FAILED punches, retry syncing them now.
             try {
               final repo = ref.read(punchRepositoryProvider);
-              await repo.retryFailed();
               await repo.syncPending();
             } catch (_) {
               // Ignore; refresh still works offline.
@@ -645,7 +641,6 @@ class _RightPanelActions extends ConsumerWidget {
         OutlinedButton.icon(
           onPressed: () async {
             final repo = ref.read(punchRepositoryProvider);
-            await repo.retryFailed();
             await repo.syncPending();
             ref
                 .read(punchesControllerProvider.notifier)

@@ -27,6 +27,27 @@ class PunchRepository {
     return 'local-$ms-${ms % 9973}';
   }
 
+  Future<void> _markLocalFailure({
+    required String entityId,
+    required int? httpStatus,
+    required String reason,
+    required bool permanent,
+  }) async {
+    try {
+      final localRaw = await db.getEntityJson(store: _store, id: entityId);
+      if (localRaw == null) return;
+      final local = jsonDecode(localRaw) as Map<String, dynamic>;
+      local['syncStatus'] = 'FAILED';
+      local['_lastSyncAttemptMs'] = DateTime.now().millisecondsSinceEpoch;
+      local['_lastHttpStatus'] = httpStatus;
+      local['_failureReason'] = reason;
+      local['_permanentFailure'] = permanent;
+      await db.upsertEntity(store: _store, id: entityId, json: jsonEncode(local));
+    } catch (_) {
+      // Best-effort only.
+    }
+  }
+
   Future<List<PunchRecord>> _loadLocalPunches({
     String? from,
     String? to,
@@ -153,6 +174,14 @@ class PunchRepository {
         );
         if (localRaw != null) {
           final localJson = jsonDecode(localRaw) as Map<String, dynamic>;
+
+          // Guardrail: skip tight retry storms for the same record.
+          final lastAttemptMs = (localJson['_lastSyncAttemptMs'] as int?) ?? 0;
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (nowMs - lastAttemptMs < 10_000) {
+            continue;
+          }
+
           final attempts = (localJson['_syncAttempts'] as int? ?? 0) + 1;
           localJson['_syncAttempts'] = attempts;
           localJson['_lastSyncAttemptMs'] =
@@ -188,94 +217,84 @@ class PunchRepository {
           // Mark as permanently failed - don't retry 401s
           await db.markSyncItemSent(item.id); // Remove from queue
 
-          // Mark local record as permanently FAILED
-          try {
-            final localRaw = await db.getEntityJson(
-              store: _store,
-              id: item.entityId,
-            );
-            if (localRaw != null) {
-              final local = jsonDecode(localRaw) as Map<String, dynamic>;
-              local['syncStatus'] = 'FAILED';
-              local['_lastSyncAttemptMs'] =
-                  DateTime.now().millisecondsSinceEpoch;
-              local['_failureReason'] = '401 Unauthorized';
-              await db.upsertEntity(
-                store: _store,
-                id: item.entityId,
-                json: jsonEncode(local),
-              );
-            }
-          } catch (_) {}
+          await _markLocalFailure(
+            entityId: item.entityId,
+            httpStatus: 401,
+            reason: '401 Unauthorized',
+            permanent: true,
+          );
 
           // Stop processing remaining items - session is invalid
           return;
         }
 
-        await db.markSyncItemError(item.id);
+        if (e is DioException) {
+          final status = e.response?.statusCode;
+          final data = e.response?.data;
 
-        // Mark local record as FAILED (best-effort)
-        try {
-          final localRaw = await db.getEntityJson(
-            store: _store,
-            id: item.entityId,
-          );
-          if (localRaw != null) {
-            final local = jsonDecode(localRaw) as Map<String, dynamic>;
-            local['syncStatus'] = 'FAILED';
-            local['_lastSyncAttemptMs'] = DateTime.now().millisecondsSinceEpoch;
-            await db.upsertEntity(
-              store: _store,
-              id: item.entityId,
-              json: jsonEncode(local),
-            );
+          String message = 'Sync failed';
+          if (data is Map) {
+            final m = data['message'] ?? data['error'];
+            if (m != null) message = m.toString();
+          } else if (data is String && data.trim().isNotEmpty) {
+            message = data.trim();
           }
-        } catch (_) {}
+
+          // Guardrail: NEVER auto-retry 400/422 (payload/business rule issues).
+          if (status == 400 || status == 422) {
+            await db.markSyncItemSent(item.id); // remove from queue to stop loops
+            await _markLocalFailure(
+              entityId: item.entityId,
+              httpStatus: status,
+              reason: message,
+              permanent: true,
+            );
+            continue;
+          }
+
+          await db.markSyncItemError(item.id);
+          await _markLocalFailure(
+            entityId: item.entityId,
+            httpStatus: status,
+            reason: message,
+            permanent: false,
+          );
+          continue;
+        }
+
+        await db.markSyncItemError(item.id);
+        await _markLocalFailure(
+          entityId: item.entityId,
+          httpStatus: null,
+          reason: e.toString(),
+          permanent: false,
+        );
       }
     }
   }
 
   /// Re-enqueue FAILED local attendance records so they can be retried.
   Future<void> retryFailed() async {
-    final rows = await db.listEntitiesJson(store: _store);
-    for (final raw in rows) {
-      try {
+    // IMPORTANT: Do not create new queue items (it can duplicate requests).
+    // Only re-queue previously errored sync_queue items back to pending.
+    await db.retryErroredSyncItems(module: _syncModule, minAge: Duration.zero);
+
+    // Best-effort: update local status back to PENDING only for retryable failures.
+    try {
+      final rows = await db.listEntitiesJson(store: _store);
+      for (final raw in rows) {
         final map = jsonDecode(raw) as Map<String, dynamic>;
         if (map['syncStatus'] != 'FAILED') continue;
-        final record = PunchRecord.fromJson(map);
-
-        final dto = CreatePunchDto(
-          type: record.type,
-          datetimeUtc: record.datetimeUtc,
-          datetimeLocal: record.datetimeLocal,
-          timezone: record.timezone,
-          locationLat: record.locationLat,
-          locationLng: record.locationLng,
-          locationAccuracy: record.locationAccuracy,
-          locationProvider: record.locationProvider,
-          addressText: record.addressText,
-          locationMissing: record.locationMissing,
-          deviceId: record.deviceId,
-          deviceName: record.deviceName,
-          platform: record.platform,
-          note: record.note,
-          syncStatus: SyncStatus.pending,
-        );
-
-        await db.enqueueSync(
-          module: _syncModule,
-          op: 'create',
-          entityId: record.id,
-          payloadJson: jsonEncode(dto.toJson()),
-        );
-
+        if (map['_permanentFailure'] == true) continue;
         map['syncStatus'] = 'PENDING';
         await db.upsertEntity(
           store: _store,
-          id: record.id,
+          id: (map['id'] ?? '').toString(),
           json: jsonEncode(map),
         );
-      } catch (_) {}
+      }
+    } catch (_) {
+      // Best-effort only.
     }
   }
 

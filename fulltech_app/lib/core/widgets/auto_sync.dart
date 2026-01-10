@@ -189,7 +189,6 @@ class _AutoSyncState extends ConsumerState<AutoSync>
 
       // --- Attendance (Ponchado)
       final punchRepo = ref.read(punchRepositoryProvider);
-      await punchRepo.retryFailed();
       await punchRepo.syncPending();
 
       // --- Sales

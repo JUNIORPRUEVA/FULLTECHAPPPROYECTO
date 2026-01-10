@@ -6,6 +6,7 @@ import {
   listAttendanceQuerySchema,
   updateAttendancePunchSchema,
 } from './attendance.schema';
+import { ZodError } from 'zod';
 
 function isAdminRole(role: string | undefined): boolean {
   return role === 'admin' || role === 'administrador';
@@ -59,14 +60,17 @@ export async function createPunch(req: Request, res: Response) {
 
     const type = normalizeType(body.type);
 
-    const datetimeUtcStr = (body as any).datetimeUtc ?? (body as any).datetime_utc;
+    const datetimeUtcStr =
+      (body as any).datetimeUtc ?? (body as any).datetime_utc ?? new Date().toISOString();
     const datetimeUtc = new Date(datetimeUtcStr);
+
+    const businessRule = (code: string, message: string) =>
+      res.status(400).json({ error: 'BUSINESS_RULE', code, message });
 
     // Disallow Sunday punches (best-effort based on UTC).
     // Client also enforces this using local time.
     if (datetimeUtc.getUTCDay() === 0) {
-      // This is a business rule, not an auth/permission failure.
-      return res.status(400).json({ error: 'No se permite ponchar los domingos' });
+      return businessRule('SUNDAY_NOT_ALLOWED', 'No se permite ponchar los domingos');
     }
 
     const today = datetimeUtc.toISOString().split('T')[0];
@@ -84,6 +88,9 @@ export async function createPunch(req: Request, res: Response) {
         deleted_at: null,
       },
       orderBy: { datetime_utc: 'desc' },
+      include: {
+        user: { select: { id: true, nombre_completo: true, email: true } },
+      },
     });
 
     const has = (t: 'IN' | 'OUT' | 'LUNCH_START' | 'LUNCH_END') =>
@@ -91,12 +98,16 @@ export async function createPunch(req: Request, res: Response) {
 
     // Strong per-day rules ("smart" and consistent)
     if (has('OUT')) {
-      return res.status(400).json({ error: 'Ya registraste la salida hoy' });
+      const out = todayPunches.find((p) => p.type === 'OUT');
+      if (out) return res.status(200).json(toPunchDto(out));
+      return businessRule('ALREADY_OUT', 'Ya registraste la salida hoy');
     }
 
     // Disallow repeating same type within the same day.
     if (has(type)) {
-      return res.status(400).json({ error: `Ya registraste "${type}" hoy` });
+      const existing = todayPunches.find((p) => p.type === type);
+      if (existing) return res.status(200).json(toPunchDto(existing));
+      return businessRule('ALREADY_PUNCHED_TYPE', `Ya registraste "${type}" hoy`);
     }
 
     if (type === 'IN') {
@@ -105,25 +116,35 @@ export async function createPunch(req: Request, res: Response) {
 
     if (type === 'LUNCH_START') {
       if (!has('IN')) {
-        return res.status(400).json({ error: 'No puedes iniciar almuerzo sin haber entrado' });
+        return businessRule('LUNCH_START_WITHOUT_IN', 'No puedes iniciar almuerzo sin haber entrado');
       }
       if (has('LUNCH_END')) {
+        return businessRule(
+          'LUNCH_START_AFTER_LUNCH_END',
+          'No puedes iniciar almuerzo después de finalizarlo',
+        );
         return res.status(400).json({ error: 'No puedes iniciar almuerzo después de finalizarlo' });
       }
     }
 
     if (type === 'LUNCH_END') {
       if (!has('LUNCH_START')) {
-        return res.status(400).json({ error: 'No puedes finalizar almuerzo sin haberlo iniciado' });
+        return businessRule(
+          'LUNCH_END_WITHOUT_LUNCH_START',
+          'No puedes finalizar almuerzo sin haberlo iniciado',
+        );
       }
     }
 
     if (type === 'OUT') {
       if (!has('IN')) {
-        return res.status(400).json({ error: 'No puedes registrar salida sin haber entrado' });
+        return businessRule('OUT_WITHOUT_IN', 'No puedes registrar salida sin haber entrado');
       }
       if (has('LUNCH_START') && !has('LUNCH_END')) {
-        return res.status(400).json({ error: 'No puedes registrar salida sin finalizar el almuerzo' });
+        return businessRule(
+          'OUT_WITHOUT_LUNCH_END',
+          'No puedes registrar salida sin finalizar el almuerzo',
+        );
       }
     }
 
@@ -156,6 +177,15 @@ export async function createPunch(req: Request, res: Response) {
 
     return res.status(201).json(toPunchDto(punch));
   } catch (error: any) {
+    if (error instanceof ZodError) {
+      console.info('[ATTENDANCE] VALIDATION_ERROR', {
+        issues: error.issues?.map((i) => ({ path: i.path, message: i.message })) ?? [],
+      });
+      return res.status(422).json({
+        error: 'VALIDATION_ERROR',
+        fields: error.flatten(),
+      });
+    }
     console.error('[ATTENDANCE] Create error:', error);
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Datos inválidos', details: error.errors });

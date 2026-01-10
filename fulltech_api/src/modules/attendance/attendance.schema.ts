@@ -57,10 +57,6 @@ export const createAttendancePunchSchema = z
     note: optionalNullableString(),
     syncStatus: syncStatusEnum.optional(),
     sync_status: syncStatusEnum.optional(),
-  })
-  .refine((v) => v.datetimeUtc != null || v.datetime_utc != null, {
-    message: 'datetimeUtc is required',
-    path: ['datetimeUtc'],
   });
 
 export const listAttendanceQuerySchema = z.object({

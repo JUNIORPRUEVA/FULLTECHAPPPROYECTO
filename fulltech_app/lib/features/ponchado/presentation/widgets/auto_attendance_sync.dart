@@ -101,7 +101,6 @@ class _AutoAttendanceSyncState extends ConsumerState<AutoAttendanceSync>
     _syncInProgress = true;
     try {
       final repo = ref.read(punchRepositoryProvider);
-      await repo.retryFailed();
       await repo.syncPending();
     } catch (e) {
       // Silently catch errors to prevent spam
