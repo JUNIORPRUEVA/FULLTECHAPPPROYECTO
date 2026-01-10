@@ -164,10 +164,7 @@ final crmTechniciansProvider = FutureProvider<List<RegisteredUserSummary>>((
   final allowed = <String>{
     'tecnico',
     'tecnico_fijo',
-    'technician',
-    'technical',
     'contratista',
-    'contractor',
   };
   final out = items
       .where((u) => allowed.contains(u.rol.toLowerCase().trim()))

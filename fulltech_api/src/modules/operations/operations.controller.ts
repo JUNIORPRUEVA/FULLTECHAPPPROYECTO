@@ -47,8 +47,9 @@ export async function listTechnicians(req: Request, res: Response): Promise<void
 
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
-  // Keep compat roles for older DB rows / imports.
-  const roles = ['tecnico', 'tecnico_fijo', 'contratista', 'technician', 'technical', 'contractor'];
+  // IMPORTANT: Must match the actual UserRole enum stored in DB.
+  // Using unknown values in an enum column will error in Postgres.
+  const roles = ['tecnico', 'tecnico_fijo', 'contratista'];
 
   const where: any = {
     empresa_id,

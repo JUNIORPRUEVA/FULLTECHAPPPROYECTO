@@ -55,10 +55,7 @@ class TechniciansRepository {
         final role = tech.rol.toLowerCase();
         return role == 'tecnico_fijo' ||
             role == 'contratista' ||
-            role == 'tecnico' ||
-            role == 'technician' ||
-            role == 'technical' ||
-            role == 'contractor';
+            role == 'tecnico';
       }).toList();
 
       // Sort by name
