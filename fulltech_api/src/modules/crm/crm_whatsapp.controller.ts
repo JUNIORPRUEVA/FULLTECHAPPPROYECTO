@@ -1386,6 +1386,7 @@ function parseNumberOrNull(value: unknown): number | null {
 
 function needsOperationsTask(status: string): boolean {
   return (
+    status === 'reserva' ||
     status === 'por_levantamiento' ||
     status === 'servicio_reservado' ||
     status === 'solucion_garantia' ||
@@ -1398,6 +1399,10 @@ function needsOperationsTask(status: string): boolean {
 function mapCrmStatusToTaskType(
   status: string,
 ): { taskType: 'LEVANTAMIENTO' | 'SERVICIO_RESERVADO' | 'GARANTIA'; initialJobStatus: string } | null {
+  if (status === 'reserva') {
+    // Treat RESERVA as an operational scheduled service so it appears in Operaciones/Agenda.
+    return { taskType: 'SERVICIO_RESERVADO', initialJobStatus: 'scheduled' };
+  }
   if (status === 'por_levantamiento') {
     return { taskType: 'LEVANTAMIENTO', initialJobStatus: 'pending_survey' };
   }
@@ -1542,9 +1547,19 @@ export async function postChatStatus(req: Request, res: Response) {
   }
 
   // Business validations
-  const requiresSchedulingPayload =
-    nextStatus === 'servicio_reservado' || nextStatus === 'por_levantamiento';
-  if (requiresSchedulingPayload) {
+  // For servicio_reservado and por_levantamiento, scheduling fields are mandatory.
+  // For reserva, keep backward compatibility: only require scheduling fields when the client provides any of them.
+  const wantsSchedulingPayload =
+    nextStatus === 'servicio_reservado' ||
+    nextStatus === 'por_levantamiento' ||
+    (nextStatus === 'reserva' &&
+      (scheduledAt !== null ||
+        address !== null ||
+        locationText !== null ||
+        assignedTechnicianId !== null ||
+        serviceId !== null));
+
+  if (wantsSchedulingPayload) {
     const d = parseScheduledAt(scheduledAt ?? null);
     if (!d) throw new ApiError(422, 'scheduled_at is required for this status');
 
@@ -1573,11 +1588,11 @@ export async function postChatStatus(req: Request, res: Response) {
     }
   }
 
-  const mapping = mapCrmStatusToTaskType(nextStatus);
+  const mapping = nextStatus === 'reserva' && !wantsSchedulingPayload ? null : mapCrmStatusToTaskType(nextStatus);
 
   const result = await prisma.$transaction(async (tx) => {
     const chatPatch: any = { status: nextStatus };
-    if (requiresSchedulingPayload) {
+    if (wantsSchedulingPayload) {
       chatPatch.scheduled_at = parseScheduledAt(scheduledAt ?? null);
       chatPatch.location_text = String(locationText ?? address ?? '').trim();
       // Lat/Lng are optional now; allow nulls.
@@ -1622,7 +1637,7 @@ export async function postChatStatus(req: Request, res: Response) {
       },
     });
 
-    if (requiresSchedulingPayload) {
+    if (wantsSchedulingPayload) {
       const svc = await tx.service.findFirst({
         where: { id: serviceId ?? undefined, empresa_id, is_active: true },
         select: { id: true },
@@ -1703,10 +1718,10 @@ export async function postChatStatus(req: Request, res: Response) {
       crm_task_type: mapping.taskType,
       product_id: productId ?? undefined,
       service_id: serviceId ?? undefined,
-      scheduled_at: requiresSchedulingPayload ? parseScheduledAt(scheduledAt ?? null) : undefined,
-      location_text: requiresSchedulingPayload ? String(locationText ?? address ?? '').trim() : undefined,
-      lat: requiresSchedulingPayload ? lat : undefined,
-      lng: requiresSchedulingPayload ? lng : undefined,
+      scheduled_at: wantsSchedulingPayload ? parseScheduledAt(scheduledAt ?? null) : undefined,
+      location_text: wantsSchedulingPayload ? String(locationText ?? address ?? '').trim() : undefined,
+      lat: wantsSchedulingPayload ? lat : undefined,
+      lng: wantsSchedulingPayload ? lng : undefined,
       last_update_by_user_id: user_id,
     };
 

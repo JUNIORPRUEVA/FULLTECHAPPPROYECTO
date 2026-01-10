@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/crm_thread.dart';
@@ -95,9 +96,25 @@ class _RightPanelCrmState extends ConsumerState<RightPanelCrm> {
                           .refresh();
                     } catch (e) {
                       if (!context.mounted) return;
+                      String message = e.toString();
+                      try {
+                        if (e is DioException) {
+                          final status = e.response?.statusCode;
+                          final data = e.response?.data;
+                          if (data != null) {
+                            message =
+                                'HTTP ${status ?? ''}: ${data.toString()}';
+                          } else if (status != null) {
+                            message =
+                                'HTTP $status: ${e.message ?? e.toString()}';
+                          }
+                        }
+                      } catch (_) {
+                        // keep fallback message
+                      }
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('No se pudo guardar: $e'),
+                          content: Text('Error al guardar: $message'),
                           backgroundColor: Theme.of(context).colorScheme.error,
                         ),
                       );
@@ -327,7 +344,9 @@ class _ActionsSection extends ConsumerWidget {
         // Cambiar Estado
         Builder(
           builder: (context) {
-            final normalizedThreadStatus = CrmStatuses.normalizeValue(thread.status);
+            final normalizedThreadStatus = CrmStatuses.normalizeValue(
+              thread.status,
+            );
             final isComproLocked = normalizedThreadStatus == CrmStatuses.compro;
             var currentStatus = normalizedThreadStatus;
             var isSaving = false;
@@ -399,7 +418,9 @@ class _ActionsSection extends ConsumerWidget {
                           .refresh();
                       // Also refresh Operations lists so the created/updated job appears immediately.
                       // ignore: unawaited_futures
-                      ref.read(operationsJobsControllerProvider.notifier).refresh();
+                      ref
+                          .read(operationsJobsControllerProvider.notifier)
+                          .refresh();
 
                       setState(() => currentStatus = nextStatus);
 
@@ -490,9 +511,24 @@ class _ActionsSection extends ConsumerWidget {
                     }
                   } catch (e) {
                     if (!context.mounted) return;
+                    String message = e.toString();
+                    try {
+                      if (e is DioException) {
+                        final status = e.response?.statusCode;
+                        final data = e.response?.data;
+                        if (data != null) {
+                          message = 'HTTP ${status ?? ''}: ${data.toString()}';
+                        } else if (status != null) {
+                          message =
+                              'HTTP $status: ${e.message ?? e.toString()}';
+                        }
+                      }
+                    } catch (_) {
+                      // keep fallback message
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Error al guardar: $e'),
+                        content: Text('Error al guardar: $message'),
                         backgroundColor: Theme.of(context).colorScheme.error,
                       ),
                     );
