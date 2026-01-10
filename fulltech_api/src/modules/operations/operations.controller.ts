@@ -16,6 +16,25 @@ import {
   patchWarrantyTicketSchema,
 } from './operations.schema';
 
+const tableExistsCache = new Map<string, { exists: boolean; atMs: number }>();
+async function tableExists(tableName: string): Promise<boolean> {
+  const now = Date.now();
+  const cached = tableExistsCache.get(tableName);
+  if (cached && now - cached.atMs < 60_000) return cached.exists;
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ regclass: string | null }[]>(
+      'SELECT to_regclass($1) as regclass',
+      `public.${tableName}`,
+    );
+    const exists = Boolean(rows?.[0]?.regclass);
+    tableExistsCache.set(tableName, { exists, atMs: now });
+    return exists;
+  } catch {
+    tableExistsCache.set(tableName, { exists: false, atMs: now });
+    return false;
+  }
+}
+
 function actorEmpresaId(req: Request): string {
   const actor = req.user;
   if (!actor?.empresaId) throw new ApiError(401, 'Unauthorized');
@@ -265,22 +284,32 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
 
   const [total, items] = await Promise.all([
     prisma.operationsJob.count({ where }),
-    prisma.operationsJob.findMany({
-      where,
-      orderBy: [{ created_at: 'desc' }],
-      take: parsed.data.limit,
-      skip: parsed.data.offset,
-      include: {
-        survey: true,
-        schedule: true,
-        warranty_tickets: {
-          where: { status: { in: ['pending', 'in_progress'] } },
-          orderBy: { reported_at: 'desc' },
-        },
+    (async () => {
+      const include: any = {
         assigned_tech: { select: { id: true, nombre_completo: true, rol: true } },
         crm_chat: { select: { id: true, status: true, display_name: true, phone: true } },
-      },
-    }),
+      };
+
+      if (await tableExists('operations_schedule')) include.schedule = true;
+      if (await tableExists('operations_survey')) include.survey = true;
+      if (await tableExists('operations_warranty_tickets')) {
+        include.warranty_tickets = {
+          where: { status: { in: ['pending', 'in_progress'] } },
+          orderBy: { reported_at: 'desc' },
+        };
+      }
+      if (await tableExists('operations_installation_reports')) {
+        include.installation_reports = { orderBy: { created_at: 'desc' } };
+      }
+
+      return prisma.operationsJob.findMany({
+        where,
+        orderBy: [{ created_at: 'desc' }],
+        take: parsed.data.limit,
+        skip: parsed.data.offset,
+        include,
+      });
+    })(),
   ]);
 
   const serviceIds = Array.from(
@@ -312,14 +341,23 @@ export async function getJob(req: Request, res: Response): Promise<void> {
   const empresa_id = actorEmpresaId(req);
   const id = req.params.id;
 
+  const include: any = {};
+  if (await tableExists('operations_survey')) {
+    include.survey = { include: { media: true } };
+  }
+  if (await tableExists('operations_schedule')) {
+    include.schedule = true;
+  }
+  if (await tableExists('operations_installation_reports')) {
+    include.installation_reports = { orderBy: { created_at: 'desc' } };
+  }
+  if (await tableExists('operations_warranty_tickets')) {
+    include.warranty_tickets = { orderBy: { reported_at: 'desc' } };
+  }
+
   const job = await prisma.operationsJob.findFirst({
     where: { id, empresa_id, deleted_at: null },
-    include: {
-      survey: { include: { media: true } },
-      schedule: true,
-      installation_reports: { orderBy: { created_at: 'desc' } },
-      warranty_tickets: { orderBy: { reported_at: 'desc' } },
-    },
+    include,
   });
   if (!job) throw new ApiError(404, 'Job not found');
   res.json(job);
