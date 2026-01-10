@@ -13,15 +13,19 @@ import {
   deleteChatMessage,
   deletePurchasedClient,
   deleteChat,
+  clearBoughtInboxFlag,
   editChatMessage,
   getChat,
   getPurchasedClient,
+  listBoughtChats,
+  listBoughtInbox,
   listChats,
   listChatMessages,
   listChatStats,
   listPurchasedClients,
   markChatRead,
   patchChat,
+  patchPostSaleState,
   postChatStatus,
   postUpload,
   recordMediaMessage,
@@ -57,6 +61,11 @@ crmRouter.use(authMiddleware);
 
 crmRouter.get('/chats', expressAsyncHandler(listChats));
 crmRouter.get('/chats/stats', expressAsyncHandler(listChatStats));
+// Bought clients flow
+crmRouter.get('/chats/bought', expressAsyncHandler(listBoughtChats));
+crmRouter.get('/chats/bought/inbox', expressAsyncHandler(listBoughtInbox));
+crmRouter.patch('/chats/:chatId/bought/inbox/clear', expressAsyncHandler(clearBoughtInboxFlag));
+crmRouter.patch('/chats/:chatId/post-sale-state', expressAsyncHandler(patchPostSaleState));
 // NEW: Purchased clients endpoint (status = "compro" only)
 crmRouter.get('/purchased-clients', expressAsyncHandler(listPurchasedClients));
 crmRouter.get('/purchased-clients/:clientId', expressAsyncHandler(getPurchasedClient));

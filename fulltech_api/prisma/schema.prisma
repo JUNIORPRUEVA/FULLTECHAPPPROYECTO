@@ -951,6 +951,14 @@ enum OperationsCrmTaskType {
   INSTALACION
 }
 
+enum CrmPostSaleState {
+  NORMAL
+  GARANTIA
+  SOLUCION_GARANTIA
+  CLIENTE_MOLESTO
+  VIP
+}
+
 model OperationsJob {
   id                  String @id @default(uuid()) @db.Uuid
   empresa_id          String @db.Uuid
@@ -973,6 +981,10 @@ model OperationsJob {
   crm_task_type       OperationsCrmTaskType?
   product_id          String? @db.Uuid
   service_id          String? @db.Uuid
+  scheduled_at        DateTime?
+  location_text       String? @db.Text
+  lat                 Float?
+  lng                 Float?
   technician_notes    String? @db.Text
   cancel_reason       String? @db.Text
   last_update_by_user_id String? @db.Uuid
@@ -1402,6 +1414,15 @@ model CrmChat {
   last_message_at      DateTime?
   unread_count         Int       @default(0)
   status               String    @default("primer_contacto")
+  scheduled_at         DateTime?
+  location_text        String?   @db.Text
+  lat                  Float?
+  lng                  Float?
+  assigned_tech_id     String?   @db.Uuid
+  service_id           String?   @db.Uuid
+  purchased_at         DateTime?
+  active_client_message_pending Boolean @default(false)
+  post_sale_state      CrmPostSaleState @default(NORMAL)
   created_at           DateTime  @default(now())
   updated_at           DateTime  @updatedAt
 

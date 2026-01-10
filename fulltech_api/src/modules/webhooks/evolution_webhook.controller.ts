@@ -475,6 +475,15 @@ async function processWebhookEvent(body: any, eventId: string | null) {
       chat.empresa_id = env.DEFAULT_EMPRESA_ID;
     }
 
+    // Bought-client inbox: if a purchased client sends a new inbound message,
+    // mark it for attention without moving it back into the normal CRM list.
+    if (direction === 'in' && String(chat.status ?? '') === 'compro') {
+      await tx.crmChat.update({
+        where: { id: chat.id },
+        data: { active_client_message_pending: true },
+      });
+    }
+
     const message = await tx.crmChatMessage.create({
       data: {
         empresa_id: chat.empresa_id,

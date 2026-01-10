@@ -91,6 +91,12 @@ export const crmChatStatusSchema = z.object({
   scheduledAt: z.string().optional().nullable(),
   scheduled_at: z.string().optional().nullable(),
 
+  locationText: z.string().max(2000).optional().nullable(),
+  location_text: z.string().max(2000).optional().nullable(),
+
+  lat: z.union([z.number(), z.string()]).optional().nullable(),
+  lng: z.union([z.number(), z.string()]).optional().nullable(),
+
   note: z.string().max(5000).optional().nullable(),
   notes: z.string().max(5000).optional().nullable(),
 
@@ -113,4 +119,8 @@ export const crmChatStatusSchema = z.object({
 
   cancelReason: z.string().max(5000).optional().nullable(),
   cancel_reason: z.string().max(5000).optional().nullable(),
+});
+
+export const crmPostSaleStateSchema = z.object({
+  state: z.enum(['NORMAL', 'GARANTIA', 'SOLUCION_GARANTIA', 'CLIENTE_MOLESTO', 'VIP']),
 });

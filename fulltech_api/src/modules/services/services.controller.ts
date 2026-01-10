@@ -87,10 +87,22 @@ export async function createService(req: Request, res: Response) {
 
   const data = parsed.data;
 
+  const nameNorm = data.name.trim();
+  const duplicate = await prisma.service.findFirst({
+    where: {
+      empresa_id,
+      name: { equals: nameNorm, mode: 'insensitive' },
+    },
+    select: { id: true },
+  });
+  if (duplicate) {
+    throw new ApiError(409, 'Service name already exists');
+  }
+
   const service = await prisma.service.create({
     data: {
       empresa_id,
-      name: data.name,
+      name: nameNorm,
       description: data.description || null,
       default_price: data.default_price || null,
       is_active: data.is_active,
@@ -125,10 +137,27 @@ export async function updateService(req: Request, res: Response) {
 
   const data = parsed.data;
 
+  if (data.name !== undefined && data.name !== null) {
+    const nameNorm = String(data.name).trim();
+    if (!nameNorm) throw new ApiError(400, 'name cannot be empty');
+
+    const duplicate = await prisma.service.findFirst({
+      where: {
+        empresa_id,
+        id: { not: id },
+        name: { equals: nameNorm, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new ApiError(409, 'Service name already exists');
+    }
+  }
+
   const updated = await prisma.service.update({
     where: { id },
     data: {
-      ...(data.name !== undefined && { name: data.name }),
+      ...(data.name !== undefined && { name: data.name ? String(data.name).trim() : data.name }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.default_price !== undefined && { default_price: data.default_price }),
       ...(data.is_active !== undefined && { is_active: data.is_active }),

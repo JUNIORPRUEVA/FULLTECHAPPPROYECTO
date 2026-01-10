@@ -9,6 +9,7 @@ import {
   crmChatMessagesListQuerySchema,
   crmChatsListQuerySchema,
   crmChatPatchSchema,
+  crmPostSaleStateSchema,
   crmChatStatusSchema,
   crmDeleteChatMessageSchema,
   crmEditChatMessageSchema,
@@ -268,6 +269,21 @@ function toChatApiItem(chat: any) {
   const internalNote = chat.internal_note ?? chat.note ?? null;
   const assignedUserId = chat.assigned_user_id ?? chat.assigned_to_user_id ?? null;
 
+  const scheduledAt = chat.scheduled_at ?? chat.scheduledAt ?? null;
+  const locationText = chat.location_text ?? chat.locationText ?? null;
+  const lat = typeof chat.lat !== 'undefined' ? chat.lat : null;
+  const lng = typeof chat.lng !== 'undefined' ? chat.lng : null;
+  const assignedTechId = chat.assigned_tech_id ?? chat.assignedTechId ?? null;
+  const serviceId = chat.service_id ?? chat.serviceId ?? null;
+  const purchasedAt = chat.purchased_at ?? chat.purchasedAt ?? null;
+  const activeClientMessagePending = Boolean(
+    chat.active_client_message_pending ?? chat.activeClientMessagePending ?? false,
+  );
+  const postSaleState = chat.post_sale_state ?? chat.postSaleState ?? null;
+  const vip = Boolean(chat.vip ?? false);
+  const purchasesCount = typeof chat.purchases_count === 'number' ? chat.purchases_count : chat.purchasesCount ?? null;
+  const totalSpent = typeof chat.total_spent !== 'undefined' ? chat.total_spent : chat.totalSpent ?? null;
+
   return {
     // canonical camelCase
     id: chat.id,
@@ -284,6 +300,20 @@ function toChatApiItem(chat: any) {
     productId,
     note: internalNote,
     assignedToUserId: assignedUserId,
+
+    // buyflow/scheduling fields (camelCase)
+    scheduledAt,
+    locationText,
+    lat,
+    lng,
+    assignedTechId,
+    serviceId,
+    purchasedAt,
+    activeClientMessagePending,
+    postSaleState,
+    vip,
+    purchasesCount,
+    totalSpent,
 
     // backward compatible
     important,
@@ -304,7 +334,59 @@ function toChatApiItem(chat: any) {
     is_important: important,
     follow_up: followUp,
     assigned_to_user_id: assignedUserId,
+    scheduled_at: scheduledAt,
+    location_text: locationText,
+    assigned_tech_id: assignedTechId,
+    service_id: serviceId,
+    purchased_at: purchasedAt,
+    active_client_message_pending: activeClientMessagePending,
+    post_sale_state: postSaleState,
+    purchases_count: purchasesCount,
+    total_spent: totalSpent,
   };
+}
+
+function digitsOnlyPhone(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const digits = String(value).replace(/\D/g, '');
+  return digits.length >= 6 ? digits : null;
+}
+
+async function fetchVipStatsByPhoneDigits(params: {
+  empresaId: string;
+  phoneDigits: string[];
+}): Promise<Map<string, { purchasesCount: number; totalSpent: number; vip: boolean }>> {
+  const unique = Array.from(new Set(params.phoneDigits.filter(Boolean)));
+  if (unique.length === 0) return new Map();
+
+  const rows = await prisma.$queryRawUnsafe<
+    { phone_digits: string; purchases_count: number; total_spent: string }[]
+  >(
+    `
+    SELECT
+      regexp_replace(customer_phone, '\\\\D', '', 'g') AS phone_digits,
+      COUNT(*)::int AS purchases_count,
+      COALESCE(SUM(amount), 0)::text AS total_spent
+    FROM sales
+    WHERE
+      empresa_id = $1::uuid
+      AND deleted = FALSE
+      AND customer_phone IS NOT NULL
+      AND regexp_replace(customer_phone, '\\\\D', '', 'g') = ANY($2::text[])
+    GROUP BY 1
+    `,
+    params.empresaId,
+    unique,
+  );
+
+  const map = new Map<string, { purchasesCount: number; totalSpent: number; vip: boolean }>();
+  for (const r of rows) {
+    const purchasesCount = Number(r.purchases_count ?? 0);
+    const totalSpent = Number(r.total_spent ?? 0);
+    const vip = purchasesCount > 3 || totalSpent >= 60000;
+    map.set(String(r.phone_digits), { purchasesCount, totalSpent, vip });
+  }
+  return map;
 }
 
 export async function getChat(req: Request, res: Response) {
@@ -679,25 +761,34 @@ export async function editChatMessage(req: Request, res: Response) {
 }
 
 export async function listChats(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const parsed = crmChatsListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
 
   const { search, status, productId, product_id, page, limit } = parsed.data;
   const skip = (page - 1) * limit;
 
-  const where: any = {};
+  // "COMPRO" (purchased) and "eliminado" are excluded from the normal CRM list.
+  const where: any = {
+    empresa_id,
+    status: { notIn: ['compro', 'eliminado'] },
+  };
 
   if (status && status.trim().length > 0) {
     const s = status.trim();
     // UX: treat "pendiente" as including "primer_contacto".
     // This prevents users from seeing an empty list when most chats are still in first-contact.
     if (s === 'pendiente') {
-      where.status = { in: ['pendiente', 'primer_contacto'] };
+      where.AND = [...(where.AND ?? []), { status: { in: ['pendiente', 'primer_contacto'] } }];
     } else if (s === 'garantia' || s === 'en_garantia') {
       // Backward compatibility: some records use en_garantia.
-      where.status = { in: ['garantia', 'en_garantia'] };
+      where.AND = [
+        ...(where.AND ?? []),
+        { status: { in: ['garantia', 'en_garantia'] } },
+      ];
     } else {
-      where.status = s;
+      // Never allow purchased/deleted chats into the normal list even if requested.
+      where.AND = [...(where.AND ?? []), { status: s }];
     }
   }
 
@@ -764,6 +855,7 @@ export async function listChats(req: Request, res: Response) {
  * This replaces the old "customers" logic - now "Clients" screen shows only CRM chats with "compro" status
  */
 export async function listPurchasedClients(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const parsed = crmChatsListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
 
@@ -772,7 +864,8 @@ export async function listPurchasedClients(req: Request, res: Response) {
 
   // STRICT FILTER: Only chats with status = "compro"
   const where: any = {
-    status: 'compro'
+    empresa_id,
+    status: 'compro',
   };
 
   if (search && search.trim().length > 0) {
@@ -800,7 +893,31 @@ export async function listPurchasedClients(req: Request, res: Response) {
   const merged = items.map((c: any) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
   
   // Map to client format (same as chat format but clearly for "purchased clients")
-  const mapped = merged.map(toChatApiItem);
+  const mappedBase = merged.map(toChatApiItem);
+  const phoneDigits = mappedBase
+    .map((i: any) => digitsOnlyPhone(i.phoneE164))
+    .filter((v: any): v is string => Boolean(v));
+  const vipStats = await fetchVipStatsByPhoneDigits({ empresaId: empresa_id, phoneDigits });
+
+  const mapped = mappedBase.map((i: any) => {
+    const d = digitsOnlyPhone(i.phoneE164);
+    const stats = d ? vipStats.get(d) : null;
+    const vip = stats?.vip ?? false;
+    const purchasesCount = stats?.purchasesCount ?? 0;
+    const totalSpent = stats?.totalSpent ?? 0;
+    const effectivePostSaleState = vip ? 'VIP' : (i.postSaleState ?? 'NORMAL');
+
+    return {
+      ...i,
+      vip,
+      purchasesCount,
+      totalSpent,
+      postSaleState: effectivePostSaleState,
+      purchases_count: purchasesCount,
+      total_spent: totalSpent,
+      post_sale_state: effectivePostSaleState,
+    };
+  });
   
   res.json({ 
     items: mapped, 
@@ -811,15 +928,140 @@ export async function listPurchasedClients(req: Request, res: Response) {
   });
 }
 
+// ===========
+// Bought flow
+// ===========
+
+// GET /api/crm/chats/bought
+export async function listBoughtChats(req: Request, res: Response) {
+  return listPurchasedClients(req, res);
+}
+
+// GET /api/crm/chats/bought/inbox
+export async function listBoughtInbox(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const parsed = crmChatsListQuerySchema.safeParse(req.query);
+  if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
+
+  const { search, page, limit } = parsed.data;
+  const skip = (page - 1) * limit;
+
+  const where: any = {
+    empresa_id,
+    status: 'compro',
+    active_client_message_pending: true,
+  };
+
+  if (search && search.trim().length > 0) {
+    const q = search.trim();
+    where.OR = [
+      { wa_id: { contains: q, mode: 'insensitive' } },
+      { phone: { contains: q, mode: 'insensitive' } },
+      { display_name: { contains: q, mode: 'insensitive' } },
+      { last_message_preview: { contains: q, mode: 'insensitive' } },
+    ];
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.crmChat.findMany({
+      where,
+      orderBy: [{ last_message_at: 'desc' }, { updated_at: 'desc' }],
+      take: limit,
+      skip,
+    }),
+    prisma.crmChat.count({ where }),
+  ]);
+
+  const metaByChatId = await fetchChatMeta(items.map((c: any) => c.id));
+  const merged = items.map((c: any) => ({ ...c, ...(metaByChatId.get(c.id) ?? {}) }));
+
+  const mappedBase = merged.map(toChatApiItem);
+  const phoneDigits = mappedBase
+    .map((i: any) => digitsOnlyPhone(i.phoneE164))
+    .filter((v: any): v is string => Boolean(v));
+  const vipStats = await fetchVipStatsByPhoneDigits({ empresaId: empresa_id, phoneDigits });
+
+  const mapped = mappedBase.map((i: any) => {
+    const d = digitsOnlyPhone(i.phoneE164);
+    const stats = d ? vipStats.get(d) : null;
+    const vip = stats?.vip ?? false;
+    const purchasesCount = stats?.purchasesCount ?? 0;
+    const totalSpent = stats?.totalSpent ?? 0;
+    const effectivePostSaleState = vip ? 'VIP' : (i.postSaleState ?? 'NORMAL');
+
+    return {
+      ...i,
+      vip,
+      purchasesCount,
+      totalSpent,
+      postSaleState: effectivePostSaleState,
+      purchases_count: purchasesCount,
+      total_spent: totalSpent,
+      post_sale_state: effectivePostSaleState,
+    };
+  });
+
+  res.json({ items: mapped, total, page, limit });
+}
+
+// PATCH /api/crm/chats/:chatId/bought/inbox/clear
+export async function clearBoughtInboxFlag(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const chatId = req.params.chatId;
+
+  const chat = await prisma.crmChat.findFirst({
+    where: { id: chatId, empresa_id, status: 'compro' },
+    select: { id: true },
+  });
+  if (!chat) throw new ApiError(404, 'Purchased chat not found');
+
+  const updated = await prisma.crmChat.update({
+    where: { id: chatId },
+    data: { active_client_message_pending: false },
+  });
+
+  emitCrmEvent({ type: 'chat.updated', chatId });
+  res.json({ item: toChatApiItem(updated) });
+}
+
+// PATCH /api/crm/chats/:chatId/post-sale-state
+export async function patchPostSaleState(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const chatId = req.params.chatId;
+
+  const parsed = crmPostSaleStateSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const chat = await prisma.crmChat.findFirst({
+    where: { id: chatId, empresa_id },
+    select: { id: true, status: true },
+  });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  if (chat.status !== 'compro') {
+    throw new ApiError(422, 'post_sale_state can only be updated for purchased clients (status=compro)');
+  }
+
+  const updated = await prisma.crmChat.update({
+    where: { id: chatId },
+    data: { post_sale_state: parsed.data.state as any },
+  });
+
+  emitCrmEvent({ type: 'chat.updated', chatId });
+  res.json({ item: toChatApiItem(updated) });
+}
+
 /**
  * Get single purchased client details (CRM chat with status = "compro")
  */
 export async function getPurchasedClient(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const clientId = req.params.clientId;
 
   const chat = await prisma.crmChat.findFirst({ 
     where: { 
       id: clientId,
+      empresa_id,
       status: 'compro'  // STRICT: Only purchased clients
     } 
   });
@@ -846,12 +1088,14 @@ export async function getPurchasedClient(req: Request, res: Response) {
  * Allows editing: display_name, phone, internal_note, assigned_user_id, product_id
  */
 export async function updatePurchasedClient(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const clientId = req.params.clientId;
   
   // Verify it's a purchased client
   const existing = await prisma.crmChat.findFirst({
     where: { 
       id: clientId,
+      empresa_id,
       status: 'compro'  // STRICT: Only purchased clients
     }
   });
@@ -918,6 +1162,7 @@ export async function updatePurchasedClient(req: Request, res: Response) {
  * Or actually deletes the record if hardDelete=true
  */
 export async function deletePurchasedClient(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const clientId = req.params.clientId;
   const hardDelete = req.query.hardDelete === 'true';
 
@@ -925,6 +1170,7 @@ export async function deletePurchasedClient(req: Request, res: Response) {
   const existing = await prisma.crmChat.findFirst({
     where: { 
       id: clientId,
+      empresa_id,
       status: 'compro'  // STRICT: Only purchased clients
     }
   });
@@ -1026,10 +1272,12 @@ export async function deleteChat(req: Request, res: Response) {
 }
 
 export async function patchChat(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
   const chatId = req.params.chatId;
 
   const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
   if (!chat) throw new ApiError(404, 'Chat not found');
+  if (chat.empresa_id !== empresa_id) throw new ApiError(403, 'Forbidden');
 
   const parsed = crmChatPatchSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -1061,7 +1309,15 @@ export async function patchChat(req: Request, res: Response) {
 
   const chatUpdates: Record<string, unknown> = {};
   if (status && status.trim().length > 0) {
-    chatUpdates.status = status.trim();
+    const nextStatus = normalizeCrmChatStatus(status.trim());
+    if (String(chat.status ?? '').trim() === 'compro' && nextStatus !== 'compro') {
+      throw new ApiError(422, 'COMPRO is irreversible and cannot be reverted');
+    }
+    chatUpdates.status = nextStatus;
+    if (nextStatus === 'compro' && String(chat.status ?? '').trim() !== 'compro') {
+      chatUpdates.purchased_at = new Date();
+      chatUpdates.active_client_message_pending = false;
+    }
   }
   if (typeof effectiveDisplayName !== 'undefined') {
     const v = (effectiveDisplayName ?? '').toString().trim();
@@ -1109,6 +1365,23 @@ function normalizePriority(raw?: string | null): 'low' | 'normal' | 'high' | nul
   if (v === 'ALTA') return 'high';
   if (v === 'low' || v === 'normal' || v === 'high') return v;
   return null;
+}
+
+function normalizeCrmChatStatus(raw: string): string {
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (!s) return s;
+  // Accept aliases: users might send "agendado"/"reservado" for scheduling.
+  if (s === 'agendado' || s === 'reservado') return 'servicio_reservado';
+  return s;
+}
+
+function parseNumberOrNull(value: unknown): number | null {
+  if (value === null || typeof value === 'undefined') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const s = String(value).trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 
 function needsOperationsTask(status: string): boolean {
@@ -1203,7 +1476,7 @@ export async function postChatStatus(req: Request, res: Response) {
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
 
   const body = parsed.data;
-  const nextStatus = body.status.trim();
+  const nextStatus = normalizeCrmChatStatus(body.status);
 
   const scheduledAt =
     typeof body.scheduledAt !== 'undefined'
@@ -1211,6 +1484,14 @@ export async function postChatStatus(req: Request, res: Response) {
       : typeof body.scheduled_at !== 'undefined'
         ? body.scheduled_at
         : null;
+  const locationText =
+    typeof (body as any).locationText !== 'undefined'
+      ? (body as any).locationText
+      : typeof (body as any).location_text !== 'undefined'
+        ? (body as any).location_text
+        : null;
+  const lat = parseNumberOrNull((body as any).lat);
+  const lng = parseNumberOrNull((body as any).lng);
   const note =
     typeof body.note !== 'undefined'
       ? body.note
@@ -1249,13 +1530,28 @@ export async function postChatStatus(req: Request, res: Response) {
         ? body.cancel_reason
         : null;
 
+  // COMPRO is irreversible once set.
+  if (String(chat.status ?? '').trim() === 'compro' && nextStatus !== 'compro') {
+    throw new ApiError(422, 'COMPRO is irreversible and cannot be reverted');
+  }
+
   // Business validations
-  if (nextStatus === 'servicio_reservado') {
+  const requiresSchedulingPayload =
+    nextStatus === 'servicio_reservado' || nextStatus === 'por_levantamiento';
+  if (requiresSchedulingPayload) {
     const d = parseScheduledAt(scheduledAt ?? null);
-    if (!d) throw new ApiError(400, 'scheduledAt is required for servicio_reservado');
-    if (!note || note.trim().length === 0) throw new ApiError(400, 'note is required for servicio_reservado');
-    if (!productId && !serviceId) {
-      throw new ApiError(400, 'productId or serviceId is required for servicio_reservado');
+    if (!d) throw new ApiError(422, 'scheduled_at is required for this status');
+    if (!locationText || String(locationText).trim().length === 0) {
+      throw new ApiError(422, 'location_text is required for this status');
+    }
+    if (lat === null || lng === null) {
+      throw new ApiError(422, 'lat and lng are required for this status');
+    }
+    if (!assignedTechnicianId) {
+      throw new ApiError(422, 'assigned_tech_id is required for this status');
+    }
+    if (!serviceId) {
+      throw new ApiError(422, 'service_id is required for this status');
     }
   }
 
@@ -1274,8 +1570,22 @@ export async function postChatStatus(req: Request, res: Response) {
   const mapping = mapCrmStatusToTaskType(nextStatus);
 
   const result = await prisma.$transaction(async (tx) => {
-    // Always update CRM status first
-    await tx.crmChat.update({ where: { id: chatId }, data: { status: nextStatus } });
+    const chatPatch: any = { status: nextStatus };
+    if (requiresSchedulingPayload) {
+      chatPatch.scheduled_at = parseScheduledAt(scheduledAt ?? null);
+      chatPatch.location_text = String(locationText ?? '').trim();
+      chatPatch.lat = lat;
+      chatPatch.lng = lng;
+      chatPatch.assigned_tech_id = assignedTechnicianId;
+      chatPatch.service_id = serviceId;
+    }
+    if (nextStatus === 'compro' && String(chat.status ?? '').trim() !== 'compro') {
+      chatPatch.purchased_at = new Date();
+      chatPatch.active_client_message_pending = false;
+    }
+
+    // Always update CRM first (and scheduling fields when applicable)
+    await tx.crmChat.update({ where: { id: chatId }, data: chatPatch });
 
     // Upsert CRM meta as best-effort (note/product interest)
     const metaPatch: any = {};
@@ -1304,6 +1614,20 @@ export async function postChatStatus(req: Request, res: Response) {
         display_name: chat.display_name ?? null,
       },
     });
+
+    if (requiresSchedulingPayload) {
+      const svc = await tx.service.findFirst({
+        where: { id: serviceId ?? undefined, empresa_id, is_active: true },
+        select: { id: true },
+      });
+      if (!svc) throw new ApiError(422, 'service_id is invalid or inactive');
+
+      const tech = await tx.usuario.findFirst({
+        where: { id: assignedTechnicianId ?? undefined, empresa_id },
+        select: { id: true },
+      });
+      if (!tech) throw new ApiError(422, 'assigned_tech_id is invalid');
+    }
 
     // Cancel other active jobs for this chat when switching operational types (prevents duplicates)
     const otherActive = await tx.operationsJob.findMany({
@@ -1372,6 +1696,10 @@ export async function postChatStatus(req: Request, res: Response) {
       crm_task_type: mapping.taskType,
       product_id: productId ?? undefined,
       service_id: serviceId ?? undefined,
+      scheduled_at: requiresSchedulingPayload ? parseScheduledAt(scheduledAt ?? null) : undefined,
+      location_text: requiresSchedulingPayload ? String(locationText ?? '').trim() : undefined,
+      lat: requiresSchedulingPayload ? lat : undefined,
+      lng: requiresSchedulingPayload ? lng : undefined,
       last_update_by_user_id: user_id,
     };
 
@@ -1566,14 +1894,24 @@ export async function convertChatToCustomer(req: Request, res: Response) {
   res.json({ customer: created, created: true });
 }
 
-export async function listChatStats(_req: Request, res: Response) {
-  const [total, byStatusRows, unreadAgg] = await Promise.all([
-    prisma.crmChat.count(),
+export async function listChatStats(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+
+  const whereNormal: any = {
+    empresa_id,
+    status: { notIn: ['compro', 'eliminado'] },
+  };
+
+  const [total, boughtTotal, byStatusRows, unreadAgg] = await Promise.all([
+    prisma.crmChat.count({ where: whereNormal }),
+    prisma.crmChat.count({ where: { empresa_id, status: 'compro' } }),
     prisma.crmChat.groupBy({
       by: ['status'],
+      where: whereNormal,
       _count: { _all: true },
     }),
     prisma.crmChat.aggregate({
+      where: whereNormal,
       _sum: { unread_count: true },
     }),
   ]);
@@ -1582,7 +1920,15 @@ export async function listChatStats(_req: Request, res: Response) {
   let importantCount = 0;
   if (await crmChatMetaExists()) {
     const importantRows = await prisma.$queryRawUnsafe<{ count: number }[]>(
-      `SELECT COUNT(*)::int as count FROM crm_chat_meta WHERE important = TRUE`,
+      `
+      SELECT COUNT(*)::int as count
+      FROM crm_chat_meta m
+      JOIN crm_chats c ON c.id = m.chat_id
+      WHERE c.empresa_id = $1::uuid
+        AND c.status NOT IN ('compro','eliminado')
+        AND m.important = TRUE
+      `,
+      empresa_id,
     );
     importantCount = importantRows?.[0]?.count ?? 0;
   }
@@ -1596,6 +1942,7 @@ export async function listChatStats(_req: Request, res: Response) {
 
   res.json({
     total,
+    boughtTotal,
     byStatus,
     importantCount,
     unreadTotal,

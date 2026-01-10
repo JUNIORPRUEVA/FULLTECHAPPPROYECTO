@@ -187,6 +187,7 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
   }
 
   const q = parsed.data.q?.trim();
+  const type = parsed.data.type;
   const status = parsed.data.status;
   const assigned_tech_id = parsed.data.assigned_tech_id;
   const from = parseDate(parsed.data.from);
@@ -195,6 +196,7 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
   const where: Prisma.OperationsJobWhereInput = {
     empresa_id,
     deleted_at: null,
+    ...(type ? { crm_task_type: type as any } : {}),
     ...(status ? { status } : {}),
     ...(assigned_tech_id ? { assigned_tech_id } : {}),
     ...(from || to
@@ -231,12 +233,31 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
           where: { status: { in: ['pending', 'in_progress'] } },
           orderBy: { reported_at: 'desc' },
         },
+        assigned_tech: { select: { id: true, nombre_completo: true, rol: true } },
+        crm_chat: { select: { id: true, status: true, display_name: true, phone: true } },
       },
     }),
   ]);
 
+  const serviceIds = Array.from(
+    new Set(items.map((i: any) => i.service_id).filter((v: any): v is string => Boolean(v))),
+  );
+  const services = serviceIds.length
+    ? await prisma.service.findMany({
+        where: { empresa_id, id: { in: serviceIds } },
+        select: { id: true, name: true, is_active: true },
+      })
+    : [];
+  const serviceById = new Map<string, { id: string; name: string; is_active: boolean }>();
+  for (const s of services) serviceById.set(s.id, s);
+
+  const enriched = items.map((job: any) => ({
+    ...job,
+    service: job.service_id ? serviceById.get(job.service_id) ?? null : null,
+  }));
+
   res.json({
-    items,
+    items: enriched,
     total,
     limit: parsed.data.limit,
     offset: parsed.data.offset,

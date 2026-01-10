@@ -29,6 +29,7 @@ export const createJobSchema = z.object({
 
 export const listJobsQuerySchema = z.object({
   q: z.string().optional(),
+  type: z.enum(['LEVANTAMIENTO', 'SERVICIO_RESERVADO', 'GARANTIA', 'INSTALACION']).optional(),
   status: operationsJobStatusEnum.optional(),
   assigned_tech_id: z.string().uuid().optional(),
   from: z.string().optional(),
