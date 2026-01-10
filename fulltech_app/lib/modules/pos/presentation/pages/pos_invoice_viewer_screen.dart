@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import '../../../../core/platform/file_saver.dart';
 import '../../../../core/widgets/module_page.dart';
 import '../../models/pos_models.dart';
+import '../../state/pos_providers.dart';
 import '../widgets/pos_invoice_pdf.dart';
 
 class PosInvoiceViewerScreen extends ConsumerStatefulWidget {
@@ -24,7 +25,8 @@ class PosInvoiceViewerScreen extends ConsumerStatefulWidget {
       _PosInvoiceViewerScreenState();
 }
 
-class _PosInvoiceViewerScreenState extends ConsumerState<PosInvoiceViewerScreen> {
+class _PosInvoiceViewerScreenState
+    extends ConsumerState<PosInvoiceViewerScreen> {
   Future<Uint8List>? _future;
   Uint8List? _bytes;
   PdfViewerController? _viewer;
@@ -179,6 +181,42 @@ class _PosInvoiceViewerScreenState extends ConsumerState<PosInvoiceViewerScreen>
         return ModulePage(
           title: 'Factura',
           actions: [
+            IconButton(
+              tooltip: 'Cancelar venta (restaurar stock)',
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Cancelar venta'),
+                    content: const Text(
+                      'Esto cancelará la venta y restaurará el stock (si el backend lo soporta). ¿Deseas continuar?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('No'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Sí, cancelar'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok != true) return;
+
+                try {
+                  await ref
+                      .read(posTpvControllerProvider.notifier)
+                      .cancelSale(saleId: widget.sale.id);
+                  if (!mounted) return;
+                  _toast('Venta cancelada');
+                } catch (e) {
+                  _toast('No se pudo cancelar: $e');
+                }
+              },
+              icon: const Icon(Icons.cancel_schedule_send_outlined),
+            ),
             if (_isDesktopPlatform) ...[
               IconButton(
                 tooltip: 'Zoom -',

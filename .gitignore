@@ -43,3 +43,6 @@ Thumbs.db
 
 # Windows
 **/windows/flutter/ephemeral/
+
+# Accidental duplicated workspace
+undefined/

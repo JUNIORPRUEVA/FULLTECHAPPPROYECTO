@@ -54,17 +54,27 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
 
   // Convert Producto (catalog) to PosProduct for TPV compatibility
   PosProduct _convertToTPVProduct(Producto producto) {
+    // Best-effort merge with POS product snapshot to get stock.
+    final posSnapshot = ref.read(posTpvControllerProvider).products;
+    PosProduct? match;
+    for (final p in posSnapshot) {
+      if (p.id == producto.id) {
+        match = p;
+        break;
+      }
+    }
+
     return PosProduct(
       id: producto.id,
       nombre: producto.nombre,
       precioVenta: producto.precioVenta,
       costPrice: producto.precioCompra,
-      stockQty: 0, // Default values since catalog doesn't have stock info
-      minStock: 0,
-      maxStock: 0,
-      allowNegativeStock: true,
-      lowStock: false,
-      suggestedReorderQty: 0,
+      stockQty: match?.stockQty ?? 0,
+      minStock: match?.minStock ?? 0,
+      maxStock: match?.maxStock ?? 0,
+      allowNegativeStock: match?.allowNegativeStock ?? false,
+      lowStock: match?.lowStock ?? false,
+      suggestedReorderQty: match?.suggestedReorderQty ?? 0,
       categoria: producto.categoria != null
           ? PosCategory(
               id: producto.categoria!.id,
@@ -448,6 +458,7 @@ class _PosCatalogPane extends ConsumerWidget {
     final st = ref.watch(posTpvControllerProvider);
     final catalogSt = ref.watch(presupuestoCatalogControllerProvider);
     final catalogCtrl = ref.read(presupuestoCatalogControllerProvider.notifier);
+    final posCtrl = ref.read(posTpvControllerProvider.notifier);
 
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -482,7 +493,10 @@ class _PosCatalogPane extends ConsumerWidget {
                     labelText: 'Buscar producto',
                     isDense: true,
                   ),
-                  onChanged: catalogCtrl.setQuery,
+                  onChanged: (v) {
+                    catalogCtrl.setQuery(v);
+                    posCtrl.setSearch(v);
+                  },
                 ),
               ),
               const SizedBox(width: 8),
@@ -545,7 +559,10 @@ class _PosCatalogPane extends ConsumerWidget {
                           : cs.onPrimaryContainer,
                       fontWeight: FontWeight.w700,
                     ),
-                    onSelected: (_) => catalogCtrl.setCategoria(c.id),
+                    onSelected: (_) {
+                      catalogCtrl.setCategoria(c.id);
+                      posCtrl.setCategory(c.id);
+                    },
                   ),
                 ),
             ],
@@ -561,6 +578,7 @@ class _PosCatalogPane extends ConsumerWidget {
             onAddProduct,
             catalogCtrl,
             productsScroll,
+            st.products,
           ),
         ),
         const SizedBox(height: 12),
@@ -603,6 +621,7 @@ class _PosCatalogPane extends ConsumerWidget {
     ValueChanged<Producto> onAddProduct,
     PresupuestoCatalogController ctrl,
     ScrollController productsScroll,
+    List<PosProduct> posProducts,
   ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -697,6 +716,11 @@ class _PosCatalogPane extends ConsumerWidget {
     }
 
     // Show products grid with loading overlay if refreshing
+    final posIndex = <String, PosProduct>{};
+    for (final p in posProducts) {
+      posIndex[p.id] = p;
+    }
+
     return Stack(
       children: [
         GridView.builder(
@@ -713,13 +737,27 @@ class _PosCatalogPane extends ConsumerWidget {
             final priceText = money0.format(p.precioVenta.round());
             final costText = money0.format(p.precioCompra.round());
 
+            final pos = posIndex[p.id];
+
             return CatalogProductGridCard(
               nombre: p.nombre,
               priceText: priceText,
               costText: costText,
               canSeeCost: canSeeCost,
               imageRaw: p.imagenUrl,
-              onTap: () => onAddProduct(p),
+              stockQty: pos?.stockQty,
+              minStock: pos?.minStock,
+              onTap: () {
+                final allowNeg = pos?.allowNegativeStock ?? false;
+                final qty = pos?.stockQty ?? 0;
+                if (!allowNeg && qty <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Sin stock disponible')),
+                  );
+                  return;
+                }
+                onAddProduct(p);
+              },
             );
           },
         ),
@@ -1009,6 +1047,37 @@ class _PosSalePane extends ConsumerWidget {
                               .read(posTpvControllerProvider.notifier)
                               .addTicket(),
                           icon: const Icon(Icons.add),
+                        ),
+                        IconButton(
+                          tooltip: 'Cancelar venta (vaciar carrito)',
+                          onPressed: () async {
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Cancelar venta'),
+                                content: const Text(
+                                  'Esto vaciará el carrito del ticket actual. ¿Deseas continuar?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(false),
+                                    child: const Text('No'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(context).pop(true),
+                                    child: const Text('Sí, cancelar'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (ok != true) return;
+                            ref
+                                .read(posTpvControllerProvider.notifier)
+                                .clearActiveTicket();
+                          },
+                          icon: const Icon(Icons.clear_all),
                         ),
                       ],
                     ),

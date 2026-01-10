@@ -1738,7 +1738,8 @@ export async function postChatStatus(req: Request, res: Response) {
     }
 
     // Upsert schedule / warranty ticket based on type
-    if (mapping.taskType === 'SERVICIO_RESERVADO') {
+    // NOTE: Levantamientos also need to show up in Agenda immediately.
+    if (mapping.taskType === 'SERVICIO_RESERVADO' || mapping.taskType === 'LEVANTAMIENTO') {
       const d = parseScheduledAt(scheduledAt ?? null);
       if (!d) throw new ApiError(400, 'scheduledAt is required for servicio_reservado');
 

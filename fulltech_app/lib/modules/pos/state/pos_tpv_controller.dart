@@ -8,7 +8,6 @@ import '../models/pos_models.dart';
 import '../models/pos_ticket.dart';
 import '../services/pos_pricing.dart';
 
-
 class PosSavedTpvState {
   final List<PosTicket> tickets;
   final String activeTicketId;
@@ -124,11 +123,15 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       final saved = await _repo.loadTpvTickets();
       if (saved == null) return;
       if (saved.tickets.isEmpty) return;
-      final activeExists = saved.tickets.any((t) => t.id == saved.activeTicketId);
+      final activeExists = saved.tickets.any(
+        (t) => t.id == saved.activeTicketId,
+      );
 
       state = state.copyWith(
         tickets: saved.tickets,
-        activeTicketId: activeExists ? saved.activeTicketId : saved.tickets.first.id,
+        activeTicketId: activeExists
+            ? saved.activeTicketId
+            : saved.tickets.first.id,
       );
     } catch (_) {
       // Best-effort restore.
@@ -208,9 +211,7 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     final tickets = state.tickets
         .map(
           (t) =>
-              t.id == id
-                  ? t.copyWith(name: nextName, isCustomName: true)
-                  : t,
+              t.id == id ? t.copyWith(name: nextName, isCustomName: true) : t,
         )
         .toList();
     state = state.copyWith(tickets: tickets);
@@ -247,7 +248,9 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       t.copyWith(
         customerId: customerId,
         customerName: nextName.isEmpty ? null : nextName,
-        customerPhone: (phone ?? '').trim().isEmpty ? null : (phone ?? '').trim(),
+        customerPhone: (phone ?? '').trim().isEmpty
+            ? null
+            : (phone ?? '').trim(),
         customerRnc: (rnc ?? '').trim().isEmpty ? null : (rnc ?? '').trim(),
         name: shouldAutoName ? nextName : t.name,
       ),
@@ -293,8 +296,23 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     final idx = items.indexWhere((it) => it.product.id == product.id);
     if (idx >= 0) {
       final current = items[idx];
-      items[idx] = current.copyWith(qty: current.qty + 1);
+      final next = current.copyWith(qty: current.qty + 1);
+      if (!product.allowNegativeStock && next.qty > product.stockQty) {
+        state = state.copyWith(
+          error:
+              'Stock insuficiente para ${product.nombre}. Disponible: ${product.stockQty.toStringAsFixed(0)}',
+        );
+        return;
+      }
+      items[idx] = next;
     } else {
+      if (!product.allowNegativeStock && 1 > product.stockQty) {
+        state = state.copyWith(
+          error:
+              'Stock insuficiente para ${product.nombre}. Disponible: ${product.stockQty.toStringAsFixed(0)}',
+        );
+        return;
+      }
       items.add(
         PosSaleItemDraft(
           product: product,
@@ -310,10 +328,52 @@ class PosTpvController extends StateNotifier<PosTpvState> {
 
   void updateLine(PosSaleItemDraft line, PosSaleItemDraft next) {
     final t = state.activeTicket;
+
+    if (!next.product.allowNegativeStock && next.qty > next.product.stockQty) {
+      state = state.copyWith(
+        error:
+            'Stock insuficiente para ${next.product.nombre}. Disponible: ${next.product.stockQty.toStringAsFixed(0)}',
+      );
+      return;
+    }
+
     final items = t.items
         .map((it) => it.product.id == line.product.id ? next : it)
         .toList();
     _updateTicket(t.copyWith(items: items));
+  }
+
+  void clearActiveTicket() {
+    final t = state.activeTicket;
+    final cleared = t.copyWith(
+      items: const [],
+      discountType: PosDiscountType.fixed,
+      discountValue: 0,
+      ncfEnabled: false,
+      selectedNcfDocType: null,
+    );
+    _updateTicket(cleared);
+    state = state.copyWith(error: null);
+  }
+
+  Future<PosSale> cancelSale({required String saleId}) async {
+    state = state.copyWith(loading: true, error: null);
+    try {
+      final canceled = await _repo.cancelSale(saleId: saleId);
+      await refreshProducts();
+
+      final last = state.lastPaidSale;
+      if (last != null && last.id == saleId) {
+        state = state.copyWith(loading: false, lastPaidSale: canceled);
+      } else {
+        state = state.copyWith(loading: false);
+      }
+
+      return canceled;
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+      rethrow;
+    }
   }
 
   void removeLine(PosSaleItemDraft line) {
@@ -381,6 +441,7 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       _updateTicket(cleared);
 
       state = state.copyWith(loading: false, lastPaidSale: paid);
+      unawaited(refreshProducts());
       _schedulePersist();
       return paid;
     } catch (e) {

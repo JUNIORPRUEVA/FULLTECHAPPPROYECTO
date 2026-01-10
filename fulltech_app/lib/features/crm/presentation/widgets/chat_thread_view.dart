@@ -531,41 +531,46 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                   onMono: () => _wrapSelection('```', '```'),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Audio',
-                      iconSize: 20,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: state.sending
-                          ? null
-                          : () => _recordAndSendAudio(notifier),
-                      icon: const Icon(Icons.mic),
-                    ),
-                    IconButton(
-                      tooltip: 'Imagen',
-                      iconSize: 20,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: state.sending
-                          ? null
-                          : () => _pickAndSendImage(notifier),
-                      icon: const Icon(Icons.photo_camera),
-                    ),
-                    IconButton(
-                      tooltip: 'Más',
-                      iconSize: 20,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _openMoreMenu,
-                      icon: const Icon(Icons.add),
-                    ),
-                    IconButton(
-                      tooltip: 'Plantillas',
-                      iconSize: 20,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _openQuickReplies,
-                      icon: const Icon(Icons.bolt),
-                    ),
-                    Expanded(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 420;
+
+                    final iconButtons = <Widget>[
+                      IconButton(
+                        tooltip: 'Audio',
+                        iconSize: 20,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: state.sending
+                            ? null
+                            : () => _recordAndSendAudio(notifier),
+                        icon: const Icon(Icons.mic),
+                      ),
+                      IconButton(
+                        tooltip: 'Imagen',
+                        iconSize: 20,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: state.sending
+                            ? null
+                            : () => _pickAndSendImage(notifier),
+                        icon: const Icon(Icons.photo_camera),
+                      ),
+                      IconButton(
+                        tooltip: 'Más',
+                        iconSize: 20,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _openMoreMenu,
+                        icon: const Icon(Icons.add),
+                      ),
+                      IconButton(
+                        tooltip: 'Plantillas',
+                        iconSize: 20,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _openQuickReplies,
+                        icon: const Icon(Icons.bolt),
+                      ),
+                    ];
+
+                    final inputField = Expanded(
                       child: TextField(
                         controller: _textCtrl,
                         minLines: 1,
@@ -576,22 +581,64 @@ class _ChatThreadViewState extends ConsumerState<ChatThreadView> {
                         ),
                         onSubmitted: (_) => _sendText(notifier),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    FilledButton.icon(
-                      onPressed: state.sending
-                          ? null
-                          : () => _sendText(notifier),
-                      icon: state.sending
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.send),
-                      label: const Text('Enviar'),
-                    ),
-                  ],
+                    );
+
+                    final sendButton = isNarrow
+                        ? FilledButton(
+                            onPressed: state.sending
+                                ? null
+                                : () => _sendText(notifier),
+                            child: state.sending
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send),
+                          )
+                        : FilledButton.icon(
+                            onPressed: state.sending
+                                ? null
+                                : () => _sendText(notifier),
+                            icon: state.sending
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send),
+                            label: const Text('Enviar'),
+                          );
+
+                    if (!isNarrow) {
+                      return Row(
+                        children: [
+                          ...iconButtons,
+                          inputField,
+                          const SizedBox(width: 10),
+                          sendButton,
+                        ],
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        Row(children: iconButtons),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            inputField,
+                            const SizedBox(width: 10),
+                            sendButton,
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

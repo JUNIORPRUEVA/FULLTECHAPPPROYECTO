@@ -8,6 +8,8 @@ class CatalogProductGridCard extends StatelessWidget {
   final String costText;
   final bool canSeeCost;
   final String imageRaw;
+  final double? stockQty;
+  final double? minStock;
   final VoidCallback onTap;
 
   const CatalogProductGridCard({
@@ -17,8 +19,42 @@ class CatalogProductGridCard extends StatelessWidget {
     required this.costText,
     required this.canSeeCost,
     required this.imageRaw,
+    this.stockQty,
+    this.minStock,
     required this.onTap,
   });
+
+  ({Color bg, Color fg, String text})? _stockBadge(BuildContext context) {
+    final qty = stockQty;
+    if (qty == null) return null;
+
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final min = minStock ?? 0;
+
+    if (qty <= 0) {
+      return (
+        bg: cs.errorContainer,
+        fg: cs.onErrorContainer,
+        text: 'Stock: ${qty.toStringAsFixed(0)}',
+      );
+    }
+
+    if (qty <= min) {
+      return (
+        bg: cs.tertiaryContainer,
+        fg: cs.onTertiaryContainer,
+        text: 'Stock: ${qty.toStringAsFixed(0)}',
+      );
+    }
+
+    return (
+      bg: cs.primaryContainer,
+      fg: cs.onPrimaryContainer,
+      text: 'Stock: ${qty.toStringAsFixed(0)}',
+    );
+  }
 
   String _publicUrlFromMaybeRelative(String raw) {
     final v = raw.trim();
@@ -33,6 +69,8 @@ class CatalogProductGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+
+    final stockBadge = _stockBadge(context);
 
     final normalizedImageRaw = imageRaw.trim();
 
@@ -58,9 +96,33 @@ class CatalogProductGridCard extends StatelessWidget {
             else
               Container(
                 color: cs.surfaceContainerHighest,
-                child: Icon(
-                  Icons.photo_outlined,
-                  color: cs.onSurfaceVariant,
+                child: Icon(Icons.photo_outlined, color: cs.onSurfaceVariant),
+              ),
+            if (stockBadge != null)
+              Positioned(
+                left: 8,
+                top: 8,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: stockBadge.bg.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Text(
+                      stockBadge.text,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: stockBadge.fg,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             Positioned(

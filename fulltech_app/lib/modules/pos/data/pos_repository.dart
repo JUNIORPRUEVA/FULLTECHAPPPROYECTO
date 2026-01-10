@@ -38,17 +38,25 @@ class PosRepository {
         : '${_tpvStore}_${empresaId.trim()}';
   }
 
-  Future<void> saveTpvTickets(List<PosTicket> tickets, String activeTicketId) async {
+  Future<void> saveTpvTickets(
+    List<PosTicket> tickets,
+    String activeTicketId,
+  ) async {
     final store = await _tpvTicketsStore();
     final payload = {
       'active_ticket_id': activeTicketId,
       'tickets': tickets.map((t) => t.toJson()).toList(),
       'updated_at': DateTime.now().toIso8601String(),
     };
-    await _db.upsertEntity(store: store, id: _tpvStateId, json: jsonEncode(payload));
+    await _db.upsertEntity(
+      store: store,
+      id: _tpvStateId,
+      json: jsonEncode(payload),
+    );
   }
 
-  Future<({List<PosTicket> tickets, String activeTicketId})?> loadTpvTickets() async {
+  Future<({List<PosTicket> tickets, String activeTicketId})?>
+  loadTpvTickets() async {
     final store = await _tpvTicketsStore();
     final raw = await _db.getEntityJson(store: store, id: _tpvStateId);
     if (raw == null || raw.trim().isEmpty) return null;
@@ -76,6 +84,11 @@ class PosRepository {
         .whereType<Map>()
         .map((m) => PosProduct.fromJson(m.cast<String, dynamic>()))
         .toList();
+  }
+
+  /// Reads the locally cached POS products snapshot (best-effort, no network).
+  Future<List<PosProduct>> readCachedProducts() async {
+    return _readCachedProducts();
   }
 
   Future<void> _cacheProducts(List<PosProduct> items) async {
@@ -321,6 +334,12 @@ class PosRepository {
     return PosSale.fromJson(data);
   }
 
+  Future<PosSale> cancelSale({required String saleId}) async {
+    final res = await _api.cancelSale(saleId);
+    final data = (res['data'] as Map).cast<String, dynamic>();
+    return PosSale.fromJson(data);
+  }
+
   // === Clientes (customers) ===
 
   Future<Map<String, dynamic>?> findCustomerByPhone(String phone) async {
@@ -351,7 +370,8 @@ class PosRepository {
     final payload = {
       'nombre': nombre.trim(),
       'telefono': telefono.trim(),
-      if (direccion != null && direccion.trim().isNotEmpty) 'direccion': direccion.trim(),
+      if (direccion != null && direccion.trim().isNotEmpty)
+        'direccion': direccion.trim(),
       if (nota != null && nota.trim().isNotEmpty) 'notas': nota.trim(),
       if (tags != null) 'tags': tags,
       'origen': 'tpv',
@@ -359,7 +379,10 @@ class PosRepository {
     return _api.createCustomer(payload);
   }
 
-  Future<Map<String, dynamic>> patchCustomer(String id, Map<String, dynamic> patch) async {
+  Future<Map<String, dynamic>> patchCustomer(
+    String id,
+    Map<String, dynamic> patch,
+  ) async {
     return _api.patchCustomer(id, patch);
   }
 
@@ -388,11 +411,16 @@ class PosRepository {
     return items.map((e) => e.cast<String, dynamic>()).toList();
   }
 
-  Future<Map<String, dynamic>> createNcfSequence(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> createNcfSequence(
+    Map<String, dynamic> payload,
+  ) async {
     return _api.createNcfSequence(payload);
   }
 
-  Future<Map<String, dynamic>> updateNcfSequence(String id, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> updateNcfSequence(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
     return _api.updateNcfSequence(id, payload);
   }
 

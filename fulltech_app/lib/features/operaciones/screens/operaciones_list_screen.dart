@@ -64,7 +64,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   bool _matchesTab(int index, OperationsJob job) {
     final t = (job.crmTaskType ?? '').toUpperCase();
     if (index == 0) {
-      // Spec: Agenda shows RESERVA + SOLUCION_GARANTIA.
+      // Agenda: solo RESERVA y SOLUCION_GARANTIA.
       return _isReserva(job) || _isWarranty(job);
     }
     if (index == 1) {

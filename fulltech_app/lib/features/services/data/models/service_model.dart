@@ -23,15 +23,24 @@ class ServiceModel {
     this.lastError,
   });
 
+  static double? _parseNullableDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+      return double.tryParse(trimmed);
+    }
+    return null;
+  }
+
   factory ServiceModel.fromJson(Map<String, dynamic> json) {
     return ServiceModel(
       id: json['id'] as String,
       empresaId: json['empresa_id'] as String,
       name: json['name'] as String,
       description: json['description'] as String?,
-      defaultPrice: json['default_price'] != null
-          ? (json['default_price'] as num).toDouble()
-          : null,
+      defaultPrice: _parseNullableDouble(json['default_price']),
       isActive: json['is_active'] == true || json['is_active'] == 1,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),

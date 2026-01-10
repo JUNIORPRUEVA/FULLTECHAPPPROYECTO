@@ -11,6 +11,8 @@ import '../../../core/widgets/module_page.dart';
 import '../models/categoria_producto.dart';
 import '../models/producto.dart';
 import '../state/catalog_providers.dart';
+import '../../../modules/pos/models/pos_models.dart';
+import '../../../modules/pos/state/pos_providers.dart';
 
 String _catalogPublicBase() {
   final base = AppConfig.apiBaseUrl;
@@ -51,6 +53,8 @@ class CatalogoScreen extends ConsumerStatefulWidget {
 class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
   final _searchCtrl = TextEditingController();
 
+  Map<String, PosProduct> _posStockIndex = const {};
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +62,23 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     Future.microtask(
       () => ref.read(catalogControllerProvider.notifier).bootstrap(),
     );
+
+    // Best-effort stock snapshot (from POS cache). If missing, fetch once.
+    Future.microtask(() async {
+      try {
+        final repo = ref.read(posRepositoryProvider);
+        var items = await repo.readCachedProducts();
+        if (items.isEmpty) {
+          items = await repo.listAllProducts();
+        }
+        if (!mounted) return;
+        setState(() {
+          _posStockIndex = {for (final p in items) p.id: p};
+        });
+      } catch (_) {
+        // Ignore stock load errors; catalog should still work.
+      }
+    });
   }
 
   @override
@@ -170,6 +191,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                         _ProductsGrid(
                           productos: state.productos,
                           isMobile: isMobile,
+                          posStockIndex: _posStockIndex,
                           onOpen: (p) async {
                             // Best-effort increment.
                             await controller.incrementSearch(p.id);
@@ -1092,6 +1114,7 @@ class _FiltersBar extends StatelessWidget {
 class _ProductsGrid extends StatelessWidget {
   final List<Producto> productos;
   final bool isMobile;
+  final Map<String, PosProduct> posStockIndex;
   final ValueChanged<Producto> onOpen;
   final ValueChanged<Producto> onEdit;
   final ValueChanged<Producto> onDelete;
@@ -1099,6 +1122,7 @@ class _ProductsGrid extends StatelessWidget {
   const _ProductsGrid({
     required this.productos,
     required this.isMobile,
+    required this.posStockIndex,
     required this.onOpen,
     required this.onEdit,
     required this.onDelete,
@@ -1121,8 +1145,11 @@ class _ProductsGrid extends StatelessWidget {
       itemCount: productos.length,
       itemBuilder: (context, i) {
         final p = productos[i];
+        final pos = posStockIndex[p.id];
         return _ProductCard(
           producto: p,
+          stockQty: pos?.stockQty,
+          minStock: pos?.minStock,
           onTap: () => onOpen(p),
           onEdit: () => onEdit(p),
           onDelete: () => onDelete(p),
@@ -1134,16 +1161,29 @@ class _ProductsGrid extends StatelessWidget {
 
 class _ProductCard extends StatelessWidget {
   final Producto producto;
+  final double? stockQty;
+  final double? minStock;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _ProductCard({
     required this.producto,
+    required this.stockQty,
+    required this.minStock,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
   });
+
+  Color _stockColor(ColorScheme cs) {
+    final qty = stockQty;
+    if (qty == null) return cs.onSurfaceVariant;
+    final min = minStock ?? 0;
+    if (qty <= 0) return cs.error;
+    if (qty <= min) return cs.tertiary;
+    return cs.primary;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1352,6 +1392,14 @@ class _ProductCard extends StatelessWidget {
                         height: 28,
                         child: Row(
                           children: [
+                            Expanded(
+                              child: _PriceChip(
+                                label: 'Stock',
+                                value: (stockQty ?? 0).toStringAsFixed(0),
+                                color: _stockColor(cs),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             Expanded(
                               child: _PriceChip(
                                 label: 'Costo',
