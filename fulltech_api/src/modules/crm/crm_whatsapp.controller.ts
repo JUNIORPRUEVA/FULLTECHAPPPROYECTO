@@ -1549,6 +1549,9 @@ export async function postChatStatus(req: Request, res: Response) {
   // Business validations
   // For servicio_reservado and por_levantamiento, scheduling fields are mandatory.
   // For reserva, keep backward compatibility: only require scheduling fields when the client provides any of them.
+  const locationResolved = String(locationText ?? address ?? '').trim();
+  const hasCoords = lat !== null && lng !== null;
+
   const wantsSchedulingPayload =
     nextStatus === 'servicio_reservado' ||
     nextStatus === 'por_levantamiento' ||
@@ -1556,6 +1559,8 @@ export async function postChatStatus(req: Request, res: Response) {
       (scheduledAt !== null ||
         address !== null ||
         locationText !== null ||
+        lat !== null ||
+        lng !== null ||
         assignedTechnicianId !== null ||
         serviceId !== null));
 
@@ -1563,10 +1568,9 @@ export async function postChatStatus(req: Request, res: Response) {
     const d = parseScheduledAt(scheduledAt ?? null);
     if (!d) throw new ApiError(422, 'scheduled_at is required for this status');
 
-    // Prefer modern field name `address`, but accept legacy `locationText` too.
-    const locationResolved = String(locationText ?? address ?? '').trim();
-    if (!locationResolved) {
-      throw new ApiError(422, 'location_text is required for this status');
+    // Location: allow either textual location or lat/lng coords.
+    if (!locationResolved && !hasCoords) {
+      throw new ApiError(422, 'location_text or lat/lng is required for this status');
     }
     if (!assignedTechnicianId) {
       throw new ApiError(422, 'assigned_tech_id is required for this status');
@@ -1594,7 +1598,7 @@ export async function postChatStatus(req: Request, res: Response) {
     const chatPatch: any = { status: nextStatus };
     if (wantsSchedulingPayload) {
       chatPatch.scheduled_at = parseScheduledAt(scheduledAt ?? null);
-      chatPatch.location_text = String(locationText ?? address ?? '').trim();
+      chatPatch.location_text = locationResolved.length > 0 ? locationResolved : null;
       // Lat/Lng are optional now; allow nulls.
       chatPatch.lat = lat;
       chatPatch.lng = lng;
@@ -1719,7 +1723,7 @@ export async function postChatStatus(req: Request, res: Response) {
       product_id: productId ?? undefined,
       service_id: serviceId ?? undefined,
       scheduled_at: wantsSchedulingPayload ? parseScheduledAt(scheduledAt ?? null) : undefined,
-      location_text: wantsSchedulingPayload ? String(locationText ?? address ?? '').trim() : undefined,
+      location_text: wantsSchedulingPayload ? (locationResolved.length > 0 ? locationResolved : null) : undefined,
       lat: wantsSchedulingPayload ? lat : undefined,
       lng: wantsSchedulingPayload ? lng : undefined,
       last_update_by_user_id: user_id,
