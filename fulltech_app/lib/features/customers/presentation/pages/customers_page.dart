@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:fulltech_app/core/routing/app_routes.dart';
 import 'package:fulltech_app/features/crm/providers/purchased_clients_provider.dart';
 import 'package:fulltech_app/features/crm/data/models/purchased_client.dart';
+import 'package:fulltech_app/features/crm/presentation/widgets/status_dialogs/required_schedule_form_dialog.dart';
 
 class CustomersPage extends ConsumerStatefulWidget {
   final bool onlyActiveCustomers; // Kept for backward compatibility, but now shows purchased clients
@@ -25,7 +26,7 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
   void initState() {
     super.initState();
     // Load purchased clients on init
-    Future.microtask(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(purchasedClientsControllerProvider.notifier).loadClients(refresh: true);
     });
   }
@@ -535,6 +536,13 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
 
           const SizedBox(height: 16),
 
+          // Post-sale status (Cliente Activo)
+          _buildInfoCard('Postventa', [
+            _buildPostSaleStatusSelector(client),
+          ]),
+
+          const SizedBox(height: 16),
+
           // Last Message
           if (client.lastMessageText != null)
             _buildInfoCard('Último Mensaje', [
@@ -620,6 +628,76 @@ class _CustomersPageState extends ConsumerState<CustomersPage> {
           ),
         ],
       ),
+    );
+  }
+
+  static const _postSaleStatuses = <({String value, String label})>[
+    (value: 'normal', label: 'Normal'),
+    (value: 'garantia', label: 'Garantía'),
+    (value: 'solucion_garantia', label: 'Solución de garantía'),
+    (value: 'cliente_molesto', label: 'Cliente molesto'),
+    (value: 'vip', label: 'VIP'),
+  ];
+
+  Widget _buildPostSaleStatusSelector(PurchasedClient client) {
+    final controller = ref.read(purchasedClientsControllerProvider.notifier);
+
+    // Treat legacy 'compro' as 'normal' for post-sale UI.
+    final current = (client.status == 'compro') ? 'normal' : client.status;
+    final allowed = _postSaleStatuses.map((e) => e.value).toSet();
+    final value = allowed.contains(current) ? current : 'normal';
+
+    return DropdownButtonFormField<String>(
+      value: value,
+      decoration: const InputDecoration(
+        labelText: 'Estado postventa',
+        border: OutlineInputBorder(),
+        isDense: true,
+      ),
+      items: _postSaleStatuses
+          .map(
+            (s) => DropdownMenuItem<String>(
+              value: s.value,
+              child: Text(s.label),
+            ),
+          )
+          .toList(growable: false),
+      onChanged: (next) async {
+        if (next == null || next == value) return;
+
+        try {
+          Map<String, dynamic>? payload;
+          if (next == 'solucion_garantia') {
+            final result = await showDialog<RequiredScheduleFormResult>(
+              context: context,
+              builder: (_) => const RequiredScheduleFormDialog(
+                title: 'Solución de garantía',
+              ),
+            );
+            if (result == null) return;
+            payload = result.toJson();
+          }
+
+          await controller.updateClientStatus(
+            client.id,
+            status: next,
+            payload: payload,
+          );
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Estado postventa actualizado.')),
+          );
+
+          // Refresh detail provider view.
+          ref.invalidate(purchasedClientDetailProvider(client.id));
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
+      },
     );
   }
 

@@ -6,16 +6,15 @@ class CrmStatuses {
   static const String reserva = 'reserva';
   static const String compro = 'compro';
   static const String compraFinalizada = 'compra_finalizada';
+  // Legacy status value (deprecated in UI; treated as RESERVA).
   static const String servicioReservado = 'servicio_reservado';
   static const String noInteresado = 'no_interesado';
   static const String porLevantamiento = 'por_levantamiento';
   static const String pendientePago = 'pendiente_pago';
-  static const String conProblema = 'con_problema';
   static const String garantia = 'garantia';
   // Legacy-compatible (some existing data uses it)
   static const String enGarantia = 'en_garantia';
   static const String solucionGarantia = 'solucion_garantia';
-  static const String servicioFinalizado = 'servicio_finalizado';
   static const String cancelado = 'cancelado';
 
   // Status labels
@@ -25,15 +24,12 @@ class CrmStatuses {
     reserva: 'Reserva',
     compro: 'Compró',
     compraFinalizada: 'Compra finalizada',
-    servicioReservado: 'Servicio reservado',
     noInteresado: 'No interesado',
     porLevantamiento: 'Por levantamiento',
     pendientePago: 'Pendiente de pago',
-    conProblema: 'Con problema',
     garantia: 'Garantía',
     enGarantia: 'En garantía',
     solucionGarantia: 'Solución de garantía',
-    servicioFinalizado: 'Servicio finalizado',
     cancelado: 'Cancelado',
   };
 
@@ -43,27 +39,19 @@ class CrmStatuses {
     primerContacto,
     interesado,
     reserva,
-    compro,
-    compraFinalizada,
     pendientePago,
     porLevantamiento,
-    servicioReservado,
-    conProblema,
     garantia,
     solucionGarantia,
+    compro,
     noInteresado,
-    servicioFinalizado,
     cancelado,
   ];
 
   /// Statuses that require a form dialog
   static const Set<String> requiresDialog = {
     reserva,
-    servicioReservado,
     porLevantamiento,
-    conProblema,
-    garantia,
-    solucionGarantia,
   };
 
   /// Statuses that trigger automatic client creation
@@ -82,15 +70,21 @@ class CrmStatuses {
     final v = raw.trim();
     if (v.isEmpty) return primerContacto;
 
+    // Legacy/deprecated CRM statuses still present in older data.
+    if (v == 'compra_finalizada') return compro;
+    if (v == 'servicio_finalizado') return compro;
+    if (v == 'con_problema') return garantia;
+
     // Legacy customer tags or older UI values.
     if (v == 'noInteresado') return noInteresado;
     if (v == 'solucionGarantia') return solucionGarantia;
-    if (v == 'servicioFinalizado') return servicioFinalizado;
     if (v == 'pendientePago') return pendientePago;
     if (v == 'porLevantamiento') return porLevantamiento;
-    if (v == 'servicioReservado') return servicioReservado;
-    if (v == 'conProblema') return conProblema;
+    if (v == 'servicioReservado') return reserva;
     if (v == 'enGarantia') return garantia;
+
+    // Deprecated UI status (legacy): treat as RESERVA.
+    if (v == servicioReservado) return reserva;
 
     // Legacy CRM status.
     if (v == enGarantia) return garantia;
@@ -101,6 +95,18 @@ class CrmStatuses {
     }
 
     return labels.containsKey(v) ? v : primerContacto;
+  }
+
+  /// True when a thread belongs to post-sale (cliente activo / postventa) inbox.
+  static bool isPostSaleStatus(String status) {
+    switch (normalizeValue(status)) {
+      case compro:
+      case garantia:
+      case solucionGarantia:
+        return true;
+      default:
+        return false;
+    }
   }
 
   /// Check if a status requires a dialog

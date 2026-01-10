@@ -136,6 +136,21 @@ class PurchasedClientsController extends StateNotifier<PurchasedClientsState> {
     }
   }
 
+  Future<void> updateClientStatus(
+    String clientId, {
+    required String status,
+    Map<String, dynamic>? payload,
+  }) async {
+    await _dataSource.updatePurchasedClientStatus(
+      clientId,
+      status: status,
+      payload: payload,
+    );
+
+    // Refresh list and detail.
+    await refresh();
+  }
+
   Future<String> deleteClient(
     String clientId, {
     bool hardDelete = false,

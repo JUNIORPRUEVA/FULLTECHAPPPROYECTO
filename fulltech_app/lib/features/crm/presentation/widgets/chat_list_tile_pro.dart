@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../constants/crm_statuses.dart';
 import '../../data/models/crm_thread.dart';
 import '../../../catalogo/models/producto.dart';
 import '../../../../core/services/app_config.dart';
@@ -219,7 +220,7 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final s = status.trim().isEmpty ? 'activo' : status.trim();
+    final s = CrmStatuses.normalizeValue(status);
 
     Color bg;
     Color fg;
@@ -229,10 +230,6 @@ class _StatusChip extends StatelessWidget {
         bg = theme.colorScheme.tertiaryContainer;
         fg = theme.colorScheme.onTertiaryContainer;
         break;
-      case 'pendiente':
-        bg = theme.colorScheme.surfaceContainerHighest;
-        fg = theme.colorScheme.onSurface;
-        break;
       case 'interesado':
         bg = theme.colorScheme.secondaryContainer;
         fg = theme.colorScheme.onSecondaryContainer;
@@ -241,11 +238,22 @@ class _StatusChip extends StatelessWidget {
         bg = theme.colorScheme.tertiaryContainer;
         fg = theme.colorScheme.onTertiaryContainer;
         break;
+      case 'por_levantamiento':
+      case 'pendiente_pago':
+        bg = theme.colorScheme.surfaceContainerHighest;
+        fg = theme.colorScheme.onSurface;
+        break;
+      case 'garantia':
+      case 'solucion_garantia':
+        bg = theme.colorScheme.errorContainer;
+        fg = theme.colorScheme.onErrorContainer;
+        break;
       case 'compro':
         bg = theme.colorScheme.primaryContainer;
         fg = theme.colorScheme.onPrimaryContainer;
         break;
       case 'no_interesado':
+      case 'cancelado':
         bg = theme.colorScheme.errorContainer;
         fg = theme.colorScheme.onErrorContainer;
         break;
@@ -259,22 +267,9 @@ class _StatusChip extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       backgroundColor: bg,
       label: Text(
-        _label(s),
+        CrmStatuses.getLabel(s),
         style: theme.textTheme.labelMedium?.copyWith(color: fg),
       ),
     );
-  }
-
-  static String _label(String s) {
-    switch (s) {
-      case 'primer_contacto':
-        return 'Primer contacto';
-      case 'no_interesado':
-        return 'No interesado';
-      case 'compro':
-        return 'Compró';
-      default:
-        return s[0].toUpperCase() + s.substring(1);
-    }
   }
 }

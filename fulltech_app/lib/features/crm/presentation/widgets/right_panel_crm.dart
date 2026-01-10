@@ -7,10 +7,7 @@ import '../../../catalogo/models/producto.dart';
 import '../../../catalogo/models/categoria_producto.dart';
 import '../../../catalogo/state/catalog_providers.dart';
 import '../../../../core/services/app_config.dart';
-import 'status_dialogs/reserva_dialog.dart';
-import 'status_dialogs/servicio_reservado_dialog.dart';
-import 'status_dialogs/por_levantamiento_dialog.dart';
-import 'status_dialogs/problem_status_dialog.dart';
+import 'status_dialogs/required_schedule_form_dialog.dart';
 
 String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
@@ -329,6 +326,7 @@ class _ActionsSection extends ConsumerWidget {
         // Cambiar Estado
         Builder(
           builder: (context) {
+            final isComproLocked = thread.status == CrmStatuses.compro;
             return DropdownButtonFormField<String>(
               initialValue: thread.status,
               items: const [
@@ -341,11 +339,6 @@ class _ActionsSection extends ConsumerWidget {
                   child: Text('Interesado'),
                 ),
                 DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
-                DropdownMenuItem(value: 'compro', child: Text('Compró')),
-                DropdownMenuItem(
-                  value: 'compra_finalizada',
-                  child: Text('Compra finalizada'),
-                ),
                 DropdownMenuItem(
                   value: 'pendiente_pago',
                   child: Text('Pendiente de pago'),
@@ -353,14 +346,6 @@ class _ActionsSection extends ConsumerWidget {
                 DropdownMenuItem(
                   value: 'por_levantamiento',
                   child: Text('Por levantamiento'),
-                ),
-                DropdownMenuItem(
-                  value: 'servicio_reservado',
-                  child: Text('Servicio reservado'),
-                ),
-                DropdownMenuItem(
-                  value: 'con_problema',
-                  child: Text('Con problema'),
                 ),
                 DropdownMenuItem(
                   value: 'garantia',
@@ -375,73 +360,36 @@ class _ActionsSection extends ConsumerWidget {
                   child: Text('Solución de garantía'),
                 ),
                 DropdownMenuItem(
-                  value: 'servicio_finalizado',
-                  child: Text('Servicio finalizado'),
-                ),
-                DropdownMenuItem(
                   value: 'cancelado',
                   child: Text('Cancelado'),
                 ),
+                DropdownMenuItem(value: 'compro', child: Text('Compró')),
               ],
-              onChanged: (v) async {
+              onChanged: isComproLocked
+                  ? null
+                  : (v) async {
                 if (v == null) return;
 
                 final nextStatus = v.trim();
 
-                // Handle dialog-required statuses first
-                if (CrmStatuses.needsDialog(nextStatus)) {
+                // Mandatory schedule form for RESERVA and POR_LEVANTAMIENTO.
+                if (nextStatus == CrmStatuses.reserva ||
+                    nextStatus == CrmStatuses.porLevantamiento) {
                   try {
-                    Map<String, dynamic> payload = {'status': nextStatus};
+                    final title = nextStatus == CrmStatuses.reserva
+                        ? 'Reserva'
+                        : 'Por levantamiento';
 
-                    if (nextStatus == CrmStatuses.reserva) {
-                      final result = await showDialog<ReservaDialogResult>(
-                        context: context,
-                        builder: (_) => const ReservaDialog(),
-                      );
-                      if (result == null) return;
-                      final scheduledAt = DateTime(
-                        result.fechaReserva.year,
-                        result.fechaReserva.month,
-                        result.fechaReserva.day,
-                        result.horaReserva.hour,
-                        result.horaReserva.minute,
-                      );
-                      payload = {
-                        'status': nextStatus,
-                        'scheduledAt': scheduledAt.toIso8601String(),
-                        'note': result.nota,
-                      };
-                    } else if (nextStatus == CrmStatuses.servicioReservado) {
-                      final result =
-                          await showDialog<ServicioReservadoDialogResult>(
-                            context: context,
-                            builder: (_) => const ServicioReservadoDialog(),
-                          );
-                      if (result == null) return;
-                      payload = {'status': nextStatus, ...result.toJson()};
-                    } else if (nextStatus == CrmStatuses.porLevantamiento) {
-                      final result = await showDialog<PorLevantamientoDialogResult>(
-                        context: context,
-                        builder: (_) => const PorLevantamientoDialog(),
-                      );
-                      if (result == null) return;
-                      payload = {'status': nextStatus, ...result.toJson()};
-                    } else if (nextStatus == CrmStatuses.conProblema ||
-                        nextStatus == CrmStatuses.garantia ||
-                        nextStatus == CrmStatuses.solucionGarantia) {
-                      final title = nextStatus == CrmStatuses.conProblema
-                          ? 'Con problema'
-                          : nextStatus == CrmStatuses.garantia
-                              ? 'Garantía'
-                              : 'Solución de garantía';
+                    final result = await showDialog<RequiredScheduleFormResult>(
+                      context: context,
+                      builder: (_) => RequiredScheduleFormDialog(title: title),
+                    );
+                    if (result == null) return;
 
-                      final result = await showDialog<ProblemStatusDialogResult>(
-                        context: context,
-                        builder: (_) => ProblemStatusDialog(title: title),
-                      );
-                      if (result == null) return;
-                      payload = {'status': nextStatus, ...result.toJson()};
-                    }
+                    final payload = {
+                      'status': nextStatus,
+                      ...result.toJson(),
+                    };
 
                     await ref
                         .read(crmRepositoryProvider)

@@ -29,9 +29,10 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(operationsJobsControllerProvider.notifier).refresh(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(operationsJobsControllerProvider.notifier).refresh();
+    });
   }
 
   bool _isTechnician(String role) =>
@@ -43,66 +44,65 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
         return 'Agenda';
       case 1:
         return 'Levantamientos';
-      case 2:
-        return 'Instalaciones';
-      case 3:
-        return 'Garantías';
       default:
         return '';
     }
   }
 
+  bool _isWarranty(OperationsJob job) {
+    final t = (job.crmTaskType ?? '').toUpperCase();
+    if (t == 'GARANTIA') return true;
+    return job.status.startsWith('warranty_') || job.status == 'closed';
+  }
+
+  bool _isReserva(OperationsJob job) {
+    final t = (job.crmTaskType ?? '').toUpperCase();
+    return t == 'SERVICIO_RESERVADO' || t == 'INSTALACION';
+  }
+
   bool _matchesTab(int index, OperationsJob job) {
     final t = (job.crmTaskType ?? '').toUpperCase();
-    if (index == 0) return true;
+    if (index == 0) {
+      // Spec: Agenda shows RESERVA + SOLUCION_GARANTIA.
+      return _isReserva(job) || _isWarranty(job);
+    }
     if (index == 1) {
       return t == 'LEVANTAMIENTO' ||
           job.status.startsWith('pending_survey') ||
           job.status.startsWith('survey_') ||
           job.status == 'pending_scheduling';
     }
-    if (index == 2) {
-      return t == 'SERVICIO_RESERVADO' ||
-          t == 'INSTALACION' ||
-          job.status == 'scheduled' ||
-          job.status == 'installation_in_progress' ||
-          job.status == 'completed';
-    }
-    if (index == 3) {
-      return t == 'GARANTIA' ||
-          job.status == 'warranty_pending' ||
-          job.status == 'warranty_in_progress' ||
-          job.status == 'closed';
-    }
     return true;
-  }
-
-  DateTime _todayLocal() {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
   }
 
   DateTime? _effectiveDate(OperationsJob job) {
     return job.scheduledDate?.toLocal() ?? job.createdAt.toLocal();
   }
 
-  String _groupLabel(OperationsJob job) {
+  DateTime? _effectiveDay(OperationsJob job) {
     final date = _effectiveDate(job);
-    if (date == null) return 'Sin fecha';
+    if (date == null) return null;
+    return DateTime(date.year, date.month, date.day);
+  }
 
-    final today = _todayLocal();
-    final day = DateTime(date.year, date.month, date.day);
+  String _typeLabelFor(int tabIndex, OperationsJob job) {
+    if (tabIndex == 1) return 'Por levantamiento';
+    if (_isWarranty(job)) return 'Solución garantía';
+    return 'Reserva';
+  }
 
-    final isTerminal =
-        job.status == 'completed' || job.status == 'closed' || job.status == 'cancelled';
-    if (!isTerminal && day.isBefore(today)) return 'Vencidas';
-
-    if (day == today) return 'Hoy';
-    if (day == today.add(const Duration(days: 1))) return 'Mañana';
-
-    final weekEnd = today.add(const Duration(days: 7));
-    if (day.isBefore(weekEnd)) return 'Esta semana';
-    return 'Próximas';
+  String _techNameById(List<dynamic> techs, String id) {
+    for (final t in techs) {
+      try {
+        if ((t.id ?? '').toString() == id) {
+          final name = (t.nombreCompleto ?? '').toString().trim();
+          return name.isNotEmpty ? name : id;
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+    return id;
   }
 
   Color _statusColor(BuildContext context, String status) {
@@ -212,8 +212,10 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
 
     final state = ref.watch(operationsJobsControllerProvider);
 
+    final techsAsync = ref.watch(operationsTechniciansProvider);
+
     return DefaultTabController(
-      length: 4,
+      length: 2,
       child: ModulePage(
         title: 'Operaciones',
         actions: [
@@ -322,7 +324,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
             TabBar(
               isScrollable: true,
               tabs: List.generate(
-                4,
+                2,
                 (i) => Tab(text: _tabLabel(i)),
               ),
             ),
@@ -330,23 +332,25 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
             Expanded(
               child: TabBarView(
                 children: List.generate(
-                  4,
+                  2,
                   (tabIndex) {
                     final filtered =
                         state.items.where((j) => _matchesTab(tabIndex, j)).toList();
 
-                    final groups = <String, List<OperationsJob>>{};
+                    final groups = <DateTime?, List<OperationsJob>>{};
                     for (final j in filtered) {
-                      final g = _groupLabel(j);
-                      groups.putIfAbsent(g, () => []).add(j);
+                      final day = _effectiveDay(j);
+                      groups.putIfAbsent(day, () => []).add(j);
                     }
 
-                    // Sort groups by priority order
-                    const order = ['Vencidas', 'Hoy', 'Mañana', 'Esta semana', 'Próximas', 'Sin fecha'];
                     final groupKeys = groups.keys.toList()
-                      ..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
+                      ..sort((a, b) {
+                        if (a == null && b == null) return 0;
+                        if (a == null) return 1;
+                        if (b == null) return -1;
+                        return a.compareTo(b);
+                      });
 
-                    // Sort within groups: overdue first then scheduled date
                     for (final k in groupKeys) {
                       groups[k]!.sort((a, b) {
                         final da = _effectiveDate(a) ?? a.createdAt;
@@ -366,61 +370,90 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                     return ListView(
                       padding: const EdgeInsets.all(12),
                       children: [
-                        for (final g in groupKeys) ...[
+                        for (final day in groupKeys) ...[
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8, top: 8),
                             child: Text(
-                              g,
+                              day == null
+                                  ? 'Sin fecha'
+                                  : MaterialLocalizations.of(context)
+                                      .formatFullDate(day),
                               style: Theme.of(context)
                                   .textTheme
                                   .titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ),
-                          ...groups[g]!.map(
-                            (job) => Card(
+                          ...groups[day]!.map((job) {
+                            final typeLabel = _typeLabelFor(tabIndex, job);
+                            final statusLabel = _statusLabel(job.status);
+                            final statusColor = _statusColor(context, job.status);
+                            final localDate = job.scheduledDate?.toLocal();
+                            final dateStr = (localDate == null)
+                                ? null
+                                : MaterialLocalizations.of(context)
+                                    .formatCompactDate(localDate);
+                            final timeStr = (job.preferredTime != null &&
+                                    job.preferredTime!.trim().isNotEmpty)
+                                ? job.preferredTime!.trim()
+                                : null;
+
+                            String? techLine;
+                            if (job.assignedTechId != null &&
+                                job.assignedTechId!.trim().isNotEmpty) {
+                              techLine = techsAsync.when(
+                                data: (techs) =>
+                                    _techNameById(techs, job.assignedTechId!),
+                                loading: () => job.assignedTechId,
+                                error: (_, __) => job.assignedTechId,
+                              );
+                            }
+
+                            final subtitleParts = <String>[];
+                            if (job.serviceType.trim().isNotEmpty) {
+                              subtitleParts.add(job.serviceType.trim());
+                            }
+                            if (job.customerAddress != null &&
+                                job.customerAddress!.trim().isNotEmpty) {
+                              subtitleParts.add(job.customerAddress!.trim());
+                            }
+                            if (dateStr != null) subtitleParts.add(dateStr);
+                            if (timeStr != null) subtitleParts.add(timeStr);
+                            if (techLine != null) subtitleParts.add('Téc: $techLine');
+
+                            return Card(
                               child: ListTile(
                                 leading: Icon(
-                                  Icons.assignment_outlined,
-                                  color: _statusColor(context, job.status),
+                                  tabIndex == 1
+                                      ? Icons.assignment_turned_in_outlined
+                                      : Icons.event_outlined,
+                                  color: statusColor,
                                 ),
                                 title: Text(job.customerName.trim().isNotEmpty
                                     ? job.customerName.trim()
                                     : 'Cliente'),
-                                subtitle: Text(
-                                  [
-                                    job.serviceType,
-                                    _statusLabel(job.status),
-                                    if (job.scheduledDate != null)
-                                      job.scheduledDate!
-                                          .toLocal()
-                                          .toString()
-                                          .split(' ')
-                                          .first,
-                                    if (job.preferredTime != null)
-                                      job.preferredTime!,
-                                  ].join(' • '),
-                                ),
+                                subtitle: Text(subtitleParts.join(' • ')),
                                 trailing: Wrap(
                                   spacing: 8,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
+                                    Chip(label: Text(typeLabel)),
                                     Chip(
-                                      label: Text(_statusLabel(job.status)),
-                                      backgroundColor: _statusColor(context, job.status)
-                                          .withValues(alpha: 0.12),
-                                      side: BorderSide(
-                                        color: _statusColor(context, job.status),
-                                      ),
+                                      label: Text(statusLabel),
+                                      backgroundColor:
+                                          statusColor.withValues(alpha: 0.12),
+                                      side: BorderSide(color: statusColor),
                                     ),
                                     if (job.crmChatId != null &&
                                         job.crmChatId!.trim().isNotEmpty)
                                       IconButton(
-                                        tooltip: 'Abrir chat CRM',
+                                        tooltip: 'Abrir chat',
                                         onPressed: () => context.go(
                                           '${AppRoutes.crm}/chats/${job.crmChatId}',
                                         ),
-                                        icon: const Icon(Icons.chat_bubble_outline),
+                                        icon: const Icon(
+                                          Icons.chat_bubble_outline,
+                                        ),
                                       ),
                                     if (isTech)
                                       PopupMenuButton<String>(
@@ -459,6 +492,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                                               cancelReason: reason,
                                             );
                                           }
+                                          if (!mounted) return;
                                           await ref
                                               .read(
                                                 operationsJobsControllerProvider.notifier,
@@ -492,8 +526,8 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen> {
                                 onTap: () =>
                                     context.go(AppRoutes.operacionesDetail(job.id)),
                               ),
-                            ),
-                          ),
+                            );
+                          }),
                         ],
                       ],
                     );

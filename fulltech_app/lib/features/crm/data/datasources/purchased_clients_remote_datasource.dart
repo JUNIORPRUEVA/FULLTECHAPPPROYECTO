@@ -92,6 +92,33 @@ class PurchasedClientsRemoteDatasource {
     }
   }
 
+  /// Update purchased client post-sale status.
+  /// Backend endpoint is expected to exist.
+  Future<PurchasedClient> updatePurchasedClientStatus(
+    String clientId, {
+    required String status,
+    Map<String, dynamic>? payload,
+  }) async {
+    final body = <String, dynamic>{
+      'status': status,
+      if (payload != null) ...payload,
+    };
+
+    final response = await _dio.patch(
+      '/crm/purchased-clients/$clientId/status',
+      data: body,
+    );
+
+    if (response.statusCode == 200) {
+      final jsonData = _normalizeJson(response.data) as Map<String, dynamic>;
+      return PurchasedClient.fromJson(jsonData['item'] as Map<String, dynamic>);
+    }
+
+    throw Exception(
+      'Failed to update purchased client status: ${response.statusCode}',
+    );
+  }
+
   /// Delete purchased client (soft delete by default)
   Future<String> deletePurchasedClient(
     String clientId, {

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +9,7 @@ import '../../../../core/widgets/compact_error_widget.dart';
 import '../../state/crm_providers.dart';
 import '../../state/crm_threads_state.dart';
 import '../../data/models/crm_thread.dart';
+import '../../constants/crm_statuses.dart';
 import '../widgets/chat_list_item_pro.dart';
 import '../widgets/chat_thread_view.dart';
 import '../widgets/crm_outbound_message_dialog.dart';
@@ -34,7 +33,7 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       _isInitialized = true;
       // Start stats controller (with auth guard inside)
       ref.read(crmChatStatsControllerProvider.notifier).start();
@@ -281,11 +280,23 @@ class _ThreadsList extends ConsumerWidget {
                       return const Center(child: Text('Sin chats'));
                     }
 
+                    final postSale = items
+                        .where((t) => CrmStatuses.isPostSaleStatus(t.status))
+                        .toList(growable: false);
+                    final normal = items
+                        .where((t) => !CrmStatuses.isPostSaleStatus(t.status))
+                        .toList(growable: false);
+
+                    final hasDivider = postSale.isNotEmpty && normal.isNotEmpty;
+                    final listLength =
+                        1 + postSale.length + (hasDivider ? 1 : 0) + normal.length;
+                    final dividerIndex = 1 + postSale.length;
+
                     return ListView.builder(
                       padding: const EdgeInsets.only(bottom: 72),
-                      itemCount: items.length + 1,
+                      itemCount: listLength + 1,
                       itemBuilder: (context, index) {
-                        if (index == items.length) {
+                        if (index == listLength) {
                           final total = threadsState.total;
                           final canLoadMore = threadsState.items.length < total;
                           return Padding(
@@ -302,7 +313,56 @@ class _ThreadsList extends ConsumerWidget {
                           );
                         }
 
-                        final CrmThread t = items[index];
+                        if (index == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                            child: Card(
+                              margin: EdgeInsets.zero,
+                              child: Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.support_agent, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Mensajes de cliente activo',
+                                        style: textTheme.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${postSale.length}',
+                                      style: textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (hasDivider && index == dividerIndex) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 10),
+                            child: Divider(height: 18),
+                          );
+                        }
+
+                        // Map list index -> correct thread list.
+                        CrmThread t;
+                        if (index > 0 && index <= postSale.length) {
+                          t = postSale[index - 1];
+                        } else {
+                          final normalOffset =
+                              index - 1 - postSale.length - (hasDivider ? 1 : 0);
+                          t = normal[normalOffset];
+                        }
+
                         return ChatListItemPro(
                           thread: t,
                           isSelected: selectedId == t.id,

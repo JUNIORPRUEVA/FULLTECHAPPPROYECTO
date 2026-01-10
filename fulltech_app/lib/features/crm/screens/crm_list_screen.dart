@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/module_page.dart';
+import '../constants/crm_statuses.dart';
 import '../models/cliente.dart';
 import 'crm_detail_screen.dart';
 
@@ -21,7 +22,7 @@ class _CrmListScreenState extends State<CrmListScreen> {
       id: '1',
       nombre: 'Juan Pérez',
       telefono: '8090000001',
-      estado: 'pendiente',
+      estado: CrmStatuses.primerContacto,
       ultimoMensaje: 'Hola, quiero cotizar...',
       ultimaInteraccion: DateTime.now().subtract(const Duration(hours: 2)),
     ),
@@ -79,9 +80,27 @@ class _CrmListScreenState extends State<CrmListScreen> {
                   initialValue: _estado,
                   items: const [
                     DropdownMenuItem(value: 'todos', child: Text('Todos')),
-                    DropdownMenuItem(value: 'pendiente', child: Text('Pendiente')),
+                    DropdownMenuItem(
+                      value: CrmStatuses.primerContacto,
+                      child: Text('Primer contacto'),
+                    ),
                     DropdownMenuItem(value: 'interesado', child: Text('Interesado')),
+                    DropdownMenuItem(value: 'reserva', child: Text('Reserva')),
+                    DropdownMenuItem(
+                      value: 'por_levantamiento',
+                      child: Text('Por levantamiento'),
+                    ),
+                    DropdownMenuItem(value: 'garantia', child: Text('Garantía')),
+                    DropdownMenuItem(
+                      value: 'solucion_garantia',
+                      child: Text('Solución de garantía'),
+                    ),
                     DropdownMenuItem(value: 'compro', child: Text('Compró')),
+                    DropdownMenuItem(
+                      value: 'no_interesado',
+                      child: Text('No interesado'),
+                    ),
+                    DropdownMenuItem(value: 'cancelado', child: Text('Cancelado')),
                   ],
                   onChanged: (v) => setState(() => _estado = v ?? 'todos'),
                   decoration: const InputDecoration(

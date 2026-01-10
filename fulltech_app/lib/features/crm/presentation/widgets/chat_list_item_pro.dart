@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../constants/crm_statuses.dart';
 import '../../data/models/crm_thread.dart';
 
 class ChatListItemPro extends StatelessWidget {
@@ -23,6 +24,8 @@ class ChatListItemPro extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    final normalizedStatus = CrmStatuses.normalizeValue(thread.status);
 
     // Display name fallback
     final displayName = (thread.displayName ?? '').trim().isNotEmpty
@@ -147,10 +150,10 @@ class ChatListItemPro extends StatelessWidget {
                             ),
                           ),
                           if (thread.status.isNotEmpty &&
-                              thread.status != 'activo')
+                              normalizedStatus != CrmStatuses.primerContacto)
                             Padding(
                               padding: const EdgeInsets.only(left: 6),
-                              child: _StatusChipMini(status: thread.status),
+                              child: _StatusChipMini(status: normalizedStatus),
                             ),
                         ],
                       ),
@@ -223,25 +226,26 @@ class ChatListItemPro extends StatelessWidget {
                             ],
                           ),
                         ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete_outline,
-                                size: 18,
-                                color: theme.colorScheme.error,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Eliminar',
-                                style: TextStyle(
+                        if (onDelete != null)
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.delete_outline,
+                                  size: 18,
                                   color: theme.colorScheme.error,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Eliminar',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.error,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -369,66 +373,87 @@ class _StatusChipMini extends StatelessWidget {
 
   const _StatusChipMini({required this.status});
 
+  static String _statusLabel(String status) {
+    final v = CrmStatuses.normalizeValue(status);
+
+    switch (v) {
+      case CrmStatuses.primerContacto:
+        return '1er';
+      case CrmStatuses.interesado:
+        return 'Int.';
+      case CrmStatuses.reserva:
+        return 'Res.';
+      case CrmStatuses.porLevantamiento:
+        return 'Lev.';
+      case CrmStatuses.garantia:
+        return 'Gar.';
+      case CrmStatuses.solucionGarantia:
+        return 'Sol.';
+      case CrmStatuses.pendientePago:
+        return 'Pago';
+      case CrmStatuses.compro:
+        return 'Cpró';
+      case CrmStatuses.noInteresado:
+        return 'No';
+      case CrmStatuses.cancelado:
+        return 'Canc.';
+      default:
+        final raw = v.trim();
+        if (raw.isEmpty) return '1er';
+        return raw.substring(0, (raw.length / 2).ceil());
+    }
+  }
+
+  static Color _statusColor(String status) {
+    final v = CrmStatuses.normalizeValue(status);
+
+    switch (v) {
+      case CrmStatuses.primerContacto:
+        return Colors.orange;
+      case CrmStatuses.interesado:
+        return Colors.blue;
+      case CrmStatuses.reserva:
+        return Colors.purple;
+      case CrmStatuses.porLevantamiento:
+      case CrmStatuses.pendientePago:
+        return Colors.deepOrange;
+      case CrmStatuses.garantia:
+      case CrmStatuses.solucionGarantia:
+        return Colors.red;
+      case CrmStatuses.compro:
+        return Colors.green;
+      case CrmStatuses.noInteresado:
+      case CrmStatuses.cancelado:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final label = _statusLabel(status);
+    final color = _statusColor(status);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: _statusColor(status).withOpacity(0.15),
+        color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: _statusColor(status).withOpacity(0.3),
+          color: color.withOpacity(0.3),
           width: 0.5,
         ),
       ),
       child: Text(
         label,
         style: theme.textTheme.labelSmall?.copyWith(
-          color: _statusColor(status),
+          color: color,
           fontSize: 9,
           fontWeight: FontWeight.w600,
         ),
       ),
     );
-  }
-
-  String _statusLabel(String v) {
-    switch (v.toLowerCase()) {
-      case 'primer_contacto':
-        return '1er';
-      case 'pendiente':
-        return 'Pend.';
-      case 'interesado':
-        return 'Int.';
-      case 'reserva':
-        return 'Res.';
-      case 'compro':
-        return 'Cpró';
-      case 'no_interesado':
-        return 'No';
-      default:
-        return v.substring(0, (v.length / 2).ceil());
-    }
-  }
-
-  Color _statusColor(String v) {
-    switch (v.toLowerCase()) {
-      case 'primer_contacto':
-      case 'pendiente':
-        return Colors.orange;
-      case 'interesado':
-        return Colors.blue;
-      case 'reserva':
-        return Colors.purple;
-      case 'compro':
-        return Colors.green;
-      case 'no_interesado':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
   }
 }
