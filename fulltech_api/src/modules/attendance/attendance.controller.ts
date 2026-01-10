@@ -64,8 +64,14 @@ export async function createPunch(req: Request, res: Response) {
       (body as any).datetimeUtc ?? (body as any).datetime_utc ?? new Date().toISOString();
     const datetimeUtc = new Date(datetimeUtcStr);
 
-    const businessRule = (code: string, message: string) =>
-      res.status(400).json({ error: 'BUSINESS_RULE', code, message });
+    const businessRule = (code: string, message: string) => {
+      console.info('[ATTENDANCE] BUSINESS_RULE', {
+        code,
+        userId: userId ? `…${String(userId).slice(-6)}` : null,
+        type,
+      });
+      return res.status(400).json({ error: 'BUSINESS_RULE', code, message, retryable: false });
+    };
 
     // Disallow Sunday punches (best-effort based on UTC).
     // Client also enforces this using local time.
