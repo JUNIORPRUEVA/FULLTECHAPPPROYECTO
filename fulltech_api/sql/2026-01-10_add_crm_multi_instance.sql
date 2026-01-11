@@ -12,8 +12,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- =====================================================
 CREATE TABLE IF NOT EXISTS crm_instancias (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  empresa_id UUID NOT NULL REFERENCES "Empresa"(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES "Usuario"(id) ON DELETE CASCADE,
   nombre_instancia TEXT NOT NULL,
   evolution_base_url TEXT NOT NULL,
   evolution_api_key TEXT NOT NULL,
@@ -47,11 +47,11 @@ ALTER TABLE crm_chats
 
 -- Add owner_user_id for quick filtering
 ALTER TABLE crm_chats 
-  ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES "Usuario"(id) ON DELETE SET NULL;
 
 -- Add asignado_a_user_id for chat assignment
 ALTER TABLE crm_chats 
-  ADD COLUMN IF NOT EXISTS asignado_a_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS asignado_a_user_id UUID REFERENCES "Usuario"(id) ON DELETE SET NULL;
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS crm_chats_instancia_idx ON crm_chats(instancia_id);
@@ -88,8 +88,8 @@ COMMENT ON COLUMN crm_messages.instancia_id IS 'Instance that handled this messa
 CREATE TABLE IF NOT EXISTS crm_chat_transfer_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   chat_id UUID NOT NULL REFERENCES crm_chats(id) ON DELETE CASCADE,
-  from_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  to_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  from_user_id UUID REFERENCES "Usuario"(id) ON DELETE SET NULL,
+  to_user_id UUID NOT NULL REFERENCES "Usuario"(id) ON DELETE CASCADE,
   from_instancia_id UUID REFERENCES crm_instancias(id) ON DELETE SET NULL,
   to_instancia_id UUID NOT NULL REFERENCES crm_instancias(id) ON DELETE CASCADE,
   notes TEXT,
@@ -119,8 +119,8 @@ DECLARE
   has_assigned_user_id BOOLEAN;
 BEGIN
   -- Get default values from first available
-  SELECT id INTO default_empresa_id FROM empresas ORDER BY created_at LIMIT 1;
-  SELECT id INTO default_user_id FROM users WHERE role IN ('admin', 'administrador') ORDER BY created_at LIMIT 1;
+  SELECT id INTO default_empresa_id FROM "Empresa" ORDER BY created_at LIMIT 1;
+  SELECT id INTO default_user_id FROM "Usuario" WHERE role IN ('admin', 'administrador') ORDER BY created_at LIMIT 1;
 
   -- Use env values if available, otherwise placeholder
   default_instance_name := COALESCE(current_setting('app.evolution_instance_name', TRUE), 'default');
@@ -206,13 +206,13 @@ SELECT COUNT(*) as total_instances FROM crm_instancias;
 -- Check instance distribution
 SELECT 
   i.nombre_instancia,
-  u.username as owner,
+  u.name as owner,
   i.is_active,
   COUNT(c.id) as chat_count
 FROM crm_instancias i
-LEFT JOIN users u ON u.id = i.user_id
+LEFT JOIN "Usuario" u ON u.id = i.user_id
 LEFT JOIN crm_chats c ON c.instancia_id = i.id
-GROUP BY i.id, u.username
+GROUP BY i.id, u.name
 ORDER BY i.created_at;
 
 -- Check chats without instance (should be 0 if migration worked)
