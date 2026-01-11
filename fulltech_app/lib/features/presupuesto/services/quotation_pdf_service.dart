@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 
 import '../../configuracion/models/company_profile.dart';
 import '../state/quotation_builder_state.dart';
+import '../models/quotation_models.dart';
 
 PdfColor _rgb(int r, int g, int b) => PdfColor(r / 255, g / 255, b / 255);
 
@@ -112,8 +113,7 @@ pw.Widget _totalsFooterBlock({
     );
   }
 
-  final itbisLabel =
-      'ITBIS (${(draft.itbisRate * 100).toStringAsFixed(0)}%)';
+  final itbisLabel = 'ITBIS (${(draft.itbisRate * 100).toStringAsFixed(0)}%)';
 
   return pw.Container(
     width: 250,
@@ -139,12 +139,50 @@ pw.Widget _totalsFooterBlock({
           decoration: pw.BoxDecoration(
             border: pw.Border(top: pw.BorderSide(color: accent, width: 1.5)),
           ),
-          child: row(
-            'TOTAL',
-            _fmtMoneyRd(draft.total),
-            strong: true,
+          child: row('TOTAL', _fmtMoneyRd(draft.total), strong: true),
+        ),
+      ],
+    ),
+  );
+}
+
+pw.Widget _termsBlock({
+  required CompanyProfile company,
+  required QuotationBuilderState draft,
+}) {
+  final validityDays = company.validityDays > 0 ? company.validityDays : 0;
+  final lines = <String>[
+    if (validityDays > 0) 'Validez de la cotización: $validityDays días.',
+    r'Precios en pesos dominicanos (RD$).',
+    if (draft.itbisEnabled)
+      'Incluye ITBIS (${(draft.itbisRate * 100).toStringAsFixed(0)}%).'
+    else
+      'No incluye ITBIS.',
+    'Forma de pago: a convenir.',
+    'Entrega/instalación: a coordinar.',
+  ];
+
+  return _card(
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Términos y condiciones',
+          style: pw.TextStyle(
+            fontSize: 10,
+            fontWeight: pw.FontWeight.bold,
+            color: _textStrong,
           ),
         ),
+        pw.SizedBox(height: 6),
+        for (final l in lines)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 2),
+            child: pw.Text(
+              '• $l',
+              style: pw.TextStyle(fontSize: 9.2, color: _textMuted),
+            ),
+          ),
       ],
     ),
   );
@@ -164,12 +202,18 @@ Future<Uint8List> buildQuotationPdfBytesPro({
 
   final accent = _accentColor(company);
 
-  final baseFont = await PdfGoogleFonts.interRegular();
-  final boldFont = await PdfGoogleFonts.interSemiBold();
-  final theme = pw.ThemeData.withFont(
-    base: baseFont,
-    bold: boldFont,
-  );
+  // PdfGoogleFonts fetches fonts over the network; keep a robust fallback
+  // so the PDF can be generated offline.
+  late final pw.Font baseFont;
+  late final pw.Font boldFont;
+  try {
+    baseFont = await PdfGoogleFonts.interRegular();
+    boldFont = await PdfGoogleFonts.interSemiBold();
+  } catch (_) {
+    baseFont = pw.Font.helvetica();
+    boldFont = pw.Font.helveticaBold();
+  }
+  final theme = pw.ThemeData.withFont(base: baseFont, bold: boldFont);
 
   final pageTheme = pw.PageTheme(
     pageFormat: format,
@@ -195,137 +239,221 @@ Future<Uint8List> buildQuotationPdfBytesPro({
   doc.addPage(
     pw.MultiPage(
       pageTheme: pageTheme,
-      pageFormat: format,
       header: (ctx) {
         final companyName = company.nombreEmpresa.trim().isEmpty
             ? 'FULLTECH'
             : company.nombreEmpresa.trim();
 
-        pw.Widget topRightBox() {
-          if (logo != null) {
-            return pw.Container(
-              width: 44,
-              height: 44,
-              padding: const pw.EdgeInsets.all(4),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: _cardBorder, width: 1),
-                borderRadius: pw.BorderRadius.circular(10),
-                color: PdfColors.white,
-              ),
-              child: pw.FittedBox(
-                fit: pw.BoxFit.contain,
-                child: pw.Image(logo),
-              ),
-            );
-          }
-
-          // Small professional badge (optional)
-          final phone = company.telefono.trim();
-          if (phone.isNotEmpty) {
-            return pw.Container(
-              width: 44,
-              height: 44,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: _cardBorder, width: 1),
-                borderRadius: pw.BorderRadius.circular(10),
-                color: PdfColors.white,
-              ),
-              child: pw.Center(
-                child: pw.Text(
-                  'WhatsApp',
-                  textAlign: pw.TextAlign.center,
-                  style: pw.TextStyle(
-                    fontSize: 7.5,
-                    fontWeight: pw.FontWeight.bold,
-                    color: accent,
-                  ),
-                ),
-              ),
-            );
-          }
-
-          return pw.Container(
-            width: 44,
-            height: 44,
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: _cardBorder, width: 1),
-              borderRadius: pw.BorderRadius.circular(10),
-              color: PdfColors.white,
-            ),
-          );
-        }
-
         pw.Widget companyLeft() {
-          return pw.Row(
+          return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (logo != null) ...[
-                pw.Container(
-                  width: 22,
-                  height: 22,
-                  padding: const pw.EdgeInsets.all(2),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: _cardBorder, width: 1),
-                    borderRadius: pw.BorderRadius.circular(6),
-                    color: PdfColors.white,
-                  ),
-                  child: pw.FittedBox(
-                    fit: pw.BoxFit.contain,
-                    child: pw.Image(logo),
-                  ),
-                ),
-                pw.SizedBox(width: 8),
-              ],
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
-                  pw.Text(
-                    companyName,
-                    style: pw.TextStyle(
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                      color: _textStrong,
+                  if (logo != null) ...[
+                    pw.Container(
+                      width: 50,
+                      height: 50,
+                      padding: const pw.EdgeInsets.all(4),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: accent, width: 2),
+                        borderRadius: pw.BorderRadius.circular(8),
+                        color: PdfColors.white,
+                      ),
+                      child: pw.FittedBox(
+                        fit: pw.BoxFit.contain,
+                        child: pw.Image(logo),
+                      ),
+                    ),
+                    pw.SizedBox(width: 12),
+                  ],
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          companyName,
+                          style: pw.TextStyle(
+                            fontSize: 16,
+                            fontWeight: pw.FontWeight.bold,
+                            color: accent,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        pw.SizedBox(height: 3),
+                        pw.Text(
+                          'Soluciones Tecnológicas y Servicios Profesionales',
+                          style: pw.TextStyle(
+                            fontSize: 8.5,
+                            color: _textMuted,
+                            fontStyle: pw.FontStyle.italic,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  pw.SizedBox(height: 2),
-                  pw.Wrap(
-                    spacing: 10,
-                    runSpacing: 2,
-                    children: [
-                      if (company.telefono.trim().isNotEmpty)
-                        pw.Text(
-                          'Tel/WhatsApp: ${company.telefono.trim()}',
-                          style: pw.TextStyle(fontSize: 9, color: _textMuted),
-                        ),
-                      if (company.rnc != null && company.rnc!.trim().isNotEmpty)
-                        pw.Text(
-                          'RNC: ${company.rnc!.trim()}',
-                          style: pw.TextStyle(fontSize: 9, color: _textMuted),
-                        ),
-                    ],
-                  ),
                 ],
+              ),
+              pw.SizedBox(height: 8),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: pw.BoxDecoration(
+                  color: _cardBg,
+                  borderRadius: pw.BorderRadius.circular(6),
+                  border: pw.Border.all(color: _cardBorder, width: 1),
+                ),
+                child: pw.Wrap(
+                  spacing: 12,
+                  runSpacing: 3,
+                  children: [
+                    if (company.telefono.trim().isNotEmpty)
+                      pw.Row(
+                        mainAxisSize: pw.MainAxisSize.min,
+                        children: [
+                          pw.Container(
+                            width: 4,
+                            height: 4,
+                            decoration: pw.BoxDecoration(
+                              color: accent,
+                              shape: pw.BoxShape.circle,
+                            ),
+                          ),
+                          pw.SizedBox(width: 4),
+                          pw.Text(
+                            '${company.telefono.trim()}',
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              color: _textStrong,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (company.email != null &&
+                        company.email!.trim().isNotEmpty)
+                      pw.Row(
+                        mainAxisSize: pw.MainAxisSize.min,
+                        children: [
+                          pw.Container(
+                            width: 4,
+                            height: 4,
+                            decoration: pw.BoxDecoration(
+                              color: accent,
+                              shape: pw.BoxShape.circle,
+                            ),
+                          ),
+                          pw.SizedBox(width: 4),
+                          pw.Text(
+                            '${company.email!.trim()}',
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              color: _textStrong,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (company.rnc != null && company.rnc!.trim().isNotEmpty)
+                      pw.Row(
+                        mainAxisSize: pw.MainAxisSize.min,
+                        children: [
+                          pw.Container(
+                            width: 4,
+                            height: 4,
+                            decoration: pw.BoxDecoration(
+                              color: accent,
+                              shape: pw.BoxShape.circle,
+                            ),
+                          ),
+                          pw.SizedBox(width: 4),
+                          pw.Text(
+                            'RNC: ${company.rnc!.trim()}',
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              color: _textStrong,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ],
           );
         }
 
-        final quoteNo = quotationNumber.trim().isEmpty ? idShort : quotationNumber;
-        final validityDays = company.validityDays > 0 ? company.validityDays : 0;
+        final quoteNo = quotationNumber.trim().isEmpty
+            ? idShort
+            : quotationNumber;
+        final validityDays = company.validityDays > 0
+            ? company.validityDays
+            : 0;
         final validUntil = validityDays > 0
             ? createdAt.add(Duration(days: validityDays))
             : null;
 
-        final metaCard = _card(
-          padding: const pw.EdgeInsets.all(10),
+        final metaCard = pw.Container(
+          padding: const pw.EdgeInsets.all(12),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.white,
+            border: pw.Border.all(color: accent, width: 2),
+            borderRadius: pw.BorderRadius.circular(10),
+            boxShadow: [
+              pw.BoxShadow(
+                color: _cardBorder,
+                offset: const PdfPoint(0, 2),
+                blurRadius: 4,
+              ),
+            ],
+          ),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _kv('Cotización No.', quoteNo),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'COTIZACIÓN',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: accent,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: pw.BoxDecoration(
+                      color: accent,
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Text(
+                      _statusLabel(status),
+                      style: const pw.TextStyle(
+                        fontSize: 7.5,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              pw.Container(
+                margin: const pw.EdgeInsets.symmetric(vertical: 8),
+                height: 1,
+                color: _cardBorder,
+              ),
+              _kv('No.', quoteNo),
+              pw.SizedBox(height: 2),
               _kv('Fecha', _fmtDate(createdAt)),
-              _kv('Estado', _statusLabel(status)),
-              if (validUntil != null) _kv('Válida hasta', _fmtDate(validUntil)),
+              if (validUntil != null) ...[
+                pw.SizedBox(height: 2),
+                _kv('Válida hasta', _fmtDate(validUntil)),
+              ],
             ],
           ),
         );
@@ -337,73 +465,87 @@ Future<Uint8List> buildQuotationPdfBytesPro({
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Expanded(child: companyLeft()),
-                pw.SizedBox(width: 12),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Row(
-                      mainAxisSize: pw.MainAxisSize.min,
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.only(top: 2),
-                          child: pw.Text(
-                            'COTIZACIÓN',
-                            style: pw.TextStyle(
-                              fontSize: 18,
-                              fontWeight: pw.FontWeight.bold,
-                              color: accent,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                        pw.SizedBox(width: 10),
-                        topRightBox(),
-                      ],
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.SizedBox(width: 250, child: metaCard),
-                  ],
-                ),
+                pw.SizedBox(width: 16),
+                pw.SizedBox(width: 240, child: metaCard),
               ],
             ),
-            pw.SizedBox(height: 14),
+            pw.SizedBox(height: 16),
+            pw.Container(
+              height: 2,
+              decoration: pw.BoxDecoration(
+                gradient: pw.LinearGradient(
+                  colors: [accent.flatten(), _cardBorder, accent.flatten()],
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 16),
           ],
         );
       },
       footer: (ctx) {
-        pw.Widget contactLine(String text) {
-          return pw.Text(
-            text,
-            style: pw.TextStyle(fontSize: 8.5, color: _textMuted),
+        pw.Widget contactLine(String icon, String text) {
+          return pw.Row(
+            children: [
+              pw.Container(
+                width: 3,
+                height: 3,
+                decoration: pw.BoxDecoration(
+                  color: accent,
+                  shape: pw.BoxShape.circle,
+                ),
+              ),
+              pw.SizedBox(width: 4),
+              pw.Text(
+                text,
+                style: pw.TextStyle(fontSize: 8.5, color: _textMuted),
+              ),
+            ],
           );
         }
 
-        final contactParts = <String>[];
+        final contactLines = <pw.Widget>[];
+
+        // Línea 1: Teléfono y Email
+        final line1Parts = <String>[];
         if (company.telefono.trim().isNotEmpty) {
-          contactParts.add('Tel/WhatsApp: ${company.telefono.trim()}');
+          line1Parts.add('Tel/WhatsApp: ${company.telefono.trim()}');
         }
+        if (company.email != null && company.email!.trim().isNotEmpty) {
+          line1Parts.add('Email: ${company.email!.trim()}');
+        }
+        if (line1Parts.isNotEmpty) {
+          contactLines.add(contactLine('', line1Parts.join('  •  ')));
+        }
+
+        // Línea 2: Dirección y RNC
+        final line2Parts = <String>[];
         if (company.direccion.trim().isNotEmpty) {
-          contactParts.add('Dirección: ${company.direccion.trim()}');
+          line2Parts.add('Dirección: ${company.direccion.trim()}');
         }
         if (company.rnc != null && company.rnc!.trim().isNotEmpty) {
-          contactParts.add('RNC: ${company.rnc!.trim()}');
+          line2Parts.add('RNC: ${company.rnc!.trim()}');
         }
-        // Default requested handle; keep optional.
-        contactParts.add('Instagram: @fulltechrd');
+        if (line2Parts.isNotEmpty) {
+          contactLines.add(contactLine('', line2Parts.join('  •  ')));
+        }
+
+        // Línea 3: Redes sociales y web (siempre mostrar)
+        contactLines.add(
+          contactLine('', 'Instagram: @fulltechrd  •  Web: www.fulltechrd.com'),
+        );
 
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            if (ctx.pageNumber == ctx.pagesCount) ...[
-              pw.Align(
-                alignment: pw.Alignment.centerRight,
-                child: _totalsFooterBlock(draft: draft, accent: accent),
+            pw.Container(
+              height: 1.5,
+              decoration: pw.BoxDecoration(
+                gradient: pw.LinearGradient(
+                  colors: [accent.flatten(), _cardBorder],
+                ),
               ),
-              pw.SizedBox(height: 10),
-            ],
-            pw.Container(height: 1, color: _cardBorder),
-            pw.SizedBox(height: 8),
+            ),
+            pw.SizedBox(height: 10),
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -411,20 +553,44 @@ Future<Uint8List> buildQuotationPdfBytesPro({
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      for (final part in contactParts)
+                      for (final line in contactLines)
                         pw.Padding(
-                          padding: const pw.EdgeInsets.only(bottom: 2),
-                          child: contactLine(part),
+                          padding: const pw.EdgeInsets.only(bottom: 3),
+                          child: line,
                         ),
                     ],
                   ),
                 ),
                 pw.SizedBox(width: 12),
-                pw.Text(
-                  'Página ${ctx.pageNumber} de ${ctx.pagesCount}',
-                  style: pw.TextStyle(fontSize: 8.5, color: _textMuted),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: pw.BoxDecoration(
+                    color: accent.flatten(),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Text(
+                    'Pág. ${ctx.pageNumber}/${ctx.pagesCount}',
+                    style: const pw.TextStyle(
+                      fontSize: 8,
+                      color: PdfColors.white,
+                    ),
+                  ),
                 ),
               ],
+            ),
+            pw.SizedBox(height: 4),
+            pw.Center(
+              child: pw.Text(
+                'Documento generado electrónicamente - FULLTECH',
+                style: pw.TextStyle(
+                  fontSize: 7,
+                  color: _textMuted,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+              ),
             ),
           ],
         );
@@ -432,6 +598,23 @@ Future<Uint8List> buildQuotationPdfBytesPro({
       build: (ctx) {
         final customer = draft.customer;
         final items = draft.items;
+
+        final hasDiscount = items.any((it) => it.lineDiscount > 0.0001);
+
+        String fmtQty(double v) {
+          final isInt = (v % 1) == 0;
+          return v.toStringAsFixed(isInt ? 0 : 2);
+        }
+
+        String fmtDiscount(QuotationItemDraft it) {
+          if (it.lineDiscount <= 0) return '—';
+          if (it.discountMode == QuotationDiscountMode.percent) {
+            final pct = it.discountPct;
+            if (pct <= 0) return _fmtMoneyRd(it.lineDiscount);
+            return '${pct.toStringAsFixed(pct % 1 == 0 ? 0 : 2)}%';
+          }
+          return _fmtMoneyRd(it.discountAmount);
+        }
 
         return [
           _card(
@@ -464,7 +647,8 @@ Future<Uint8List> buildQuotationPdfBytesPro({
                     'Tel: ${customer.telefono!.trim()}',
                     style: pw.TextStyle(fontSize: 9.5, color: _textMuted),
                   ),
-                if (customer?.email != null && customer!.email!.trim().isNotEmpty)
+                if (customer?.email != null &&
+                    customer!.email!.trim().isNotEmpty)
                   pw.Text(
                     'Email: ${customer.email!.trim()}',
                     style: pw.TextStyle(fontSize: 9.5, color: _textMuted),
@@ -474,48 +658,81 @@ Future<Uint8List> buildQuotationPdfBytesPro({
           ),
           pw.SizedBox(height: 14),
           pw.Table.fromTextArray(
-            headers: const ['CANT.', 'DESCRIPCIÓN', 'PRECIO UNIT.', 'IMPORTE'],
+            headers: hasDiscount
+                ? const ['CANT.', 'DESCRIPCIÓN', 'P. UNIT.', 'DESC.', 'IMPORTE']
+                : const ['CANT.', 'DESCRIPCIÓN', 'P. UNIT.', 'IMPORTE'],
             data: [
               for (final it in items)
-                [
-                  it.cantidad.toStringAsFixed(it.cantidad % 1 == 0 ? 0 : 2),
-                  it.nombre,
-                  _fmtMoneyRd(it.unitPrice),
-                  _fmtMoneyRd(it.lineNet),
-                ],
+                if (hasDiscount)
+                  [
+                    fmtQty(it.cantidad),
+                    it.nombre,
+                    _fmtMoneyRd(it.unitPrice),
+                    fmtDiscount(it),
+                    _fmtMoneyRd(it.lineNet),
+                  ]
+                else
+                  [
+                    fmtQty(it.cantidad),
+                    it.nombre,
+                    _fmtMoneyRd(it.unitPrice),
+                    _fmtMoneyRd(it.lineNet),
+                  ],
             ],
             border: pw.TableBorder(
               top: pw.BorderSide(color: _cardBorder, width: 1),
               bottom: pw.BorderSide(color: _cardBorder, width: 1),
               horizontalInside: pw.BorderSide(color: _cardBorder, width: 0.6),
             ),
-            headerDecoration: pw.BoxDecoration(
-              color: accent,
-              borderRadius: pw.BorderRadius.circular(6),
+            headerDecoration: pw.BoxDecoration(color: accent),
+            headerHeight: 22,
+            cellPadding: const pw.EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 6,
             ),
-            headerHeight: 24,
-            cellHeight: 24,
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             headerStyle: pw.TextStyle(
-              fontSize: 9,
+              fontSize: 8.8,
               fontWeight: pw.FontWeight.bold,
               color: PdfColors.white,
             ),
-            cellStyle: pw.TextStyle(fontSize: 9.5, color: _textStrong),
-            cellAlignment: pw.Alignment.centerLeft,
-            columnWidths: {
-              0: const pw.FixedColumnWidth(52),
-              1: const pw.FlexColumnWidth(3.8),
-              2: const pw.FixedColumnWidth(90),
-              3: const pw.FixedColumnWidth(90),
-            },
-            cellAlignments: {
-              0: pw.Alignment.centerRight,
-              1: pw.Alignment.centerLeft,
-              2: pw.Alignment.centerRight,
-              3: pw.Alignment.centerRight,
-            },
+            cellStyle: pw.TextStyle(fontSize: 9.2, color: _textStrong),
+            cellAlignment: pw.Alignment.topLeft,
+            columnWidths: hasDiscount
+                ? {
+                    0: const pw.FixedColumnWidth(46),
+                    1: const pw.FlexColumnWidth(3.6),
+                    2: const pw.FixedColumnWidth(76),
+                    3: const pw.FixedColumnWidth(60),
+                    4: const pw.FixedColumnWidth(78),
+                  }
+                : {
+                    0: const pw.FixedColumnWidth(46),
+                    1: const pw.FlexColumnWidth(3.9),
+                    2: const pw.FixedColumnWidth(86),
+                    3: const pw.FixedColumnWidth(86),
+                  },
+            cellAlignments: hasDiscount
+                ? {
+                    0: pw.Alignment.topRight,
+                    1: pw.Alignment.topLeft,
+                    2: pw.Alignment.topRight,
+                    3: pw.Alignment.topRight,
+                    4: pw.Alignment.topRight,
+                  }
+                : {
+                    0: pw.Alignment.topRight,
+                    1: pw.Alignment.topLeft,
+                    2: pw.Alignment.topRight,
+                    3: pw.Alignment.topRight,
+                  },
           ),
+          pw.SizedBox(height: 12),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: _totalsFooterBlock(draft: draft, accent: accent),
+          ),
+          pw.SizedBox(height: 12),
+          _termsBlock(company: company, draft: draft),
           if (notes.trim().isNotEmpty) ...[
             pw.SizedBox(height: 12),
             _card(
@@ -523,7 +740,7 @@ Future<Uint8List> buildQuotationPdfBytesPro({
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    'Notas',
+                    'Notas / Observaciones',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
@@ -533,13 +750,13 @@ Future<Uint8List> buildQuotationPdfBytesPro({
                   pw.SizedBox(height: 6),
                   pw.Text(
                     notes.trim(),
-                    style: pw.TextStyle(fontSize: 9.5, color: _textMuted),
+                    style: pw.TextStyle(fontSize: 9.2, color: _textMuted),
                   ),
                 ],
               ),
             ),
           ],
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: 6),
         ];
       },
     ),

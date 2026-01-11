@@ -77,6 +77,13 @@ class ConfiguracionScreen extends ConsumerWidget {
         description: 'Modo pantalla grande (F1) y escala.',
         route: '${AppRoutes.configuracion}/pantalla',
       ),
+      if (canManageSettings)
+        _SettingsCardModel(
+          icon: Icons.verified_outlined,
+          title: 'Garantías (TPV)',
+          description: 'Lista de garantías para el selector del TPV.',
+          route: '${AppRoutes.configuracion}/garantias',
+        ),
     ];
 
     return ModulePage(

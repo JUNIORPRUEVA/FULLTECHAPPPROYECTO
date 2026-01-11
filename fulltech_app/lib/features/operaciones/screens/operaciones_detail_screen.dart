@@ -15,9 +15,29 @@ class OperacionesDetailScreen extends ConsumerWidget {
 
   const OperacionesDetailScreen({super.key, this.title});
 
+  static const Color _primaryDarkBlue = Color(0xFF0D47A1);
+
   bool _isAdmin(String role) => role == 'admin' || role == 'administrador';
+  bool _isAssistantAdmin(String role) => role == 'asistente_administrativo';
+
+  // Technician roles allowed to perform actions in Operaciones.
+  // NOTE: Keep legacy 'tecnico' but exclude 'contratista' as requested.
   bool _isTechnician(String role) =>
-      role == 'tecnico' || role == 'tecnico_fijo' || role == 'contratista';
+      role == 'tecnico' || role == 'tecnico_fijo';
+
+  bool _canMutateOperaciones(String role) {
+    return _isAdmin(role) || _isTechnician(role) || _isAssistantAdmin(role);
+  }
+
+  void _showReadOnlySnack(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Modo solo lectura: no tienes permisos para realizar esta acción.',
+        ),
+      ),
+    );
+  }
 
   Future<String?> _promptNote({
     required BuildContext context,
@@ -26,6 +46,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
   }) async {
     final ctrl = TextEditingController();
     String? error;
+
     final res = await showDialog<String?>(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
@@ -75,28 +96,6 @@ class OperacionesDetailScreen extends ConsumerWidget {
     return res;
   }
 
-  Color _statusColor(BuildContext context, String status) {
-    final cs = Theme.of(context).colorScheme;
-    switch (status) {
-      case 'pending_survey':
-      case 'pending_scheduling':
-      case 'scheduled':
-      case 'warranty_pending':
-        return cs.tertiary;
-      case 'survey_in_progress':
-      case 'installation_in_progress':
-      case 'warranty_in_progress':
-        return cs.primary;
-      case 'completed':
-      case 'closed':
-        return Colors.green.shade700;
-      case 'cancelled':
-        return cs.error;
-      default:
-        return cs.outline;
-    }
-  }
-
   String _statusLabel(String status) {
     switch (status) {
       case 'pending_survey':
@@ -124,6 +123,143 @@ class OperacionesDetailScreen extends ConsumerWidget {
       default:
         return status;
     }
+  }
+
+  String _estadoLabel(String estado) {
+    switch (estado.trim().toUpperCase()) {
+      case 'PENDIENTE':
+        return 'Pendiente';
+      case 'PROGRAMADO':
+        return 'Programado';
+      case 'EN_EJECUCION':
+        return 'En ejecución';
+      case 'FINALIZADO':
+        return 'Finalizado';
+      case 'CERRADO':
+        return 'Cerrado';
+      case 'CANCELADO':
+        return 'Cancelado';
+      default:
+        return estado;
+    }
+  }
+
+  Future<void> _openEstadoPicker({
+    required BuildContext context,
+    required WidgetRef ref,
+    required OperationsJob job,
+    required bool canMutate,
+  }) async {
+    if (!canMutate) {
+      _showReadOnlySnack(context);
+      return;
+    }
+
+    const estados = <String>[
+      'PENDIENTE',
+      'PROGRAMADO',
+      'EN_EJECUCION',
+      'FINALIZADO',
+      'CERRADO',
+      'CANCELADO',
+    ];
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            children: [
+              Text(
+                'Cambiar estado',
+                style: Theme.of(
+                  sheetCtx,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Estado actual: ${_estadoLabel(job.estado)}',
+                style: Theme.of(sheetCtx).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              for (final e in estados)
+                ListTile(
+                  leading: Icon(
+                    e == job.estado
+                        ? Icons.check_circle
+                        : Icons.circle_outlined,
+                    color: e == job.estado
+                        ? Theme.of(sheetCtx).colorScheme.primary
+                        : null,
+                  ),
+                  title: Text(_estadoLabel(e)),
+                  onTap: () => Navigator.of(sheetCtx).pop(e),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (selected == null) return;
+    if (selected == job.estado) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ya está en ese estado')));
+      return;
+    }
+
+    final repo = ref.read(operationsRepositoryProvider);
+
+    if (selected == 'PROGRAMADO') {
+      final picked = await showDatePicker(
+        context: context,
+        firstDate: DateTime.now().subtract(const Duration(days: 1)),
+        lastDate: DateTime.now().add(const Duration(days: 365)),
+        initialDate: DateTime.now(),
+      );
+      if (picked == null) return;
+      final iso =
+          '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      await repo.programarOperacion(
+        jobId: job.id,
+        scheduledDate: iso,
+        assignedTechId: job.assignedTechId,
+      );
+    } else if (selected == 'FINALIZADO') {
+      final note = await _promptNote(
+        context: context,
+        title: 'Finalizar',
+        label: 'Resumen / resultado *',
+      );
+      if (note == null) return;
+      await repo.patchOperacionEstado(
+        jobId: job.id,
+        estado: selected,
+        note: note,
+      );
+    } else if (selected == 'CANCELADO') {
+      final reason = await _promptNote(
+        context: context,
+        title: 'Cancelar',
+        label: 'Motivo de cancelación *',
+      );
+      if (reason == null) return;
+      await repo.patchOperacionEstado(
+        jobId: job.id,
+        estado: selected,
+        note: reason,
+      );
+    } else {
+      await repo.patchOperacionEstado(jobId: job.id, estado: selected);
+    }
+
+    ref.invalidate(operationsJobDetailProvider(job.id));
+    ref.invalidate(operationsJobHistoryProvider(job.id));
+    // ignore: unawaited_futures
+    ref.read(operationsJobsControllerProvider.notifier).refresh();
   }
 
   String _fmtDateTime(BuildContext context, DateTime dt) {
@@ -177,11 +313,13 @@ class OperacionesDetailScreen extends ConsumerWidget {
 
     final auth = ref.watch(authControllerProvider);
     final role = (auth is AuthAuthenticated) ? auth.user.role : '';
-    final canTechUpdate = _isTechnician(role) || _isAdmin(role);
-    final canAssign = role == 'vendedor' || _isAdmin(role);
+    final canMutate = _canMutateOperaciones(role);
+    final canTechUpdate = canMutate;
+    final canAssign = canMutate && (_isAdmin(role) || _isAssistantAdmin(role));
 
     final jobAsync = ref.watch(operationsJobDetailProvider(jobId));
     final historyAsync = ref.watch(operationsJobHistoryProvider(jobId));
+    final warrantyAsync = ref.watch(operationsWarrantyTicketsProvider(jobId));
 
     return ModulePage(
       title: title ?? 'Detalle Operación',
@@ -191,6 +329,7 @@ class OperacionesDetailScreen extends ConsumerWidget {
           onPressed: () {
             ref.invalidate(operationsJobDetailProvider(jobId));
             ref.invalidate(operationsJobHistoryProvider(jobId));
+            ref.invalidate(operationsWarrantyTicketsProvider(jobId));
           },
           icon: const Icon(Icons.refresh),
         ),
@@ -231,107 +370,463 @@ class OperacionesDetailScreen extends ConsumerWidget {
           final locationText = (job.locationText ?? job.customerAddress)
               ?.trim();
 
+          final hasLocation =
+              (job.locationLat != null && job.locationLng != null) ||
+              (locationText != null && locationText.trim().isNotEmpty);
+
           return ListView(
             children: [
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Wrap(
-                    runSpacing: 12,
-                    spacing: 12,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        job.customerName,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
+                clipBehavior: Clip.antiAlias,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF0D47A1), Color(0xFF062A5B)],
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                job.customerName,
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                child: Text(
+                                  job.estado.trim().isNotEmpty
+                                      ? _estadoLabel(job.estado)
+                                      : _statusLabel(job.status),
+                                  style: Theme.of(context).textTheme.labelLarge
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      if (job.customerPhone != null &&
-                          job.customerPhone!.trim().isNotEmpty)
-                        Text(job.customerPhone!),
-                      if (job.crmChatId != null &&
-                          job.crmChatId!.trim().isNotEmpty)
-                        Text('Chat ID: ${job.crmChatId!.trim()}'),
-                      Text('Creado: ${_fmtDateTime(context, job.createdAt)}'),
-                      const SizedBox(width: 12),
-                      Chip(
-                        label: Text(_statusLabel(job.status)),
-                        backgroundColor: _statusColor(
-                          context,
-                          job.status,
-                        ).withValues(alpha: 0.12),
-                        side: BorderSide(
-                          color: _statusColor(context, job.status),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (!canMutate)
+                              const _HeaderPill(
+                                icon: Icons.lock_outline,
+                                text: 'Solo lectura',
+                              ),
+                            if (job.customerPhone != null &&
+                                job.customerPhone!.trim().isNotEmpty)
+                              _HeaderPill(
+                                icon: Icons.call_outlined,
+                                text: job.customerPhone!.trim(),
+                              ),
+                            _HeaderPill(
+                              icon: Icons.design_services_outlined,
+                              text: job.serviceType.trim().isEmpty
+                                  ? 'Servicio'
+                                  : job.serviceType.trim(),
+                            ),
+                            _HeaderPill(
+                              icon: Icons.flag_outlined,
+                              text: 'Prioridad: ${job.priority}',
+                            ),
+                            if (job.crmChatId != null &&
+                                job.crmChatId!.trim().isNotEmpty)
+                              _HeaderPill(
+                                icon: Icons.forum_outlined,
+                                text: 'Chat: ${job.crmChatId!.trim()}',
+                              ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Chip(label: Text(job.serviceType)),
-                      const SizedBox(width: 12),
-                      Chip(label: Text('Prioridad: ${job.priority}')),
-                    ],
+                        const SizedBox(height: 12),
+                        Container(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.18),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 14,
+                          runSpacing: 10,
+                          children: [
+                            _HeaderInfo(
+                              icon: Icons.schedule_outlined,
+                              label: 'Programación',
+                              value: scheduleLabel,
+                            ),
+                            _HeaderInfo(
+                              icon: Icons.event_available_outlined,
+                              label: 'Creado',
+                              value: _fmtDateTime(context, job.createdAt),
+                            ),
+                            if (techName != null)
+                              _HeaderInfo(
+                                icon: Icons.engineering_outlined,
+                                label: 'Técnico',
+                                value: techName,
+                              ),
+                            if (locationText != null &&
+                                locationText.trim().isNotEmpty)
+                              _HeaderInfo(
+                                icon: Icons.place_outlined,
+                                label: 'Ubicación',
+                                value: locationText.trim(),
+                              ),
+                            if (job.locationLat != null &&
+                                job.locationLng != null)
+                              _HeaderInfo(
+                                icon: Icons.my_location_outlined,
+                                label: 'Coordenadas',
+                                value: '${job.locationLat}, ${job.locationLng}',
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            if (hasLocation)
+                              OutlinedButton.icon(
+                                onPressed: () => _openMaps(
+                                  context: context,
+                                  lat: job.locationLat,
+                                  lng: job.locationLng,
+                                  address: locationText,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.35),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                icon: const Icon(Icons.map_outlined),
+                                label: const Text('Google Maps'),
+                              ),
+                            if (job.crmChatId != null &&
+                                job.crmChatId!.trim().isNotEmpty)
+                              OutlinedButton.icon(
+                                onPressed: () => context.go(
+                                  '${AppRoutes.crm}/chats/${job.crmChatId}',
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: BorderSide(
+                                    color: Colors.white.withValues(alpha: 0.35),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                icon: const Icon(Icons.chat_bubble_outline),
+                                label: const Text('Abrir chat CRM'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
+
+              const SizedBox(height: 12),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Programación',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(scheduleLabel),
-                      if (techName != null) ...[
-                        const SizedBox(height: 8),
-                        Text('Técnico: $techName'),
-                      ],
-                      if (locationText != null && locationText.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text('Ubicación: $locationText'),
-                      ],
-                      if (job.locationLat != null &&
-                          job.locationLng != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Coordenadas: ${job.locationLat}, ${job.locationLng}',
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _openMaps(
-                            context: context,
-                            lat: job.locationLat,
-                            lng: job.locationLng,
-                            address: locationText,
-                          ),
-                          icon: const Icon(Icons.map_outlined),
-                          label: const Text('Abrir en Google Maps'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (job.crmChatId != null &&
-                          job.crmChatId!.trim().isNotEmpty)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: () => context.go(
-                              '${AppRoutes.crm}/chats/${job.crmChatId}',
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Garantía',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
                             ),
-                            icon: const Icon(Icons.chat_bubble_outline),
-                            label: const Text('Abrir chat CRM'),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: () async {
+                              if (!canTechUpdate) {
+                                _showReadOnlySnack(context);
+                                return;
+                              }
+                              final reason = await _promptNote(
+                                context: context,
+                                title: 'Garantía',
+                                label: 'Detalle de garantía (motivo)',
+                              );
+                              if (reason == null || reason.trim().isEmpty) {
+                                return;
+                              }
+
+                              final repo = ref.read(
+                                operationsRepositoryProvider,
+                              );
+                              await repo.createWarrantyTicketLocalFirst(
+                                jobId: jobId,
+                                reason: reason.trim(),
+                                assignedTechId: job.assignedTechId,
+                              );
+
+                              if (context.mounted) {
+                                ref.invalidate(
+                                  operationsWarrantyTicketsProvider(jobId),
+                                );
+                                ref.invalidate(
+                                  operationsJobDetailProvider(jobId),
+                                );
+                              }
+                            },
+                            icon: Icon(
+                              canTechUpdate
+                                  ? Icons.add_outlined
+                                  : Icons.lock_outline,
+                            ),
+                            label: Text(
+                              canTechUpdate ? 'Agregar' : 'Agregar (bloqueado)',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      warrantyAsync.when(
+                        loading: () => const LinearProgressIndicator(),
+                        error: (e, _) => Text(
+                          'Error cargando garantía: $e',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
                           ),
                         ),
+                        data: (tickets) {
+                          if (tickets.isEmpty) {
+                            return const Text('Sin garantía registrada');
+                          }
+
+                          tickets.sort(
+                            (a, b) => b.reportedAt.compareTo(a.reportedAt),
+                          );
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final t in tickets) ...[
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant
+                                          .withValues(alpha: 0.35),
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Text(
+                                          'Garantía: ${t.reason}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            Chip(
+                                              label: Text(switch (t.status) {
+                                                'pending' => 'Pendiente',
+                                                'in_progress' => 'En progreso',
+                                                'resolved' => 'Resuelto',
+                                                _ => t.status,
+                                              }),
+                                            ),
+                                            Text(
+                                              'Reportado: ${_fmtDateTime(context, t.reportedAt)}',
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Text(
+                                          'Solución de garantía:',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelLarge
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          (t.resolutionNotes ?? '')
+                                                  .trim()
+                                                  .isEmpty
+                                              ? 'Sin solución registrada'
+                                              : t.resolutionNotes!.trim(),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            OutlinedButton.icon(
+                                              onPressed: () async {
+                                                if (!canTechUpdate) {
+                                                  _showReadOnlySnack(context);
+                                                  return;
+                                                }
+                                                final solution = await _promptNote(
+                                                  context: context,
+                                                  title: 'Solución de garantía',
+                                                  label:
+                                                      'Describe la solución aplicada',
+                                                );
+                                                if (solution == null ||
+                                                    solution.trim().isEmpty) {
+                                                  return;
+                                                }
+
+                                                final repo = ref.read(
+                                                  operationsRepositoryProvider,
+                                                );
+                                                await repo
+                                                    .patchWarrantyTicketLocalFirst(
+                                                      ticketId: t.id,
+                                                      jobId: jobId,
+                                                      patch: {
+                                                        'status': 'resolved',
+                                                        'resolution_notes':
+                                                            solution.trim(),
+                                                        'resolved_at':
+                                                            DateTime.now()
+                                                                .toIso8601String(),
+                                                      },
+                                                    );
+
+                                                if (context.mounted) {
+                                                  ref.invalidate(
+                                                    operationsWarrantyTicketsProvider(
+                                                      jobId,
+                                                    ),
+                                                  );
+                                                  ref.invalidate(
+                                                    operationsJobDetailProvider(
+                                                      jobId,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              icon: Icon(
+                                                canTechUpdate
+                                                    ? Icons.task_alt_outlined
+                                                    : Icons.lock_outline,
+                                              ),
+                                              label: Text(
+                                                canTechUpdate
+                                                    ? 'Marcar resuelta'
+                                                    : 'Resuelta (bloqueado)',
+                                              ),
+                                            ),
+                                            OutlinedButton.icon(
+                                              onPressed: () async {
+                                                if (!canTechUpdate) {
+                                                  _showReadOnlySnack(context);
+                                                  return;
+                                                }
+                                                final repo = ref.read(
+                                                  operationsRepositoryProvider,
+                                                );
+                                                await repo
+                                                    .patchWarrantyTicketLocalFirst(
+                                                      ticketId: t.id,
+                                                      jobId: jobId,
+                                                      patch: {
+                                                        'status': 'in_progress',
+                                                      },
+                                                    );
+                                                if (context.mounted) {
+                                                  ref.invalidate(
+                                                    operationsWarrantyTicketsProvider(
+                                                      jobId,
+                                                    ),
+                                                  );
+                                                  ref.invalidate(
+                                                    operationsJobDetailProvider(
+                                                      jobId,
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                              icon: Icon(
+                                                canTechUpdate
+                                                    ? Icons.play_circle_outline
+                                                    : Icons.lock_outline,
+                                              ),
+                                              label: Text(
+                                                canTechUpdate
+                                                    ? 'En progreso'
+                                                    : 'En progreso (bloqueado)',
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                            ],
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
               ),
+
               if (job.notes != null && job.notes!.trim().isNotEmpty)
                 Card(
                   child: Padding(
@@ -369,92 +864,167 @@ class OperacionesDetailScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-              if (canTechUpdate)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: () async {
-                            final repo = ref.read(operationsRepositoryProvider);
-                            await repo.updateJobStatus(
-                              jobId: job.id,
-                              status: 'EN_PROCESO',
-                              technicianNotes: 'Iniciado',
-                            );
-                            ref.invalidate(operationsJobDetailProvider(jobId));
-                            ref.invalidate(operationsJobHistoryProvider(jobId));
-                            // Refresh list view cache
-                            // ignore: unawaited_futures
-                            ref
-                                .read(operationsJobsControllerProvider.notifier)
-                                .refresh();
-                          },
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('Iniciar'),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      if (!canTechUpdate)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            'Modo solo lectura: cambios de estado bloqueados.',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                        FilledButton.icon(
-                          onPressed: () async {
-                            final note = await _promptNote(
-                              context: context,
-                              title: 'Terminar',
-                              label: 'Resumen / resultado *',
-                            );
-                            if (note == null) return;
-                            final repo = ref.read(operationsRepositoryProvider);
-                            await repo.updateJobStatus(
-                              jobId: job.id,
-                              status: 'TERMINADO',
-                              technicianNotes: note,
-                            );
-                            ref.invalidate(operationsJobDetailProvider(jobId));
-                            ref.invalidate(operationsJobHistoryProvider(jobId));
-                            // ignore: unawaited_futures
-                            ref
-                                .read(operationsJobsControllerProvider.notifier)
-                                .refresh();
-                          },
-                          icon: const Icon(Icons.check_circle_outline),
-                          label: const Text('Terminar'),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          if (!canTechUpdate) {
+                            _showReadOnlySnack(context);
+                            return;
+                          }
+                          final repo = ref.read(operationsRepositoryProvider);
+                          await repo.patchOperacionEstado(
+                            jobId: job.id,
+                            estado: 'EN_EJECUCION',
+                            note: 'Iniciado',
+                          );
+                          ref.invalidate(operationsJobDetailProvider(jobId));
+                          ref.invalidate(operationsJobHistoryProvider(jobId));
+                          // Refresh list view cache
+                          // ignore: unawaited_futures
+                          ref
+                              .read(operationsJobsControllerProvider.notifier)
+                              .refresh();
+                        },
+                        icon: Icon(
+                          canTechUpdate ? Icons.play_arrow : Icons.lock_outline,
                         ),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final reason = await _promptNote(
-                              context: context,
-                              title: 'Cancelar',
-                              label: 'Motivo de cancelación *',
-                            );
-                            if (reason == null) return;
-                            final repo = ref.read(operationsRepositoryProvider);
-                            await repo.updateJobStatus(
-                              jobId: job.id,
-                              status: 'CANCELADO',
-                              cancelReason: reason,
-                            );
-                            ref.invalidate(operationsJobDetailProvider(jobId));
-                            ref.invalidate(operationsJobHistoryProvider(jobId));
-                            // ignore: unawaited_futures
-                            ref
-                                .read(operationsJobsControllerProvider.notifier)
-                                .refresh();
-                          },
-                          icon: const Icon(Icons.cancel_outlined),
-                          label: const Text('Cancelar'),
+                        label: Text(
+                          canTechUpdate ? 'Iniciar' : 'Iniciar (bloqueado)',
                         ),
-                      ],
-                    ),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () async {
+                          if (!canTechUpdate) {
+                            _showReadOnlySnack(context);
+                            return;
+                          }
+                          final note = await _promptNote(
+                            context: context,
+                            title: 'Terminar',
+                            label: 'Resumen / resultado *',
+                          );
+                          if (note == null) return;
+                          final repo = ref.read(operationsRepositoryProvider);
+                          await repo.patchOperacionEstado(
+                            jobId: job.id,
+                            estado: 'FINALIZADO',
+                            note: note,
+                          );
+                          ref.invalidate(operationsJobDetailProvider(jobId));
+                          ref.invalidate(operationsJobHistoryProvider(jobId));
+                          // ignore: unawaited_futures
+                          ref
+                              .read(operationsJobsControllerProvider.notifier)
+                              .refresh();
+                        },
+                        icon: Icon(
+                          canTechUpdate
+                              ? Icons.check_circle_outline
+                              : Icons.lock_outline,
+                        ),
+                        label: Text(
+                          canTechUpdate ? 'Terminar' : 'Terminar (bloqueado)',
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          if (!canTechUpdate) {
+                            _showReadOnlySnack(context);
+                            return;
+                          }
+                          final reason = await _promptNote(
+                            context: context,
+                            title: 'Cancelar',
+                            label: 'Motivo de cancelación *',
+                          );
+                          if (reason == null) return;
+                          final repo = ref.read(operationsRepositoryProvider);
+                          await repo.patchOperacionEstado(
+                            jobId: job.id,
+                            estado: 'CANCELADO',
+                            note: reason,
+                          );
+                          ref.invalidate(operationsJobDetailProvider(jobId));
+                          ref.invalidate(operationsJobHistoryProvider(jobId));
+                          // ignore: unawaited_futures
+                          ref
+                              .read(operationsJobsControllerProvider.notifier)
+                              .refresh();
+                        },
+                        icon: Icon(
+                          canTechUpdate
+                              ? Icons.cancel_outlined
+                              : Icons.lock_outline,
+                        ),
+                        label: Text(
+                          canTechUpdate ? 'Cancelar' : 'Cancelar (bloqueado)',
+                        ),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () => _openEstadoPicker(
+                          context: context,
+                          ref: ref,
+                          job: job,
+                          canMutate: canTechUpdate,
+                        ),
+                        icon: Icon(
+                          canTechUpdate
+                              ? Icons.swap_horiz_outlined
+                              : Icons.lock_outline,
+                        ),
+                        label: Text(
+                          canTechUpdate
+                              ? 'Cambiar estado'
+                              : 'Cambiar estado (bloqueado)',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              if (canAssign)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: _AssignSection(job: job),
-                  ),
+              ),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: canAssign
+                      ? _AssignSection(job: job)
+                      : InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _showReadOnlySnack(context),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.lock_outline,
+                                size: 18,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Text(
+                                  'Asignación (solo Admin / Asistente Administrativo).',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
+              ),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -511,6 +1081,92 @@ class OperacionesDetailScreen extends ConsumerWidget {
   }
 }
 
+class _HeaderPill extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _HeaderPill({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.95)),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderInfo extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _HeaderInfo({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 220),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.95)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.78),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AssignSection extends ConsumerStatefulWidget {
   final OperationsJob job;
 
@@ -535,7 +1191,12 @@ class _AssignSectionState extends ConsumerState<_AssignSection> {
   Widget build(BuildContext context) {
     final api = ref.watch(operationsApiProvider);
     final auth = ref.watch(authControllerProvider);
-    final canSave = auth is AuthAuthenticated;
+    final role = (auth is AuthAuthenticated) ? auth.user.role : '';
+    final canSave =
+        auth is AuthAuthenticated &&
+        (role == 'admin' ||
+            role == 'administrador' ||
+            role == 'asistente_administrativo');
     final techsAsync = ref.watch(operationsTechniciansProvider);
 
     return Column(
@@ -594,23 +1255,33 @@ class _AssignSectionState extends ConsumerState<_AssignSection> {
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.icon(
-            onPressed: !canSave
-                ? null
-                : () async {
-                    await api.patchJob(widget.job.id, {
-                      'priority': _priority,
-                      'assigned_tech_id': _techId,
-                    });
-                    ref.invalidate(operationsJobDetailProvider(widget.job.id));
-                    // ignore: unawaited_futures
-                    ref
-                        .read(operationsJobsControllerProvider.notifier)
-                        .refresh();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Actualizado')),
-                    );
-                  },
+            style: FilledButton.styleFrom(
+              backgroundColor: OperacionesDetailScreen._primaryDarkBlue,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              if (!canSave) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Modo solo lectura: no tienes permisos para guardar asignación.',
+                    ),
+                  ),
+                );
+                return;
+              }
+              await api.patchJob(widget.job.id, {
+                'priority': _priority,
+                'assigned_tech_id': _techId,
+              });
+              ref.invalidate(operationsJobDetailProvider(widget.job.id));
+              // ignore: unawaited_futures
+              ref.read(operationsJobsControllerProvider.notifier).refresh();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('Actualizado')));
+            },
             icon: const Icon(Icons.save_outlined),
             label: const Text('Guardar'),
           ),

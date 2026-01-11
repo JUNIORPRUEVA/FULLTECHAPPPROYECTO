@@ -3,6 +3,7 @@ import 'package:fulltech_app/core/utils/debouncer.dart';
 
 import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
+import '../constants/operations_tab_mapping.dart';
 import '../data/operations_repository.dart';
 import 'operations_jobs_state.dart';
 
@@ -50,9 +51,13 @@ class OperationsJobsController extends StateNotifier<OperationsJobsState> {
       if (forceServer) {
         await _repo.refreshJobsFromServer(
           empresaId: empresaId,
+          tab: state.tab,
           q: state.search.isEmpty ? null : state.search,
-          status: state.status,
+          estado: state.estado,
+          tipoTrabajo: state.tipoTrabajo,
           assignedTechId: state.assignedTechId,
+          from: state.from,
+          to: state.to,
           page: 1,
           pageSize: state.pageSize,
         );
@@ -61,21 +66,18 @@ class OperationsJobsController extends StateNotifier<OperationsJobsState> {
       final local = await _repo.listLocalJobs(
         empresaId: empresaId,
         q: state.search.isEmpty ? null : state.search,
-        status: state.status,
+        estado: state.estado,
+        tipoTrabajo: state.tipoTrabajo,
         assignedTechId: state.assignedTechId,
+        from: state.from,
+        to: state.to,
         page: 1,
         pageSize: state.pageSize,
       );
 
-      final filtered = state.serviceId == null
-          ? local
-          : local
-                .where((j) => (j.serviceId ?? '').trim() == state.serviceId)
-                .toList(growable: false);
-
       state = state.copyWith(
         loading: false,
-        items: filtered,
+        items: local,
         page: 1,
         hasMore: local.length >= state.pageSize,
       );
@@ -98,9 +100,13 @@ class OperationsJobsController extends StateNotifier<OperationsJobsState> {
       try {
         await _repo.refreshJobsFromServer(
           empresaId: empresaId,
+          tab: state.tab,
           q: state.search.isEmpty ? null : state.search,
-          status: state.status,
+          estado: state.estado,
+          tipoTrabajo: state.tipoTrabajo,
           assignedTechId: state.assignedTechId,
+          from: state.from,
+          to: state.to,
           page: nextPage,
           pageSize: state.pageSize,
         );
@@ -109,21 +115,18 @@ class OperationsJobsController extends StateNotifier<OperationsJobsState> {
       final local = await _repo.listLocalJobs(
         empresaId: empresaId,
         q: state.search.isEmpty ? null : state.search,
-        status: state.status,
+        estado: state.estado,
+        tipoTrabajo: state.tipoTrabajo,
         assignedTechId: state.assignedTechId,
+        from: state.from,
+        to: state.to,
         page: nextPage,
         pageSize: state.pageSize,
       );
 
-      final filtered = state.serviceId == null
-          ? local
-          : local
-                .where((j) => (j.serviceId ?? '').trim() == state.serviceId)
-                .toList(growable: false);
-
       state = state.copyWith(
         loading: false,
-        items: [...state.items, ...filtered],
+        items: [...state.items, ...local],
         page: nextPage,
         hasMore: local.length >= state.pageSize,
       );
@@ -137,8 +140,73 @@ class OperationsJobsController extends StateNotifier<OperationsJobsState> {
     _debouncer.run(() => refresh(forceServer: true));
   }
 
-  void setStatus(String? value) {
-    state = state.copyWith(status: value);
+  void setTab(String tab) {
+    final t = tab.trim();
+    if (t.isEmpty) return;
+    state = state.copyWith(tab: t);
+    _debouncer.run(() => refresh(forceServer: true));
+  }
+
+  void applyTabPreset(OperationsTab tab) {
+    String nextTab = state.tab;
+    String? nextEstado;
+    String? nextTipoTrabajo;
+
+    switch (tab) {
+      case OperationsTab.agenda:
+        nextTab = 'agenda';
+        nextEstado = null;
+        nextTipoTrabajo = null;
+        break;
+      case OperationsTab.levantamientos:
+        nextTab = 'levantamientos';
+        nextEstado = null;
+        nextTipoTrabajo = null;
+        break;
+      case OperationsTab.instalacionEnCurso:
+        nextTab = 'agenda';
+        nextEstado = 'EN_EJECUCION';
+        nextTipoTrabajo = 'INSTALACION';
+        break;
+      case OperationsTab.enGarantia:
+        nextTab = 'agenda';
+        nextEstado = null;
+        nextTipoTrabajo = 'GARANTIA';
+        break;
+      case OperationsTab.instalacionFinalizada:
+        nextTab = 'historial';
+        nextEstado = 'FINALIZADO';
+        nextTipoTrabajo = 'INSTALACION';
+        break;
+      case OperationsTab.solucionGarantia:
+        nextTab = 'historial';
+        nextEstado = 'CERRADO';
+        nextTipoTrabajo = 'GARANTIA';
+        break;
+      case OperationsTab.historial:
+        nextTab = 'historial';
+        nextEstado = null;
+        nextTipoTrabajo = null;
+        break;
+    }
+
+    state = state.copyWith(
+      tab: nextTab,
+      estado: nextEstado,
+      tipoTrabajo: nextTipoTrabajo,
+    );
+    _debouncer.run(() => refresh(forceServer: true));
+  }
+
+  void setEstado(String? value) {
+    final v = (value ?? '').trim();
+    state = state.copyWith(estado: v.isEmpty ? null : v);
+    _debouncer.run(() => refresh(forceServer: true));
+  }
+
+  void setTipoTrabajo(String? value) {
+    final v = (value ?? '').trim();
+    state = state.copyWith(tipoTrabajo: v.isEmpty ? null : v);
     _debouncer.run(() => refresh(forceServer: true));
   }
 
@@ -148,9 +216,35 @@ class OperationsJobsController extends StateNotifier<OperationsJobsState> {
     _debouncer.run(() => refresh(forceServer: true));
   }
 
-  void setServiceId(String? value) {
-    final v = (value ?? '').trim();
-    state = state.copyWith(serviceId: v.isEmpty ? null : v);
+  void setDateRange({DateTime? from, DateTime? to}) {
+    state = state.copyWith(from: from, to: to);
     _debouncer.run(() => refresh(forceServer: true));
+  }
+
+  void quickToday() {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start
+        .add(const Duration(days: 1))
+        .subtract(const Duration(milliseconds: 1));
+    setDateRange(from: start, to: end);
+  }
+
+  void quickThisWeek() {
+    final now = DateTime.now();
+    final weekday = now.weekday; // Mon=1
+    final start = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: weekday - 1));
+    final end = start
+        .add(const Duration(days: 7))
+        .subtract(const Duration(milliseconds: 1));
+    setDateRange(from: start, to: end);
+  }
+
+  void clearDateRange() {
+    setDateRange(from: null, to: null);
   }
 }

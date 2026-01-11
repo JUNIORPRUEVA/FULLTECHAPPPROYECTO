@@ -102,6 +102,7 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
               'name': t.name,
               'quotation_id': t.quotationId,
               'remote_created': t.remoteCreated,
+              'crm_chat_id': t.crmChatId,
               'customer': t.customer == null
                   ? null
                   : {
@@ -134,6 +135,7 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
 
         final quotationId = raw['quotation_id']?.toString();
         final remoteCreated = (raw['remote_created'] as bool?) ?? false;
+        final crmChatId = raw['crm_chat_id']?.toString();
 
         QuotationCustomerDraft? customer;
         final customerJson = raw['customer'];
@@ -167,6 +169,9 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
             name: name.isEmpty ? 'Ticket ${tickets.length + 1}' : name,
             quotationId: quotationId,
             remoteCreated: remoteCreated,
+            crmChatId: (crmChatId != null && crmChatId.trim().isNotEmpty)
+                ? crmChatId.trim()
+                : null,
             customer: customer,
             items: items,
             itbisEnabled: (raw['itbis_enabled'] as bool?) ?? true,
@@ -219,6 +224,7 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
       name: 'Ticket 1',
       quotationId: null,
       remoteCreated: false,
+      crmChatId: null,
       customer: customer,
       items: items,
       itbisEnabled: (json['itbis_enabled'] as bool?) ?? true,
@@ -307,6 +313,20 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
     }
 
     next[idx] = updated;
+    state = state.copyWith(tickets: next, clearError: true);
+    // ignore: unawaited_futures
+    _persistDraft();
+  }
+
+  void setCrmChatId(String? crmChatId) {
+    _ensureAtLeastOneTicket();
+    final idx = state.activeTicketIndex.clamp(0, state.tickets.length - 1);
+    final next = [...state.tickets];
+    next[idx] = next[idx].copyWith(
+      crmChatId: (crmChatId != null && crmChatId.trim().isNotEmpty)
+          ? crmChatId.trim()
+          : null,
+    );
     state = state.copyWith(tickets: next, clearError: true);
     // ignore: unawaited_futures
     _persistDraft();
@@ -486,7 +506,8 @@ class QuotationBuilderController extends StateNotifier<QuotationBuilderState> {
             e.type == DioExceptionType.sendTimeout;
       }
       final msg = e.toString();
-      return msg.contains('SocketException') || msg.contains('Failed host lookup');
+      return msg.contains('SocketException') ||
+          msg.contains('Failed host lookup');
     }
 
     try {

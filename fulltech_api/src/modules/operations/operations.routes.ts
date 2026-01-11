@@ -28,6 +28,15 @@ operationsRouter.patch('/jobs/:id', expressAsyncHandler(operationsController.pat
 operationsRouter.get('/jobs/:id/history', expressAsyncHandler(operationsController.listJobHistory));
 operationsRouter.patch('/jobs/:id/status', expressAsyncHandler(operationsController.patchJobStatus));
 
+// New simplified Operaciones API (preferred by Flutter)
+operationsRouter.get('/', expressAsyncHandler(operationsController.listOperaciones));
+operationsRouter.patch('/:id/estado', expressAsyncHandler(operationsController.patchOperacionEstado));
+operationsRouter.post('/:id/programar', expressAsyncHandler(operationsController.programarOperacion));
+operationsRouter.post(
+  '/:id/convertir-a-agenda',
+  expressAsyncHandler(operationsController.convertirALaAgenda),
+);
+
 // Technicians (for CRM scheduling dialogs, etc.)
 operationsRouter.get('/technicians', expressAsyncHandler(operationsController.listTechnicians));
 

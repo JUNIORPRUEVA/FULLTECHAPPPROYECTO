@@ -3,8 +3,11 @@ import '../models/operations_models.dart';
 enum OperationsTab {
   agenda,
   levantamientos,
-  mantenimiento,
-  instalaciones,
+  instalacionEnCurso,
+  instalacionFinalizada,
+  enGarantia,
+  solucionGarantia,
+  historial,
 }
 
 String operationsTabLabel(OperationsTab tab) {
@@ -13,11 +16,27 @@ String operationsTabLabel(OperationsTab tab) {
       return 'Agenda';
     case OperationsTab.levantamientos:
       return 'Levantamientos';
-    case OperationsTab.mantenimiento:
-      return 'Mantenimiento';
-    case OperationsTab.instalaciones:
-      return 'Instalaciones';
+    case OperationsTab.instalacionEnCurso:
+      return 'Instalación en curso';
+    case OperationsTab.instalacionFinalizada:
+      return 'Instalación finalizada';
+    case OperationsTab.enGarantia:
+      return 'En garantía';
+    case OperationsTab.solucionGarantia:
+      return 'Solución garantía';
+    case OperationsTab.historial:
+      return 'Historial';
   }
+}
+
+bool _isHistorialEstado(String estado) {
+  final e = estado.trim().toUpperCase();
+  return e == 'FINALIZADO' || e == 'CERRADO' || e == 'CANCELADO';
+}
+
+bool _isAgendaEstado(String estado) {
+  final e = estado.trim().toUpperCase();
+  return e == 'PENDIENTE' || e == 'PROGRAMADO' || e == 'EN_EJECUCION';
 }
 
 bool isWarranty(OperationsJob job) {
@@ -56,32 +75,49 @@ bool hasScheduleOrScheduledStatus(OperationsJob job) {
 }
 
 bool jobMatchesTab(OperationsTab tab, OperationsJob job) {
+  final tipo = job.tipoTrabajo.trim().toUpperCase();
+  final estado = job.estado.trim().toUpperCase();
+
   switch (tab) {
     case OperationsTab.agenda:
-      // Agenda: anything scheduled (and keep warranty visible).
-      return hasScheduleOrScheduledStatus(job) ||
-          isReservaAgendar(job) ||
-          isWarranty(job);
+      // Agenda: PROGRAMADO or PENDIENTE, excluding LEVANTAMIENTO
+      return (estado == 'PROGRAMADO' || estado == 'PENDIENTE') &&
+          tipo != 'LEVANTAMIENTO';
 
     case OperationsTab.levantamientos:
-      // Levantamientos: survey pipeline.
-      return isLevantamiento(job) || job.status == 'pending_scheduling';
+      // Levantamientos: active states (not closed/canceled) and type LEVANTAMIENTO
+      return _isAgendaEstado(estado) && tipo == 'LEVANTAMIENTO';
 
-    case OperationsTab.mantenimiento:
-      // Mantenimiento: separate view for maintenance-labelled jobs.
-      return isMantenimiento(job);
+    case OperationsTab.instalacionEnCurso:
+      // Installation in progress: EN_EJECUCION for INSTALACION or MANTENIMIENTO
+      return (tipo == 'INSTALACION' || tipo == 'MANTENIMIENTO') &&
+          estado == 'EN_EJECUCION';
 
-    case OperationsTab.instalaciones:
-      // Instalaciones: installation jobs.
-      return isInstalacion(job);
+    case OperationsTab.instalacionFinalizada:
+      // Completed installations: FINALIZADO or CERRADO for INSTALACION or MANTENIMIENTO
+      return (tipo == 'INSTALACION' || tipo == 'MANTENIMIENTO') &&
+          (estado == 'FINALIZADO' || estado == 'CERRADO');
+
+    case OperationsTab.enGarantia:
+      // Active warranty: GARANTIA type with active states (not closed/canceled)
+      return tipo == 'GARANTIA' &&
+          (estado == 'PROGRAMADO' ||
+              estado == 'PENDIENTE' ||
+              estado == 'EN_EJECUCION');
+
+    case OperationsTab.solucionGarantia:
+      // Resolved warranty: GARANTIA type with FINALIZADO or CERRADO
+      return tipo == 'GARANTIA' && (estado == 'FINALIZADO' || estado == 'CERRADO');
+
+    case OperationsTab.historial:
+      // Historial: CANCELADO only (FINALIZADO/CERRADO go to their specific tabs)
+      return estado == 'CANCELADO';
   }
 }
 
 OperationsTab tabForCrmStatus(String status) {
   final s = status.trim().toLowerCase();
   if (s == 'por_levantamiento') return OperationsTab.levantamientos;
-  if (s == 'mantenimiento') return OperationsTab.mantenimiento;
-  if (s == 'instalacion') return OperationsTab.instalaciones;
-  // agendado/reserva -> agenda
+  if (s == 'historial') return OperationsTab.historial;
   return OperationsTab.agenda;
 }

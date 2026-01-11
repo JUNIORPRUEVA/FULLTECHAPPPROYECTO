@@ -209,6 +209,114 @@ export class EvolutionClient {
     return { messageId, raw };
   }
 
+  async sendDocumentBase64({
+    toPhone,
+    toWaId,
+    base64,
+    fileName,
+    caption,
+    mimeType,
+  }: {
+    toPhone?: string;
+    toWaId?: string;
+    base64: string;
+    fileName: string;
+    caption?: string;
+    mimeType?: string;
+  }): Promise<EvolutionSendResult> {
+    const trimmedB64 = String(base64 ?? '').trim();
+    if (!trimmedB64) throw new Error('base64 is required');
+
+    const name = String(fileName ?? '').trim() || 'document.pdf';
+    const mt = String(mimeType ?? '').trim() || 'application/pdf';
+    const number = normalizeDestNumber({ toPhone, toWaId });
+
+    // Many Evolution deployments accept either raw base64, or a data URL.
+    const dataUrl = trimmedB64.startsWith('data:')
+      ? trimmedB64
+      : `data:${mt};base64,${trimmedB64}`;
+
+    // Try common endpoints and payload formats.
+    const paths = [
+      '/message/sendMedia',
+      '/message/sendDocument',
+      '/message/sendFile',
+      '/message/sendBase64',
+      '/message/sendDocumentBase64',
+    ];
+
+    const payloads = [
+      {
+        number,
+        mediaMessage: {
+          mediatype: 'document',
+          media: dataUrl,
+          caption: caption ?? '',
+          fileName: name,
+          mimetype: mt,
+        },
+      },
+      {
+        number,
+        mediaMessage: {
+          mediatype: 'document',
+          media: trimmedB64,
+          caption: caption ?? '',
+          fileName: name,
+          mimetype: mt,
+        },
+      },
+      {
+        number,
+        mediatype: 'document',
+        media: dataUrl,
+        caption: caption ?? '',
+        fileName: name,
+        mimetype: mt,
+      },
+      {
+        number,
+        mediatype: 'document',
+        media: trimmedB64,
+        caption: caption ?? '',
+        fileName: name,
+        mimetype: mt,
+      },
+      {
+        number,
+        base64: trimmedB64,
+        fileName: name,
+        mimetype: mt,
+        caption: caption ?? '',
+      },
+      {
+        number,
+        document: trimmedB64,
+        fileName: name,
+        mimetype: mt,
+        caption: caption ?? '',
+      },
+      {
+        number,
+        data: trimmedB64,
+        fileName: name,
+        mimetype: mt,
+        caption: caption ?? '',
+      },
+    ];
+
+    const res = await this._postCandidates(paths, payloads);
+    const raw = res.data;
+
+    const messageId =
+      (raw && typeof raw === 'object' &&
+      (raw.messageId || raw.message_id || raw.key?.id || raw.data?.key?.id))
+        ? String(raw.messageId ?? raw.message_id ?? raw.key?.id ?? raw.data?.key?.id)
+        : null;
+
+    return { messageId, raw };
+  }
+
   async deleteMessage({
     remoteMessageId,
     toPhone,

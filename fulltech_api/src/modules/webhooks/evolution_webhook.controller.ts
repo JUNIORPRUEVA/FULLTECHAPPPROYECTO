@@ -164,6 +164,41 @@ async function processWebhookEvent(body: any, eventId: string | null) {
   const parsed = parseEvolutionWebhook(body);
   const empresaId = env.DEFAULT_EMPRESA_ID;
 
+  // ========================================================
+  // INSTANCE DETECTION - Extract instance name from payload
+  // ========================================================
+  // Evolution webhooks typically include "instance" field in the payload
+  // Format: { instance: "junior01", ... }
+  let instanceName: string | null = null;
+  let instanciaId: string | null = null;
+  let instanceOwnerId: string | null = null;
+
+  if (body && typeof body === 'object') {
+    instanceName = body.instance || body.instanceName || null;
+  }
+
+  // If instance name is provided, look up the instance
+  if (instanceName && instanceName.trim()) {
+    try {
+      const instances = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id, user_id FROM crm_instancias WHERE nombre_instancia = $1 AND is_active = TRUE LIMIT 1`,
+        instanceName.trim()
+      );
+      
+      if (instances.length > 0) {
+        instanciaId = instances[0].id;
+        instanceOwnerId = instances[0].user_id;
+        console.log('[WEBHOOK] Instance matched:', { instanceName, instanciaId, instanceOwnerId });
+      } else {
+        console.warn('[WEBHOOK] Instance not found or inactive:', instanceName);
+      }
+    } catch (e: any) {
+      console.error('[WEBHOOK] Error looking up instance:', e?.message || e);
+    }
+  } else {
+    console.warn('[WEBHOOK] No instance name in payload - message will be orphaned');
+  }
+
   if (parsed.kind === 'status') {
     if (!parsed.messageId || !parsed.status) {
       console.log('[WEBHOOK] Status update ignored - missing messageId or status');
@@ -323,28 +358,44 @@ async function processWebhookEvent(body: any, eventId: string | null) {
       }
     }
 
-    const chat = await tx.crmChat.upsert({
-      where: ({ empresa_id_wa_id: { empresa_id: empresaId, wa_id: normalizedWaId } } as any),
-      create: {
-        wa_id: normalizedWaId,
-        display_name: parsed.displayName?.trim() || null,
-        phone: phoneE164 ?? null,
-        last_message_preview: preview,
-        last_message_at: createdAt,
-        unread_count: direction === 'in' ? 1 : 0,
-        status: 'primer_contacto',
-        empresa: {
-          connect: { id: empresaId },
-        },
-      },
-      update: {
-        ...(parsed.displayName?.trim() ? { display_name: parsed.displayName.trim() } : null),
-        ...(phoneE164 ? { phone: phoneE164 } : null),
-        last_message_preview: preview,
-        last_message_at: createdAt,
-        ...(direction === 'in' ? { unread_count: { increment: 1 } } : null),
-      },
+    // Find or create chat - with instance support
+    let chat = await tx.crmChat.findFirst({
+      where: instanciaId
+        ? { instancia_id: instanciaId, wa_id: normalizedWaId }
+        : { empresa_id: empresaId, wa_id: normalizedWaId },
     });
+
+    if (!chat) {
+      // Create new chat
+      chat = await tx.crmChat.create({
+        data: {
+          wa_id: normalizedWaId,
+          display_name: parsed.displayName?.trim() || null,
+          phone: phoneE164 ?? null,
+          last_message_preview: preview,
+          last_message_at: createdAt,
+          unread_count: direction === 'in' ? 1 : 0,
+          status: 'primer_contacto',
+          empresa_id: empresaId,
+          // Assign to instance if detected
+          instancia_id: instanciaId ?? null,
+          owner_user_id: instanceOwnerId ?? null,
+          asignado_a_user_id: instanceOwnerId ?? null,
+        },
+      });
+    } else {
+      // Update existing chat
+      chat = await tx.crmChat.update({
+        where: { id: chat.id },
+        data: {
+          ...(parsed.displayName?.trim() ? { display_name: parsed.displayName.trim() } : {}),
+          ...(phoneE164 ? { phone: phoneE164 } : {}),
+          last_message_preview: preview,
+          last_message_at: createdAt,
+          ...(direction === 'in' ? { unread_count: { increment: 1 } } : {}),
+        },
+      });
+    }
 
     // Ensure empresa_id is set - fetch and update if NULL
     if (!chat.empresa_id) {
@@ -374,6 +425,8 @@ async function processWebhookEvent(body: any, eventId: string | null) {
         remote_message_id: parsed.messageId?.trim() || null,
         status,
         timestamp: createdAt,
+        // Assign to instance for audit and filtering
+        instancia_id: instanciaId ?? null,
       },
     });
 

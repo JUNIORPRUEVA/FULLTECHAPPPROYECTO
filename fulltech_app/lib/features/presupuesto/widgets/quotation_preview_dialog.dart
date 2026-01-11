@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../configuracion/state/company_profile_providers.dart';
 import '../models/quotation_models.dart';
@@ -59,6 +60,26 @@ class _QuotationPreviewDialogState
     return trimmed.length <= 8 ? trimmed : trimmed.substring(0, 8);
   }
 
+  String _digitsOnly(String raw) => raw.replaceAll(RegExp(r'[^0-9]'), '');
+
+  String? _normalizeWhatsAppPhone(String? raw) {
+    if (raw == null) return null;
+    final digits = _digitsOnly(raw.trim());
+    if (digits.isEmpty) return null;
+    if (digits.length == 10) return '1$digits';
+    if (digits.length >= 11) return digits;
+    return null;
+  }
+
+  Future<bool> _openWhatsAppChat(String phoneDigits, String message) async {
+    final uri = Uri.parse(
+      'https://wa.me/$phoneDigits?text=${Uri.encodeComponent(message)}',
+    );
+    if (!await canLaunchUrl(uri)) return false;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    return true;
+  }
+
   Future<Uint8List> _buildPdfBytes({required PdfPageFormat format}) async {
     await _ensureSaved(force: true);
     final meta = _saved ?? <String, dynamic>{};
@@ -112,6 +133,87 @@ class _QuotationPreviewDialogState
     } catch (e) {
       _toast('Error imprimiendo PDF: $e');
     }
+  }
+
+  Future<void> _whatsAppMenu() async {
+    await _ensureSaved(force: true);
+    final meta = _saved;
+    if (!mounted || meta == null) return;
+
+    final numero = (meta['numero'] ?? '').toString().trim();
+    final id = (meta['id'] ?? '').toString().trim();
+    final idShort = _shortId(id: id, numero: numero);
+    final quoteNo = numero.isEmpty ? idShort : numero;
+
+    final customer = widget.draft.customer;
+    final phoneDigits = _normalizeWhatsAppPhone(customer?.telefono);
+    final customerName = (customer?.nombre ?? '').trim();
+
+    final msg =
+        'Hola${customerName.isEmpty ? '' : ' $customerName'}, le comparto su cotización No. $quoteNo. '
+        'Total: RD\$ ${widget.draft.total.toStringAsFixed(2)}.';
+
+    final bytes = await _buildPdfBytes(format: PdfPageFormat.a4);
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Enviar por WhatsApp',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: phoneDigits == null
+                      ? null
+                      : () async {
+                          Navigator.of(ctx).pop();
+                          final ok = await _openWhatsAppChat(phoneDigits, msg);
+                          if (!ok) _toast('No se pudo abrir WhatsApp');
+                        },
+                  icon: const Icon(Icons.chat_outlined),
+                  label: const Text('Abrir chat (mensaje)'),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.tonalIcon(
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    try {
+                      final createdAtRaw =
+                          (meta['created_at'] ?? meta['createdAt'])?.toString();
+                      final createdAt =
+                          DateTime.tryParse(createdAtRaw ?? '') ??
+                          DateTime.now();
+                      String two(int n) => n.toString().padLeft(2, '0');
+                      final fname =
+                          'Cotizacion_FULLTECH_${idShort}_${createdAt.year}${two(createdAt.month)}${two(createdAt.day)}.pdf';
+                      await Printing.sharePdf(bytes: bytes, filename: fname);
+                    } catch (e) {
+                      _toast('No se pudo compartir: $e');
+                    }
+                  },
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Compartir PDF (selecciona WhatsApp)'),
+                ),
+                if (phoneDigits == null) ...[
+                  const SizedBox(height: 10),
+                  const Text('Nota: el cliente no tiene teléfono válido.'),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -255,7 +357,7 @@ class _QuotationPreviewDialogState
               : () async {
                   await _ensureSaved();
                   if (_saved != null) {
-                    _toast('Enviado por WhatsApp (pendiente integración)');
+                    await _whatsAppMenu();
                   }
                 },
           child: const Text('WhatsApp'),

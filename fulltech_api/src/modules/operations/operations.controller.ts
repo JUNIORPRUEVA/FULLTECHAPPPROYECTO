@@ -6,12 +6,16 @@ import { emitCrmEvent } from '../crm/crm_stream';
 import {
   createJobSchema,
   listJobsQuerySchema,
+  listOperacionesQuerySchema,
   patchJobSchema,
+  patchOperacionesEstadoSchema,
   patchTaskStatusSchema,
+  programarOperacionSchema,
   submitSurveySchema,
   scheduleJobSchema,
   startInstallationSchema,
   completeInstallationSchema,
+  convertirALaAgendaSchema,
   createWarrantyTicketSchema,
   patchWarrantyTicketSchema,
 } from './operations.schema';
@@ -59,6 +63,85 @@ function isAdminRole(role: string): boolean {
 
 function isTechnicianRole(role: string): boolean {
   return role === 'tecnico' || role === 'tecnico_fijo' || role === 'contratista';
+}
+
+type OperacionesTipoTrabajo = 'INSTALACION' | 'MANTENIMIENTO' | 'LEVANTAMIENTO' | 'GARANTIA';
+type OperacionesEstado =
+  | 'PENDIENTE'
+  | 'PROGRAMADO'
+  | 'EN_EJECUCION'
+  | 'FINALIZADO'
+  | 'CERRADO'
+  | 'CANCELADO';
+
+function inferTipoTrabajoFromJob(job: any): OperacionesTipoTrabajo {
+  const normalized = String(job?.tipo_trabajo ?? '').toUpperCase();
+  if (
+    normalized === 'INSTALACION' ||
+    normalized === 'MANTENIMIENTO' ||
+    normalized === 'LEVANTAMIENTO' ||
+    normalized === 'GARANTIA'
+  ) {
+    return normalized as OperacionesTipoTrabajo;
+  }
+
+  const legacy = String(job?.crm_task_type ?? '').toUpperCase();
+  if (legacy === 'LEVANTAMIENTO') return 'LEVANTAMIENTO';
+  if (legacy === 'GARANTIA') return 'GARANTIA';
+  if (legacy === 'SERVICIO_RESERVADO') return 'MANTENIMIENTO';
+  if (legacy === 'INSTALACION') return 'INSTALACION';
+
+  return 'INSTALACION';
+}
+
+function mapLegacyStatusToEstado(params: { legacyStatus: string; tipoTrabajo: OperacionesTipoTrabajo }): OperacionesEstado {
+  const s = String(params.legacyStatus ?? '').toLowerCase();
+  if (s === 'cancelled') return 'CANCELADO';
+  if (s === 'closed') return 'CERRADO';
+  if (s === 'completed') return 'FINALIZADO';
+  if (s === 'installation_in_progress' || s === 'survey_in_progress' || s === 'warranty_in_progress') {
+    return 'EN_EJECUCION';
+  }
+  if (s === 'scheduled') return 'PROGRAMADO';
+
+  if (s === 'survey_completed') return 'FINALIZADO';
+  if (s === 'pending_scheduling') {
+    // For Levantamientos, pending_scheduling means survey already finished.
+    return params.tipoTrabajo === 'LEVANTAMIENTO' ? 'FINALIZADO' : 'PENDIENTE';
+  }
+
+  return 'PENDIENTE';
+}
+
+function mapEstadoToLegacyStatus(params: {
+  estado: OperacionesEstado;
+  tipoTrabajo: OperacionesTipoTrabajo;
+  currentLegacy: string;
+}): string {
+  if (params.estado === 'CANCELADO') return 'cancelled';
+  if (params.estado === 'CERRADO') return 'closed';
+
+  if (params.tipoTrabajo === 'GARANTIA') {
+    if (params.estado === 'EN_EJECUCION') return 'warranty_in_progress';
+    if (params.estado === 'FINALIZADO') return 'closed';
+    if (params.estado === 'PROGRAMADO') return 'warranty_pending';
+    return 'warranty_pending';
+  }
+
+  if (params.tipoTrabajo === 'LEVANTAMIENTO') {
+    if (params.estado === 'EN_EJECUCION') return 'survey_in_progress';
+    if (params.estado === 'FINALIZADO') return 'pending_scheduling';
+    if (params.estado === 'PROGRAMADO') return 'pending_survey';
+    return 'pending_survey';
+  }
+
+  // INSTALACION / MANTENIMIENTO
+  if (params.estado === 'PROGRAMADO') return 'scheduled';
+  if (params.estado === 'EN_EJECUCION') return 'installation_in_progress';
+  if (params.estado === 'FINALIZADO') return 'completed';
+  if (params.estado === 'PENDIENTE') return 'pending_scheduling';
+
+  return params.currentLegacy;
 }
 
 export async function listTechnicians(req: Request, res: Response): Promise<void> {
@@ -337,6 +420,106 @@ export async function listJobs(req: Request, res: Response): Promise<void> {
   });
 }
 
+export async function listOperaciones(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+
+  const parsed = listOperacionesQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new ApiError(400, 'Invalid query', parsed.error.flatten());
+  }
+
+  const q = parsed.data.q?.trim();
+  const estado = parsed.data.estado;
+  const tipo = parsed.data.tipo;
+  const tecnicoId = parsed.data.tecnicoId;
+  const tab = parsed.data.tab;
+  const from = parseDate(parsed.data.from);
+  const to = parseDate(parsed.data.to);
+
+  // NOTE: `estado` / `tipo_trabajo` are normalized fields added to OperationsJob.
+  // Some editor TS servers may keep stale Prisma typings; keep runtime behavior correct
+  // while avoiding blocking diagnostics.
+  const tabWhere: any =
+    tab === 'agenda'
+      ? {
+          estado: { in: ['PENDIENTE', 'PROGRAMADO', 'EN_EJECUCION'] },
+          tipo_trabajo: { not: 'LEVANTAMIENTO' },
+        }
+      : tab === 'levantamientos'
+        ? {
+            estado: { in: ['PENDIENTE', 'PROGRAMADO', 'EN_EJECUCION'] },
+            tipo_trabajo: 'LEVANTAMIENTO',
+          }
+        : tab === 'historial'
+          ? {
+              estado: { in: ['FINALIZADO', 'CERRADO', 'CANCELADO'] },
+            }
+          : {};
+
+  const where: any = {
+    empresa_id,
+    deleted_at: null,
+    ...tabWhere,
+    ...(estado ? { estado } : {}),
+    ...(tipo ? { tipo_trabajo: tipo } : {}),
+    ...(tecnicoId ? { assigned_tech_id: tecnicoId } : {}),
+    ...(from || to
+      ? {
+          created_at: {
+            ...(from ? { gte: from } : {}),
+            ...(to ? { lte: to } : {}),
+          },
+        }
+      : {}),
+    ...(q
+      ? {
+          OR: [
+            { customer_name: { contains: q, mode: 'insensitive' } },
+            { customer_phone: { contains: q, mode: 'insensitive' } },
+            { customer_address: { contains: q, mode: 'insensitive' } },
+            { id: { equals: q } },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, items] = await Promise.all([
+    prisma.operationsJob.count({ where }),
+    (async () => {
+      const include: any = {
+        assigned_tech: { select: { id: true, nombre_completo: true, rol: true } },
+        crm_chat: { select: { id: true, status: true, display_name: true, phone: true } },
+      };
+      if (await tableExists('operations_schedule')) include.schedule = true;
+      if (await tableExists('operations_survey')) include.survey = true;
+      if (await tableExists('operations_warranty_tickets')) {
+        include.warranty_tickets = {
+          where: { status: { in: ['pending', 'in_progress'] } },
+          orderBy: { reported_at: 'desc' },
+        };
+      }
+      if (await tableExists('operations_installation_reports')) {
+        include.installation_reports = { orderBy: { created_at: 'desc' } };
+      }
+
+      return prisma.operationsJob.findMany({
+        where,
+        orderBy: [{ created_at: 'desc' }],
+        take: parsed.data.limit,
+        skip: parsed.data.offset,
+        include,
+      });
+    })(),
+  ]);
+
+  res.json({
+    items,
+    total,
+    limit: parsed.data.limit,
+    offset: parsed.data.offset,
+  });
+}
+
 export async function getJob(req: Request, res: Response): Promise<void> {
   const empresa_id = actorEmpresaId(req);
   const id = req.params.id;
@@ -508,10 +691,14 @@ export async function patchJobStatus(req: Request, res: Response): Promise<void>
   });
 
   const updated = await prisma.$transaction(async (tx) => {
+    const tipoTrabajo = inferTipoTrabajoFromJob(existing as any);
+    const normalizedEstado = mapLegacyStatusToEstado({ legacyStatus: newStatus, tipoTrabajo });
+
     const job = await tx.operationsJob.update({
       where: { id },
       data: {
         status: newStatus as any,
+        estado: normalizedEstado,
         technician_notes:
           body.status === 'EN_PROCESO' || body.status === 'TERMINADO'
             ? (technicianNotes ?? undefined)
@@ -645,8 +832,9 @@ export async function submitSurvey(req: Request, res: Response): Promise<void> {
       where: { id: body.job_id },
       data: {
         status: 'pending_scheduling',
+        estado: 'FINALIZADO',
         updated_at: new Date(),
-      },
+      } as any,
     });
 
     const full = await tx.operationsSurvey.findUnique({
@@ -709,8 +897,9 @@ export async function scheduleJob(req: Request, res: Response): Promise<void> {
       where: { id: body.job_id },
       data: {
         status: 'scheduled',
+        estado: 'PROGRAMADO',
         assigned_tech_id: body.assigned_tech_id ?? null,
-      },
+      } as any,
     });
 
     return schedule;
@@ -740,7 +929,7 @@ export async function startInstallation(req: Request, res: Response): Promise<vo
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.operationsJob.update({
       where: { id: body.job_id },
-      data: { status: 'installation_in_progress' },
+      data: { status: 'installation_in_progress', estado: 'EN_EJECUCION' } as any,
     });
 
     const report = await tx.operationsInstallationReport.create({
@@ -792,7 +981,7 @@ export async function completeInstallation(req: Request, res: Response): Promise
 
     await tx.operationsJob.update({
       where: { id: body.job_id },
-      data: { status: 'completed' },
+      data: { status: 'completed', estado: 'FINALIZADO' } as any,
     });
 
     return report;
@@ -830,7 +1019,7 @@ export async function createWarrantyTicket(req: Request, res: Response): Promise
 
     await tx.operationsJob.update({
       where: { id: body.job_id },
-      data: { status: 'warranty_pending' },
+      data: { status: 'warranty_pending', estado: 'PENDIENTE', tipo_trabajo: 'GARANTIA' } as any,
     });
 
     return ticket;
@@ -890,13 +1079,13 @@ export async function patchWarrantyTicket(req: Request, res: Response): Promise<
       if (remaining === 0) {
         await tx.operationsJob.update({
           where: { id: existing.job_id },
-          data: { status: 'closed' },
+          data: { status: 'closed', estado: 'CERRADO' } as any,
         });
       }
     } else if (body.status === 'in_progress') {
       await tx.operationsJob.update({
         where: { id: existing.job_id },
-        data: { status: 'warranty_in_progress' },
+        data: { status: 'warranty_in_progress', estado: 'EN_EJECUCION' } as any,
       });
     }
 
@@ -904,4 +1093,271 @@ export async function patchWarrantyTicket(req: Request, res: Response): Promise<
   });
 
   res.json(updated);
+}
+
+export async function patchOperacionEstado(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+  const role = actorRole(req);
+  const user_id = actorUserId(req);
+  const id = req.params.id;
+
+  const parsed = patchOperacionesEstadoSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+  }
+
+  const existing = await prisma.operationsJob.findFirst({
+    where: { id, empresa_id, deleted_at: null },
+  });
+  if (!existing) throw new ApiError(404, 'Job not found');
+
+  const note = (parsed.data as any).note as string | null | undefined;
+  const trimmedNote = typeof note === 'string' ? note.trim() : '';
+
+  if (isTechnicianRole(role) && !isAdminRole(role)) {
+    if (!existing.assigned_tech_id || existing.assigned_tech_id !== user_id) {
+      throw new ApiError(403, 'Forbidden: technicians can only update their assigned jobs');
+    }
+  }
+
+  const tipoTrabajo = inferTipoTrabajoFromJob(existing as any);
+  const oldEstado = String((existing as any).estado ?? '');
+  const newEstado = parsed.data.estado as OperacionesEstado;
+
+  if (newEstado === 'CANCELADO' && !trimmedNote) {
+    throw new ApiError(400, 'note is required for CANCELADO');
+  }
+  if (newEstado === 'FINALIZADO' && isTechnicianRole(role) && !isAdminRole(role) && !trimmedNote) {
+    throw new ApiError(400, 'note is required for FINALIZADO');
+  }
+
+  const newLegacyStatus = mapEstadoToLegacyStatus({
+    estado: newEstado,
+    tipoTrabajo,
+    currentLegacy: String((existing as any).status ?? ''),
+  });
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const job = await tx.operationsJob.update({
+      where: { id },
+      data: {
+        estado: newEstado,
+        status: newLegacyStatus as any,
+        technician_notes: newEstado === 'FINALIZADO' && trimmedNote ? trimmedNote : undefined,
+        cancel_reason: newEstado === 'CANCELADO' && trimmedNote ? trimmedNote : undefined,
+        last_update_by_user_id: user_id,
+      } as any,
+    });
+
+    await recordJobHistory({
+      tx,
+      jobId: id,
+      actionType: 'estado_update',
+      oldStatus: oldEstado || null,
+      newStatus: newEstado,
+      note: trimmedNote || null,
+      createdByUserId: user_id,
+    });
+
+    return job;
+  });
+
+  const chatId = (existing as any).crm_chat_id as string | null | undefined;
+  if (chatId && trimmedNote) {
+    const stamp = new Date().toISOString();
+    await appendCrmInternalNote({
+      chatId,
+      note: `[OPS ${stamp}] Estado ${newEstado}: ${trimmedNote}`,
+    });
+    emitCrmEvent({ type: 'chat.updated', chatId });
+  }
+
+  res.json(updated);
+}
+
+export async function programarOperacion(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+  const role = actorRole(req);
+  const user_id = actorUserId(req);
+  const id = req.params.id;
+
+  if (isTechnicianRole(role) && !isAdminRole(role)) {
+    throw new ApiError(403, 'Forbidden: only admin/office roles can schedule');
+  }
+
+  const parsed = programarOperacionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+  }
+
+  if (!(await tableExists('operations_schedule'))) {
+    throw new ApiError(409, 'Scheduling is not available (operations_schedule table missing)');
+  }
+
+  const existing = await prisma.operationsJob.findFirst({
+    where: { id, empresa_id, deleted_at: null },
+  });
+  if (!existing) throw new ApiError(404, 'Job not found');
+
+  const scheduled_date = parseDateOnly(parsed.data.scheduled_date);
+  const oldEstado = String((existing as any).estado ?? '');
+
+  const result = await prisma.$transaction(async (tx) => {
+    const schedule = await tx.operationsSchedule.upsert({
+      where: { job_id: id },
+      create: {
+        job: { connect: { id } },
+        scheduled_date,
+        preferred_time: parsed.data.preferred_time ?? null,
+        assigned_tech: parsed.data.assigned_tech_id
+          ? { connect: { id: parsed.data.assigned_tech_id } }
+          : undefined,
+      },
+      update: {
+        scheduled_date,
+        preferred_time: parsed.data.preferred_time ?? null,
+        assigned_tech:
+          parsed.data.assigned_tech_id === undefined
+            ? undefined
+            : parsed.data.assigned_tech_id === null
+              ? { disconnect: true }
+              : { connect: { id: parsed.data.assigned_tech_id } },
+      },
+    });
+
+    const job = await tx.operationsJob.update({
+      where: { id },
+      data: {
+        estado: 'PROGRAMADO',
+        status: 'scheduled',
+        assigned_tech_id:
+          parsed.data.assigned_tech_id === undefined
+            ? undefined
+            : parsed.data.assigned_tech_id,
+        last_update_by_user_id: user_id,
+      } as any,
+    });
+
+    await recordJobHistory({
+      tx,
+      jobId: id,
+      actionType: 'programar',
+      oldStatus: oldEstado || null,
+      newStatus: 'PROGRAMADO',
+      note: parsed.data.note ?? null,
+      createdByUserId: user_id,
+    });
+
+    return { schedule, job };
+  });
+
+  if (parsed.data.note && (existing as any).crm_chat_id) {
+    await appendCrmInternalNote({
+      chatId: String((existing as any).crm_chat_id),
+      note: `[OPS ${new Date().toISOString()}] Programado: ${parsed.data.note.trim()}`,
+    });
+    emitCrmEvent({ type: 'chat.updated', chatId: String((existing as any).crm_chat_id) });
+  }
+
+  res.status(201).json(result);
+}
+
+export async function convertirALaAgenda(req: Request, res: Response): Promise<void> {
+  const empresa_id = actorEmpresaId(req);
+  const role = actorRole(req);
+  const user_id = actorUserId(req);
+  const id = req.params.id;
+
+  if (isTechnicianRole(role) && !isAdminRole(role)) {
+    throw new ApiError(403, 'Forbidden: only admin/office roles can convert surveys');
+  }
+
+  const parsed = convertirALaAgendaSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+  }
+
+  if (!(await tableExists('operations_schedule'))) {
+    throw new ApiError(409, 'Scheduling is not available (operations_schedule table missing)');
+  }
+
+  const existing = await prisma.operationsJob.findFirst({
+    where: { id, empresa_id, deleted_at: null },
+  });
+  if (!existing) throw new ApiError(404, 'Job not found');
+
+  const tipoActual = inferTipoTrabajoFromJob(existing as any);
+  if (tipoActual !== 'LEVANTAMIENTO') {
+    throw new ApiError(400, 'Only Levantamientos can be converted to Agenda');
+  }
+
+  const scheduled_date = parseDateOnly(parsed.data.scheduled_date);
+  const oldTipo = String((existing as any).tipo_trabajo ?? '');
+  const oldEstado = String((existing as any).estado ?? '');
+
+  const legacyCrmTaskType =
+    parsed.data.tipo_destino === 'MANTENIMIENTO'
+      ? 'SERVICIO_RESERVADO'
+      : parsed.data.tipo_destino;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const schedule = await tx.operationsSchedule.upsert({
+      where: { job_id: id },
+      create: {
+        job: { connect: { id } },
+        scheduled_date,
+        preferred_time: parsed.data.preferred_time ?? null,
+        assigned_tech: parsed.data.assigned_tech_id
+          ? { connect: { id: parsed.data.assigned_tech_id } }
+          : undefined,
+      },
+      update: {
+        scheduled_date,
+        preferred_time: parsed.data.preferred_time ?? null,
+        assigned_tech:
+          parsed.data.assigned_tech_id === undefined
+            ? undefined
+            : parsed.data.assigned_tech_id === null
+              ? { disconnect: true }
+              : { connect: { id: parsed.data.assigned_tech_id } },
+      },
+    });
+
+    const job = await tx.operationsJob.update({
+      where: { id },
+      data: {
+        tipo_trabajo: parsed.data.tipo_destino,
+        estado: 'PROGRAMADO',
+        status: 'scheduled',
+        crm_task_type: legacyCrmTaskType as any,
+        assigned_tech_id:
+          parsed.data.assigned_tech_id === undefined
+            ? undefined
+            : parsed.data.assigned_tech_id,
+        last_update_by_user_id: user_id,
+      } as any,
+    });
+
+    await recordJobHistory({
+      tx,
+      jobId: id,
+      actionType: 'convertir_a_agenda',
+      oldStatus: `${oldTipo}:${oldEstado}` || null,
+      newStatus: `${parsed.data.tipo_destino}:PROGRAMADO`,
+      note: parsed.data.note ?? null,
+      createdByUserId: user_id,
+    });
+
+    return { schedule, job };
+  });
+
+  if (parsed.data.note && (existing as any).crm_chat_id) {
+    await appendCrmInternalNote({
+      chatId: String((existing as any).crm_chat_id),
+      note: `[OPS ${new Date().toISOString()}] Convertido a Agenda (${parsed.data.tipo_destino}): ${parsed.data.note.trim()}`,
+    });
+    emitCrmEvent({ type: 'chat.updated', chatId: String((existing as any).crm_chat_id) });
+  }
+
+  res.status(201).json(result);
 }

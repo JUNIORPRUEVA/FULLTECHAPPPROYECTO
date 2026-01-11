@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/app_config.dart';
@@ -12,15 +14,38 @@ import '../../../core/widgets/catalog_product_grid_card.dart';
 import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
 import '../../catalogo/models/producto.dart';
+import '../../configuracion/state/company_profile_providers.dart';
+import '../../crm/data/models/crm_thread.dart';
 import '../models/quotation_models.dart';
+import '../services/quotation_pdf_service.dart';
 import '../state/presupuesto_catalog_controller.dart';
 import '../state/quotation_builder_controller.dart';
 import '../state/quotation_builder_state.dart';
-import '../widgets/customer_picker_dialog.dart';
+import '../widgets/crm_chat_picker_dialog.dart';
 import '../widgets/manual_item_dialog.dart';
 import '../widgets/presupuesto_filters_dialog.dart';
 import '../widgets/quotation_item_edit_dialog.dart';
 import 'quotation_pdf_viewer_screen.dart';
+
+String _digitsOnly(String raw) => raw.replaceAll(RegExp(r'[^0-9]'), '');
+
+String? _normalizeWhatsAppPhone(String? raw) {
+  if (raw == null) return null;
+  final digits = _digitsOnly(raw.trim());
+  if (digits.isEmpty) return null;
+  if (digits.length == 10) return '1$digits';
+  if (digits.length >= 11) return digits;
+  return null;
+}
+
+Future<bool> _openWhatsAppChat(String phoneDigits, String message) async {
+  final uri = Uri.parse(
+    'https://wa.me/$phoneDigits?text=${Uri.encodeComponent(message)}',
+  );
+  if (!await canLaunchUrl(uri)) return false;
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+  return true;
+}
 
 class PresupuestoDetailScreen extends ConsumerStatefulWidget {
   const PresupuestoDetailScreen({super.key});
@@ -86,12 +111,26 @@ class _PresupuestoDetailScreenState
   }
 
   Future<void> _pickCustomer() async {
-    final selected = await showDialog<QuotationCustomerDraft>(
+    final selected = await showDialog<CrmThread>(
       context: context,
-      builder: (_) => const CustomerPickerDialog(),
+      builder: (_) => const CrmChatPickerDialog(),
     );
     if (selected == null) return;
-    ref.read(quotationBuilderControllerProvider.notifier).setCustomer(selected);
+
+    final name = (selected.displayName ?? '').trim().isNotEmpty
+        ? selected.displayName!.trim()
+        : (selected.phone ?? selected.waId).trim();
+
+    final draft = QuotationCustomerDraft(
+      id: null,
+      nombre: name,
+      telefono: (selected.phone ?? '').trim().isEmpty ? null : selected.phone,
+      email: null,
+    );
+
+    final ctrl = ref.read(quotationBuilderControllerProvider.notifier);
+    ctrl.setCustomer(draft);
+    ctrl.setCrmChatId(selected.id);
   }
 
   Future<void> _editItem(String localId) async {
@@ -348,13 +387,14 @@ class _CatalogPane extends ConsumerWidget {
         st.selectedCategoriaId!.trim().isEmpty;
 
     final width = MediaQuery.sizeOf(context).width;
+    // Bigger cards: fewer columns per breakpoint.
     final crossAxisCount = width >= 1400
-        ? 7
+        ? 6
         : (width >= 1200
-              ? 6
+              ? 5
               : (width >= 980
-                    ? 5
-                    : (width >= 760 ? 4 : (width >= 520 ? 3 : 2))));
+                    ? 4
+                    : (width >= 760 ? 3 : (width >= 520 ? 2 : 2))));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -455,7 +495,7 @@ class _CatalogPane extends ConsumerWidget {
             controller: productsScroll,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: crossAxisCount,
-              childAspectRatio: 0.95,
+              childAspectRatio: 0.78,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
             ),
@@ -475,6 +515,8 @@ class _CatalogPane extends ConsumerWidget {
                 costText: costText,
                 canSeeCost: canSeeCost,
                 imageRaw: p.imagenUrl,
+                stockQty: p.stock.toDouble(),
+                minStock: p.minStock.toDouble(),
                 onTap: () => onAddProduct(p),
               );
             },
@@ -625,18 +667,18 @@ class _QuotePane extends ConsumerWidget {
                 height: 34,
                 child: ClipOval(
                   child: (imageUrl != null && imageUrl.trim().isNotEmpty)
-                        ? adaptiveImage(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: cs.surfaceContainerHighest,
-                              child: Icon(
-                                Icons.image_not_supported_outlined,
-                                size: 18,
-                                color: cs.onSurfaceVariant,
-                              ),
+                      ? adaptiveImage(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: cs.surfaceContainerHighest,
+                            child: Icon(
+                              Icons.image_not_supported_outlined,
+                              size: 18,
+                              color: cs.onSurfaceVariant,
                             ),
-                          )
+                          ),
+                        )
                       : Container(
                           color: cs.surfaceContainerHighest,
                           child: Icon(
@@ -814,55 +856,166 @@ class _QuotePane extends ConsumerWidget {
     }
 
     Future<void> sendWhatsApp() async {
-      final phoneRaw = ticket.customer?.telefono;
-      final phone = phoneRaw == null
-          ? ''
-          : phoneRaw.replaceAll(RegExp(r'[^0-9]'), '');
-      if (phone.isEmpty) {
+      final chatId = (ticket.crmChatId ?? '').trim();
+      Map<String, dynamic>? created;
+      try {
+        created = await ref
+            .read(quotationBuilderControllerProvider.notifier)
+            .saveQuotation();
+      } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('El cliente no tiene teléfono')),
+          SnackBar(content: Text('Error guardando cotización: $e')),
+        );
+        return;
+      }
+      if (created == null) return;
+
+      final company = await ref.read(companyProfileProvider.future);
+
+      final numero = (created['numero'] ?? '').toString();
+      final id = (created['id'] ?? '').toString();
+      final createdAtRaw = (created['created_at'] ?? created['createdAt'])
+          ?.toString();
+      final createdAt = DateTime.tryParse(createdAtRaw ?? '') ?? DateTime.now();
+      final status = (created['status'] ?? 'draft').toString();
+      final notes = (created['notes'] ?? '').toString();
+
+      String shortId({required String id, required String numero}) {
+        final n = numero.trim();
+        if (n.isNotEmpty) return n;
+        final trimmed = id.trim();
+        if (trimmed.isEmpty) return 'SIN_ID';
+        return trimmed.length <= 8 ? trimmed : trimmed.substring(0, 8);
+      }
+
+      String fmtDateForFilename(DateTime dt) {
+        String two(int n) => n.toString().padLeft(2, '0');
+        return '${dt.year}${two(dt.month)}${two(dt.day)}';
+      }
+
+      final idShort = shortId(id: id, numero: numero);
+      final filename =
+          'Cotizacion_FULLTECH_${idShort}_${fmtDateForFilename(createdAt)}.pdf';
+
+      final pdfBytes = await buildQuotationPdfBytesProSafe(
+        draft: quote,
+        quotationNumber: numero,
+        idShort: idShort,
+        createdAt: createdAt,
+        status: status,
+        notes: notes,
+        company: company,
+        format: PdfPageFormat.a4,
+      );
+
+      final caption =
+          'Cotización ${numero.trim().isEmpty ? idShort : numero} · Total RD\$ ${quote.total.toStringAsFixed(2)}';
+
+      // If the user didn't select a CRM chat, allow sending to the client's
+      // phone via WhatsApp (open chat + share PDF).
+      if (chatId.isEmpty) {
+        final customer = ticket.customer;
+        final phoneDigits = _normalizeWhatsAppPhone(customer?.telefono);
+        final customerName = (customer?.nombre ?? '').trim();
+        final quoteNo = numero.trim().isEmpty ? idShort : numero.trim();
+        final msg =
+            'Hola${customerName.isEmpty ? '' : ' $customerName'}, le comparto su cotización No. $quoteNo. '
+            'Total: RD\$ ${quote.total.toStringAsFixed(2)}.';
+
+        if (!context.mounted) return;
+        await showModalBottomSheet<void>(
+          context: context,
+          showDragHandle: true,
+          builder: (ctx) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Enviar por WhatsApp',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: phoneDigits == null
+                          ? null
+                          : () async {
+                              Navigator.of(ctx).pop();
+                              final ok = await _openWhatsAppChat(
+                                phoneDigits,
+                                msg,
+                              );
+                              if (!ok && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No se pudo abrir WhatsApp'),
+                                  ),
+                                );
+                              }
+                            },
+                      icon: const Icon(Icons.chat_outlined),
+                      label: const Text('Abrir chat (mensaje)'),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton.tonalIcon(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        try {
+                          await Printing.sharePdf(
+                            bytes: pdfBytes,
+                            filename: filename,
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('No se pudo compartir: $e')),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                      label: const Text('Compartir PDF (selecciona WhatsApp)'),
+                    ),
+                    if (phoneDigits == null) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Nota: el cliente no tiene teléfono válido en la ficha.',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
         );
         return;
       }
 
-      final msg =
-          'Cotización\nTotal: RD\$ ${quote.total.toStringAsFixed(2)}\nItems: ${ticket.items.length}';
-      final uri = Uri.parse(
-        'https://wa.me/$phone?text=${Uri.encodeComponent(msg)}',
-      );
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo abrir WhatsApp')),
-        );
-      }
-    }
-
-    Future<void> sendEmail() async {
-      final email = (ticket.customer?.email ?? '').trim();
-      if (email.isEmpty) {
+      try {
+        await ref
+            .read(quotationApiProvider)
+            .sendQuotationWhatsappPdf(
+              id,
+              chatId: chatId,
+              pdfBytes: pdfBytes,
+              filename: filename,
+              caption: caption,
+            );
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('El cliente no tiene correo')),
+          const SnackBar(content: Text('Cotización enviada por WhatsApp')),
         );
-        return;
-      }
-
-      final subject = 'Cotización';
-      final body =
-          'Hola ${ticket.customer?.nombre ?? ''},\n\nAdjunto la cotización.\nTotal: RD\$ ${quote.total.toStringAsFixed(2)}\n\nGracias.';
-      final uri = Uri(
-        scheme: 'mailto',
-        path: email,
-        queryParameters: {'subject': subject, 'body': body},
-      );
-
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo abrir el correo')),
-        );
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error enviando WhatsApp: $e')));
       }
     }
 
@@ -1365,17 +1518,6 @@ class _QuotePane extends ConsumerWidget {
                           ),
                         ),
                       );
-                      final mailBtn = btn(
-                        FilledButton.tonalIcon(
-                          onPressed: disabled ? null : sendEmail,
-                          icon: const Icon(Icons.email_outlined),
-                          label: const Text(
-                            'Email',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      );
 
                       return SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -1386,8 +1528,6 @@ class _QuotePane extends ConsumerWidget {
                             waBtn,
                             const SizedBox(width: 8),
                             pdfBtn,
-                            const SizedBox(width: 8),
-                            mailBtn,
                           ],
                         ),
                       );

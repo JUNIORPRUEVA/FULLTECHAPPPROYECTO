@@ -2,8 +2,7 @@ import 'pos_models.dart';
 
 enum PosDiscountType {
   fixed,
-  percent,
-  ;
+  percent;
 
   static PosDiscountType fromJson(dynamic v) {
     final s = (v ?? '').toString().trim().toLowerCase();
@@ -32,6 +31,10 @@ class PosTicket {
   final bool ncfEnabled;
   final String? selectedNcfDocType;
 
+  final bool warrantyEnabled;
+  final String? selectedWarrantyId;
+  final String? selectedWarrantyName;
+
   final List<PosSaleItemDraft> items;
 
   const PosTicket({
@@ -48,6 +51,9 @@ class PosTicket {
     required this.itbisRate,
     required this.ncfEnabled,
     required this.selectedNcfDocType,
+    required this.warrantyEnabled,
+    required this.selectedWarrantyId,
+    required this.selectedWarrantyName,
     required this.items,
   });
 
@@ -66,7 +72,9 @@ class PosTicket {
     final baseAfterLine = clamp0(subtotal - lineDiscounts);
     if (baseAfterLine <= 0) return 0.0;
 
-    final v = discountValue.isNaN || discountValue.isInfinite ? 0.0 : discountValue;
+    final v = discountValue.isNaN || discountValue.isInfinite
+        ? 0.0
+        : discountValue;
     if (discountType == PosDiscountType.percent) {
       final p = v.clamp(0, 100).toDouble();
       final amt = baseAfterLine * (p / 100.0);
@@ -92,6 +100,9 @@ class PosTicket {
     double? itbisRate,
     bool? ncfEnabled,
     String? selectedNcfDocType,
+    bool? warrantyEnabled,
+    String? selectedWarrantyId,
+    String? selectedWarrantyName,
     List<PosSaleItemDraft>? items,
   }) {
     return PosTicket(
@@ -108,42 +119,50 @@ class PosTicket {
       itbisRate: itbisRate ?? this.itbisRate,
       ncfEnabled: ncfEnabled ?? this.ncfEnabled,
       selectedNcfDocType: selectedNcfDocType ?? this.selectedNcfDocType,
+      warrantyEnabled: warrantyEnabled ?? this.warrantyEnabled,
+      selectedWarrantyId: selectedWarrantyId ?? this.selectedWarrantyId,
+      selectedWarrantyName: selectedWarrantyName ?? this.selectedWarrantyName,
       items: items ?? this.items,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'is_custom_name': isCustomName,
-        'customer_id': customerId,
-        'customer_name': customerName,
-        'customer_phone': customerPhone,
-        'customer_rnc': customerRnc,
-        'discount_type': discountType.toJson(),
-        'discount_value': discountValue,
-        'itbis_enabled': itbisEnabled,
-        'itbis_rate': itbisRate,
-        'ncf_enabled': ncfEnabled,
-        'selected_ncf_doc_type': selectedNcfDocType,
-        'items': items
-            .map(
-              (it) => {
-                'product': it.product.toJson(),
-                'qty': it.qty,
-                'unit_price': it.unitPrice,
-                'discount_amount': it.discountAmount,
-              },
-            )
-            .toList(),
-      };
+    'id': id,
+    'name': name,
+    'is_custom_name': isCustomName,
+    'customer_id': customerId,
+    'customer_name': customerName,
+    'customer_phone': customerPhone,
+    'customer_rnc': customerRnc,
+    'discount_type': discountType.toJson(),
+    'discount_value': discountValue,
+    'itbis_enabled': itbisEnabled,
+    'itbis_rate': itbisRate,
+    'ncf_enabled': ncfEnabled,
+    'selected_ncf_doc_type': selectedNcfDocType,
+    'warranty_enabled': warrantyEnabled,
+    'selected_warranty_id': selectedWarrantyId,
+    'selected_warranty_name': selectedWarrantyName,
+    'items': items
+        .map(
+          (it) => {
+            'product': it.product.toJson(),
+            'qty': it.qty,
+            'unit_price': it.unitPrice,
+            'discount_amount': it.discountAmount,
+          },
+        )
+        .toList(),
+  };
 
   static PosTicket fromJson(Map<String, dynamic> json) {
     final itemsJson = (json['items'] as List?)?.cast<Map>() ?? const [];
 
     final items = itemsJson.map((m) {
       final mm = m.cast<String, dynamic>();
-      final product = PosProduct.fromJson((mm['product'] as Map).cast<String, dynamic>());
+      final product = PosProduct.fromJson(
+        (mm['product'] as Map).cast<String, dynamic>(),
+      );
       return PosSaleItemDraft(
         product: product,
         qty: (mm['qty'] as num?)?.toDouble() ?? 0,
@@ -152,7 +171,8 @@ class PosTicket {
       );
     }).toList();
 
-    bool asBool(dynamic v) => v == true || (v?.toString().toLowerCase() == 'true');
+    bool asBool(dynamic v) =>
+        v == true || (v?.toString().toLowerCase() == 'true');
     double asDouble(dynamic v, double fallback) {
       if (v == null) return fallback;
       if (v is num) return v.toDouble();
@@ -178,6 +198,9 @@ class PosTicket {
       itbisRate: asDouble(json['itbis_rate'], 0.18),
       ncfEnabled: asBool(json['ncf_enabled']),
       selectedNcfDocType: cleanNullable(json['selected_ncf_doc_type']),
+      warrantyEnabled: asBool(json['warranty_enabled']),
+      selectedWarrantyId: cleanNullable(json['selected_warranty_id']),
+      selectedWarrantyName: cleanNullable(json['selected_warranty_name']),
       items: items,
     );
   }

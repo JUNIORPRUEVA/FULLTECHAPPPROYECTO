@@ -6,8 +6,11 @@ import {
   listQuotationsQuerySchema,
   quotationIdParamsSchema,
   sendQuotationSchema,
+  sendQuotationWhatsappPdfSchema,
   updateQuotationSchema,
 } from './quotations.schema';
+
+import { EvolutionClient } from '../../services/evolution/evolution_client';
 
 const prismaAny = prisma as any;
 
@@ -472,4 +475,64 @@ export async function sendQuotation(req: Request, res: Response) {
   } catch (_) {}
 
   res.json({ ok: true, channel, to, url });
+}
+
+export async function sendQuotationWhatsappPdf(req: Request, res: Response) {
+  const empresaId = req.user!.empresaId;
+
+  const parsedParams = quotationIdParamsSchema.safeParse(req.params);
+  if (!parsedParams.success) {
+    throw new ApiError(400, 'Invalid id', parsedParams.error.flatten());
+  }
+  const { id } = parsedParams.data;
+
+  const parsed = sendQuotationWhatsappPdfSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, 'Invalid send payload', parsed.error.flatten());
+  }
+
+  const quotation = await prismaAny.quotation.findFirst({
+    where: { id, empresa_id: empresaId },
+    include: { items: true },
+  });
+  if (!quotation) throw new ApiError(404, 'Quotation not found');
+
+  const chat = await prismaAny.crmChat.findFirst({
+    where: { id: parsed.data.chat_id, empresa_id: empresaId },
+  });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  const toWaId = String(chat.wa_id ?? '').trim();
+  const toPhone = String(chat.phone ?? '').trim();
+
+  if (!toWaId && !toPhone) {
+    throw new ApiError(400, 'Chat has no destination (wa_id/phone)');
+  }
+
+  const filename = (parsed.data.filename ?? '').trim() || `Cotizacion_${quotation.numero ?? quotation.id}.pdf`;
+  const caption = (parsed.data.caption ?? '').trim() ||
+    `Cotización ${quotation.numero ?? ''} - Total: ${quotation.total}`.trim();
+
+  let evo: EvolutionClient;
+  try {
+    evo = new EvolutionClient();
+  } catch (e) {
+    throw new ApiError(500, `Evolution is not configured: ${String((e as any)?.message ?? e)}`);
+  }
+
+  const result = await evo.sendDocumentBase64({
+    toWaId: toWaId || undefined,
+    toPhone: toPhone || undefined,
+    base64: parsed.data.pdf_base64,
+    fileName: filename,
+    caption,
+    mimeType: 'application/pdf',
+  });
+
+  // Best-effort status update (do not fail the send result)
+  try {
+    await prismaAny.quotation.update({ where: { id }, data: { status: 'sent' } });
+  } catch (_) {}
+
+  res.json({ ok: true, messageId: result.messageId, channel: 'whatsapp', to: toWaId || toPhone, filename, raw: result.raw });
 }

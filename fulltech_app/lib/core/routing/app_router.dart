@@ -38,6 +38,7 @@ import '../../features/tecnico/screens/tecnico_list_screen.dart';
 import '../../features/contrato/screens/contrato_list_screen.dart';
 import '../../features/guagua/screens/guagua_list_screen.dart';
 import '../../features/maintenance/presentation/pages/maintenance_page.dart';
+import '../../features/configuracion/screens/warranty_options_screen.dart';
 import '../../features/ponchado/presentation/pages/ponchado_page.dart';
 import '../../features/rrhh/screens/rrhh_list_screen.dart';
 import '../../features/perfil/screens/perfil_screen.dart';
@@ -174,10 +175,7 @@ GoRouter createRouter(Ref ref) {
               title: 'Operación ${s.pathParameters['id']!}',
             ),
           ),
-          GoRoute(
-            path: 'agenda',
-            builder: (c, s) => const AgendaPage(),
-          ),
+          GoRoute(path: 'agenda', builder: (c, s) => const AgendaPage()),
         ],
       ),
       GoRoute(
@@ -396,6 +394,15 @@ GoRouter createRouter(Ref ref) {
               return isAdmin ? null : AppRoutes.configuracion;
             },
             builder: (c, s) => const PermissionsSettingsScreen(),
+          ),
+          GoRoute(
+            path: 'garantias',
+            redirect: (context, state) {
+              final auth = ref.read(authControllerProvider);
+              if (auth is! AuthAuthenticated) return AppRoutes.login;
+              return null;
+            },
+            builder: (c, s) => const WarrantyOptionsScreen(),
           ),
         ],
       ),

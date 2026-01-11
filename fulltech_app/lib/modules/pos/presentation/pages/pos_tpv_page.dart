@@ -20,6 +20,13 @@ import '../../state/pos_tpv_controller.dart';
 import 'pos_invoice_viewer_screen.dart';
 import '../widgets/pos_invoice_pdf.dart';
 import '../../../../core/widgets/catalog_product_grid_card.dart';
+import '../../../../features/configuracion/state/warranty_options_provider.dart';
+
+final _ncfSequencesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      final repo = ref.watch(posRepositoryProvider);
+      return repo.listNcfSequences();
+    });
 
 class PosTpvPage extends ConsumerStatefulWidget {
   const PosTpvPage({super.key});
@@ -341,13 +348,16 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
     final grossSubtotal = ticket.subtotal;
     final discountTotal = ticket.lineDiscounts + ticket.globalDiscount;
     final base = clamp0(grossSubtotal - discountTotal);
-    final itbis = base * 0.18;
+    final itbis = base * (ticket.itbisEnabled ? ticket.itbisRate : 0.0);
     final total = base + itbis;
 
     final res = await showDialog<_CheckoutResult>(
       context: context,
-      builder: (_) =>
-          _CheckoutDialog(invoiceType: ticket.invoiceType, total: total),
+      builder: (_) => _CheckoutDialog(
+        invoiceType: ticket.invoiceType,
+        total: total,
+        initialDocType: ticket.selectedNcfDocType,
+      ),
     );
     if (res == null) return;
 
@@ -470,13 +480,14 @@ class _PosCatalogPane extends ConsumerWidget {
     final categorias = catalogSt.categorias;
 
     final width = MediaQuery.sizeOf(context).width;
+    // Bigger cards: fewer columns per breakpoint.
     final crossAxisCount = width >= 1400
-        ? 7
+        ? 6
         : (width >= 1200
-              ? 6
+              ? 5
               : (width >= 980
-                    ? 5
-                    : (width >= 760 ? 4 : (width >= 520 ? 3 : 2))));
+                    ? 4
+                    : (width >= 760 ? 3 : (width >= 520 ? 2 : 2))));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -728,7 +739,7 @@ class _PosCatalogPane extends ConsumerWidget {
           controller: productsScroll,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.95,
+            childAspectRatio: 0.78,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
           ),
@@ -995,12 +1006,15 @@ class _PosSalePane extends ConsumerWidget {
     final cs = theme.colorScheme;
 
     final ticket = state.activeTicket;
+    final tpvCtrl = ref.read(posTpvControllerProvider.notifier);
+    final warrantyOptions = ref.watch(warrantyOptionsProvider);
+    final ncfSequences = ref.watch(_ncfSequencesProvider);
 
     double clamp0(double v) => v < 0 ? 0 : v;
     final grossSubtotal = ticket.subtotal;
     final discountTotal = ticket.lineDiscounts + ticket.globalDiscount;
     final base = clamp0(grossSubtotal - discountTotal);
-    final itbis = base * 0.18;
+    final itbis = base * (ticket.itbisEnabled ? ticket.itbisRate : 0.0);
     final total = base + itbis;
 
     final totalsLabelStyle = theme.textTheme.titleSmall?.copyWith(
@@ -1044,93 +1058,94 @@ class _PosSalePane extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'TPV',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Agregar ticket',
-                          onPressed: () => ref
-                              .read(posTpvControllerProvider.notifier)
-                              .addTicket(),
-                          icon: const Icon(Icons.add),
-                        ),
-                        IconButton(
-                          tooltip: 'Cancelar venta (vaciar carrito)',
-                          onPressed: () async {
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (_) => AlertDialog(
-                                title: const Text('Cancelar venta'),
-                                content: const Text(
-                                  'Esto vaciará el carrito del ticket actual. ¿Deseas continuar?',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(false),
-                                    child: const Text('No'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () =>
-                                        Navigator.of(context).pop(true),
-                                    child: const Text('Sí, cancelar'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (ok != true) return;
-                            ref
-                                .read(posTpvControllerProvider.notifier)
-                                .clearActiveTicket();
-                          },
-                          icon: const Icon(Icons.clear_all),
-                        ),
-                      ],
-                    ),
                     SizedBox(height: paneUltraTightH ? 6 : 8),
                     SizedBox(
                       height: 40,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: state.tickets.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (context, i) {
-                          final t = state.tickets[i];
-                          final selected = t.id == state.activeTicketId;
-                          return GestureDetector(
-                            onLongPress: () => _renameTicket(context, ref, t),
-                            child: InputChip(
-                              label: Text(
-                                t.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              showCheckmark: false,
-                              selected: selected,
-                              backgroundColor: cs.surfaceContainerHighest,
-                              selectedColor: cs.primary,
-                              side: BorderSide(
-                                color:
-                                    (selected ? cs.primary : cs.outlineVariant)
-                                        .withValues(alpha: 0.5),
-                              ),
-                              labelStyle: theme.textTheme.labelLarge?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: selected ? cs.onPrimary : cs.onSurface,
-                              ),
-                              onPressed: () => ref
-                                  .read(posTpvControllerProvider.notifier)
-                                  .selectTicket(t.id),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: state.tickets.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 8),
+                              itemBuilder: (context, i) {
+                                final t = state.tickets[i];
+                                final selected = t.id == state.activeTicketId;
+                                return GestureDetector(
+                                  onLongPress: () =>
+                                      _renameTicket(context, ref, t),
+                                  child: InputChip(
+                                    label: Text(
+                                      t.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    showCheckmark: false,
+                                    selected: selected,
+                                    backgroundColor: cs.surfaceContainerHighest,
+                                    selectedColor: cs.primary,
+                                    side: BorderSide(
+                                      color:
+                                          (selected
+                                                  ? cs.primary
+                                                  : cs.outlineVariant)
+                                              .withValues(alpha: 0.5),
+                                    ),
+                                    labelStyle: theme.textTheme.labelLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                          color: selected
+                                              ? cs.onPrimary
+                                              : cs.onSurface,
+                                        ),
+                                    onPressed: () => ref
+                                        .read(posTpvControllerProvider.notifier)
+                                        .selectTicket(t.id),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
+                          ),
+                          IconButton(
+                            tooltip: 'Agregar ticket',
+                            onPressed: () => ref
+                                .read(posTpvControllerProvider.notifier)
+                                .addTicket(),
+                            icon: const Icon(Icons.add),
+                          ),
+                          IconButton(
+                            tooltip: 'Cancelar venta (vaciar carrito)',
+                            onPressed: () async {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('Cancelar venta'),
+                                  content: const Text(
+                                    'Esto vaciará el carrito del ticket actual. ¿Deseas continuar?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(false),
+                                      child: const Text('No'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(true),
+                                      child: const Text('Sí, cancelar'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (ok != true) return;
+                              ref
+                                  .read(posTpvControllerProvider.notifier)
+                                  .clearActiveTicket();
+                            },
+                            icon: const Icon(Icons.clear_all),
+                          ),
+                        ],
                       ),
                     ),
                     SizedBox(height: paneUltraTightH ? 6 : 10),
@@ -1316,19 +1331,13 @@ class _PosSalePane extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 children: [
+                  const SizedBox(height: 2),
                   if (ticket.items.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text('Agrega productos desde el catálogo'),
                     )
-                  else ...[
-                    Text(
-                      'Catálogo',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                  else
                     for (final it in ticket.items)
                       _itemCard(
                         context: context,
@@ -1337,7 +1346,6 @@ class _PosSalePane extends ConsumerWidget {
                         imageUrl: _imageSourceFor(it),
                         onEdit: () => onEditLine(it),
                       ),
-                  ],
                   if (state.error != null) ...[
                     const SizedBox(height: 8),
                     Text(state.error!, style: TextStyle(color: cs.error)),
@@ -1358,32 +1366,153 @@ class _PosSalePane extends ConsumerWidget {
               ),
               child: Column(
                 children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: ticket.ncfEnabled,
+                    onChanged: (v) => tpvCtrl.setNcfEnabled(v),
+                    title: const Text('Facturar con comprobante'),
+                    dense: true,
+                  ),
+                  if (ticket.ncfEnabled) ...[
+                    const SizedBox(height: 6),
+                    ncfSequences.when(
+                      data: (seqs) {
+                        final opts = <String, String>{};
+                        for (final s in seqs) {
+                          final docType =
+                              (s['docType'] ?? s['doc_type'] ?? s['type'] ?? '')
+                                  .toString()
+                                  .trim();
+                          if (docType.isEmpty) continue;
+                          final label =
+                              (s['label'] ??
+                                      s['name'] ??
+                                      s['nombre'] ??
+                                      docType)
+                                  .toString()
+                                  .trim();
+                          opts[docType] = label.isEmpty ? docType : label;
+                        }
+
+                        final entries = opts.entries.toList()
+                          ..sort((a, b) => a.key.compareTo(b.key));
+
+                        final value =
+                            (ticket.selectedNcfDocType != null &&
+                                opts.containsKey(ticket.selectedNcfDocType))
+                            ? ticket.selectedNcfDocType
+                            : null;
+
+                        return DropdownButtonFormField<String>(
+                          value: value,
+                          items: [
+                            for (final e in entries)
+                              DropdownMenuItem(
+                                value: e.key,
+                                child: Text('${e.key} — ${e.value}'),
+                              ),
+                          ],
+                          onChanged: (v) => tpvCtrl.setSelectedNcfDocType(v),
+                          decoration: const InputDecoration(
+                            labelText: 'Comprobante (NCF)',
+                            isDense: true,
+                          ),
+                        );
+                      },
+                      loading: () =>
+                          const LinearProgressIndicator(minHeight: 2),
+                      error: (e, st) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'No se pudieron cargar los comprobantes',
+                          style: TextStyle(color: cs.error),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: SwitchListTile(
                           contentPadding: EdgeInsets.zero,
-                          value: true,
-                          onChanged: null,
-                          title: Text('ITBIS'),
+                          value: ticket.itbisEnabled,
+                          onChanged: (v) => tpvCtrl.setItbisEnabled(v),
+                          title: const Text('ITBIS'),
                           dense: true,
                         ),
                       ),
                       SizedBox(
                         width: 90,
                         child: TextFormField(
-                          initialValue: '18',
-                          enabled: false,
+                          key: ValueKey(
+                            'itbisRate-${ticket.itbisEnabled}-${ticket.itbisRate}',
+                          ),
+                          initialValue: (ticket.itbisRate * 100)
+                              .toStringAsFixed(0)
+                              .replaceAll('.0', ''),
+                          enabled: ticket.itbisEnabled,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
                             suffixText: '%',
                             isDense: true,
                           ),
-                          onFieldSubmitted: (_) {},
+                          onFieldSubmitted: (v) {
+                            final p =
+                                double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
+                            tpvCtrl.setItbisRatePercent(p);
+                          },
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: ticket.warrantyEnabled,
+                    onChanged: (v) => tpvCtrl.setWarrantyEnabled(v),
+                    title: const Text('Activar garantía'),
+                    dense: true,
+                  ),
+                  if (ticket.warrantyEnabled) ...[
+                    const SizedBox(height: 6),
+                    if (warrantyOptions.isEmpty)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => context.go(
+                            '${AppRoutes.configuracion}/garantias',
+                          ),
+                          icon: const Icon(Icons.settings_outlined),
+                          label: const Text('Configurar lista de garantías'),
+                        ),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        value: ticket.selectedWarrantyId,
+                        items: [
+                          for (final o in warrantyOptions)
+                            DropdownMenuItem(value: o.id, child: Text(o.name)),
+                        ],
+                        onChanged: (id) {
+                          WarrantyOption? selected;
+                          for (final o in warrantyOptions) {
+                            if (o.id == id) {
+                              selected = o;
+                              break;
+                            }
+                          }
+                          tpvCtrl.setSelectedWarranty(
+                            warrantyId: selected?.id,
+                            warrantyName: selected?.name,
+                          );
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Garantía',
+                          isDense: true,
+                        ),
+                      ),
+                  ],
                   SizedBox(height: paneUltraTightH ? 6 : 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1410,7 +1539,12 @@ class _PosSalePane extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('ITBIS monto', style: totalsLabelStyle),
+                      Text(
+                        ticket.itbisEnabled
+                            ? 'ITBIS (${(ticket.itbisRate * 100).toStringAsFixed(0)}%)'
+                            : 'ITBIS',
+                        style: totalsLabelStyle,
+                      ),
                       Text(itbis.toStringAsFixed(2), style: totalsValueStyle),
                     ],
                   ),
@@ -1526,6 +1660,7 @@ class _EditLineDialogState extends State<_EditLineDialog> {
   late final TextEditingController _qty;
   late final TextEditingController _price;
   late final TextEditingController _disc;
+  String _discountMode = 'AMOUNT';
 
   @override
   void initState() {
@@ -1549,6 +1684,15 @@ class _EditLineDialogState extends State<_EditLineDialog> {
 
   @override
   Widget build(BuildContext context) {
+    double parse(String s) => double.tryParse(s.replaceAll(',', '.')) ?? 0;
+
+    void bumpQty(double delta) {
+      final current = parse(_qty.text);
+      final next = (current + delta);
+      if (next <= 0) return;
+      _qty.text = next.toStringAsFixed(2);
+    }
+
     return AlertDialog(
       title: Text(widget.line.product.nombre),
       content: SizedBox(
@@ -1556,15 +1700,32 @@ class _EditLineDialogState extends State<_EditLineDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: _qty,
-              decoration: const InputDecoration(
-                labelText: 'Cantidad',
-                isDense: true,
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Disminuir',
+                  onPressed: () => setState(() => bumpQty(-1)),
+                  icon: const Icon(Icons.remove_circle_outline),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _qty,
+                    decoration: const InputDecoration(
+                      labelText: 'Cantidad',
+                      isDense: true,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Aumentar',
+                  onPressed: () => setState(() => bumpQty(1)),
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             TextField(
@@ -1576,17 +1737,62 @@ class _EditLineDialogState extends State<_EditLineDialog> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _discountMode,
+              items: const [
+                DropdownMenuItem(
+                  value: 'AMOUNT',
+                  child: Text('Descuento monto'),
+                ),
+                DropdownMenuItem(value: 'PERCENT', child: Text('Descuento %')),
+              ],
+              onChanged: (v) => setState(() => _discountMode = v ?? 'AMOUNT'),
+              decoration: const InputDecoration(
+                labelText: 'Tipo de descuento',
+                isDense: true,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _disc,
-              decoration: const InputDecoration(
-                labelText: 'Descuento línea',
+              decoration: InputDecoration(
+                labelText: 'Descuento',
                 isDense: true,
+                suffixText: _discountMode == 'PERCENT' ? '%' : null,
               ),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+            Builder(
+              builder: (context) {
+                final qty = parse(_qty.text);
+                final price = parse(_price.text);
+                final discInput = parse(_disc.text);
+                final base = (qty < 0 ? 0.0 : qty) * (price < 0 ? 0.0 : price);
+                final discAmount = _discountMode == 'PERCENT'
+                    ? base *
+                          ((discInput < 0
+                                  ? 0.0
+                                  : (discInput > 100 ? 100.0 : discInput)) /
+                              100.0)
+                    : (discInput < 0 ? 0.0 : discInput);
+                final lineTotal = (base - discAmount) < 0
+                    ? 0.0
+                    : ((base - discAmount) > base ? base : (base - discAmount));
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Total línea: ${lineTotal.toStringAsFixed(2)}',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -1598,20 +1804,32 @@ class _EditLineDialogState extends State<_EditLineDialog> {
         ),
         ElevatedButton(
           onPressed: () {
-            double parse(String s) =>
-                double.tryParse(s.replaceAll(',', '.')) ?? 0;
-
             final qty = parse(_qty.text);
             final price = parse(_price.text);
-            final disc = parse(_disc.text);
+            final discInput = parse(_disc.text);
 
             if (qty <= 0) return;
+
+            final safeQty = qty;
+            final safePrice = price < 0 ? 0.0 : price;
+            final base = safeQty * safePrice;
+            final discAmount = _discountMode == 'PERCENT'
+                ? base *
+                      ((discInput < 0
+                              ? 0.0
+                              : (discInput > 100 ? 100.0 : discInput)) /
+                          100.0)
+                : (discInput < 0 ? 0.0 : discInput);
+            final safeDisc = discAmount < 0
+                ? 0.0
+                : (discAmount > base ? base : discAmount);
+
             Navigator.pop(
               context,
               widget.line.copyWith(
-                qty: qty,
-                unitPrice: price < 0 ? 0 : price,
-                discountAmount: disc < 0 ? 0 : disc,
+                qty: safeQty,
+                unitPrice: safePrice,
+                discountAmount: safeDisc,
               ),
             );
           },
@@ -1641,8 +1859,13 @@ class _CheckoutResult {
 class _CheckoutDialog extends StatefulWidget {
   final String invoiceType;
   final double total;
+  final String? initialDocType;
 
-  const _CheckoutDialog({required this.invoiceType, required this.total});
+  const _CheckoutDialog({
+    required this.invoiceType,
+    required this.total,
+    required this.initialDocType,
+  });
 
   @override
   State<_CheckoutDialog> createState() => _CheckoutDialogState();
@@ -1652,8 +1875,15 @@ class _CheckoutDialogState extends State<_CheckoutDialog> {
   String _payment = 'CASH';
   final _received = TextEditingController();
   final _initialPayment = TextEditingController();
-  final _docType = TextEditingController(text: 'B02');
+  late final TextEditingController _docType;
   DateTime? _dueDate;
+
+  @override
+  void initState() {
+    super.initState();
+    final raw = (widget.initialDocType ?? '').trim();
+    _docType = TextEditingController(text: raw.isEmpty ? 'B02' : raw);
+  }
 
   @override
   void dispose() {

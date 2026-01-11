@@ -26,6 +26,8 @@ class OperationsRepository {
     required String empresaId,
     String? q,
     String? status,
+    String? estado,
+    String? tipoTrabajo,
     String? assignedTechId,
     DateTime? from,
     DateTime? to,
@@ -37,6 +39,8 @@ class OperationsRepository {
       empresaId: empresaId,
       q: q,
       status: status,
+      estado: estado,
+      tipoTrabajo: tipoTrabajo,
       assignedTechId: assignedTechId,
       fromIso: from?.toIso8601String(),
       toIso: to?.toIso8601String(),
@@ -51,6 +55,8 @@ class OperationsRepository {
     required String empresaId,
     String? q,
     String? status,
+    String? estado,
+    String? tipoTrabajo,
     String? assignedTechId,
     DateTime? from,
     DateTime? to,
@@ -59,6 +65,8 @@ class OperationsRepository {
       empresaId: empresaId,
       q: q,
       status: status,
+      estado: estado,
+      tipoTrabajo: tipoTrabajo,
       assignedTechId: assignedTechId,
       fromIso: from?.toIso8601String(),
       toIso: to?.toIso8601String(),
@@ -70,8 +78,11 @@ class OperationsRepository {
 
   Future<void> refreshJobsFromServer({
     required String empresaId,
+    String? tab,
     String? q,
     String? status,
+    String? estado,
+    String? tipoTrabajo,
     String? assignedTechId,
     DateTime? from,
     DateTime? to,
@@ -80,15 +91,48 @@ class OperationsRepository {
   }) async {
     final offset = (page - 1) * pageSize;
 
-    final data = await _api.listJobs(
-      q: q,
-      status: status,
-      assignedTechId: assignedTechId,
-      from: from?.toIso8601String(),
-      to: to?.toIso8601String(),
-      limit: pageSize,
-      offset: offset,
-    );
+    // Prefer the new simplified endpoint (`GET /operations`) when using tab/estado/tipo.
+    // If the backend is an older deploy and returns 404, fall back to legacy `GET /operations/jobs`.
+    late final Map<String, dynamic> data;
+    if (tab != null || estado != null || tipoTrabajo != null) {
+      try {
+        data = await _api.listOperaciones(
+          tab: tab,
+          q: q,
+          estado: estado,
+          tipo: tipoTrabajo,
+          tecnicoId: assignedTechId,
+          from: from?.toIso8601String(),
+          to: to?.toIso8601String(),
+          limit: pageSize,
+          offset: offset,
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) {
+          data = await _api.listJobs(
+            q: q,
+            status: status,
+            assignedTechId: assignedTechId,
+            from: from?.toIso8601String(),
+            to: to?.toIso8601String(),
+            limit: pageSize,
+            offset: offset,
+          );
+        } else {
+          rethrow;
+        }
+      }
+    } else {
+      data = await _api.listJobs(
+        q: q,
+        status: status,
+        assignedTechId: assignedTechId,
+        from: from?.toIso8601String(),
+        to: to?.toIso8601String(),
+        limit: pageSize,
+        offset: offset,
+      );
+    }
 
     final items =
         (data['items'] as List?)
@@ -109,10 +153,11 @@ class OperationsRepository {
       final schedule = it['schedule'];
       if (schedule is Map) {
         final scheduleJson = schedule.cast<String, dynamic>();
-        final rawDate = (scheduleJson['scheduled_date'] ??
-                scheduleJson['scheduledDate'] ??
-                '')
-            .toString();
+        final rawDate =
+            (scheduleJson['scheduled_date'] ??
+                    scheduleJson['scheduledDate'] ??
+                    '')
+                .toString();
         final rawTime = scheduleJson['preferred_time']?.toString();
         await _db.upsertOperationsSchedule(
           row: {
@@ -154,7 +199,9 @@ class OperationsRepository {
           overrideSyncStatus: 'synced',
           overrideLastError: null,
         );
-        jobRow['scheduled_date'] = DateTime.tryParse(rawDate)?.toIso8601String();
+        jobRow['scheduled_date'] = DateTime.tryParse(
+          rawDate,
+        )?.toIso8601String();
         jobRow['preferred_time'] = rawTime;
         await _db.upsertOperationsJob(row: jobRow);
       }
@@ -435,6 +482,187 @@ class OperationsRepository {
     );
   }
 
+  Future<void> patchOperacionEstado({
+    required String jobId,
+    required String estado,
+    String? note,
+  }) async {
+    final data = await _api.patchOperacionEstado(
+      jobId,
+      estado: estado,
+      note: note,
+    );
+    final job = OperationsJob.fromServerJson(data);
+    await _db.upsertOperationsJob(
+      row: job.toLocalRow(
+        overrideSyncStatus: 'synced',
+        overrideLastError: null,
+      ),
+    );
+  }
+
+  Future<void> programarOperacion({
+    required String jobId,
+    required String scheduledDate, // YYYY-MM-DD
+    String? preferredTime,
+    String? assignedTechId,
+    String? note,
+  }) async {
+    final data = await _api.programarOperacion(
+      jobId,
+      scheduledDate: scheduledDate,
+      preferredTime: preferredTime,
+      assignedTechId: assignedTechId,
+      note: note,
+    );
+
+    final jobJson = (data['job'] is Map)
+        ? (data['job'] as Map).cast<String, dynamic>()
+        : data;
+    final job = OperationsJob.fromServerJson(jobJson);
+    await _db.upsertOperationsJob(
+      row: job.toLocalRow(
+        overrideSyncStatus: 'synced',
+        overrideLastError: null,
+      ),
+    );
+
+    final schedule = data['schedule'];
+    if (schedule is Map) {
+      final scheduleJson = schedule.cast<String, dynamic>();
+      final rawDate =
+          (scheduleJson['scheduled_date'] ??
+                  scheduleJson['scheduledDate'] ??
+                  '')
+              .toString();
+      final rawTime = scheduleJson['preferred_time']?.toString();
+      await _db.upsertOperationsSchedule(
+        row: {
+          'id': (scheduleJson['id'] ?? '').toString(),
+          'job_id': job.id,
+          'scheduled_date': rawDate,
+          'preferred_time': rawTime,
+          'assigned_tech_id':
+              (scheduleJson['assigned_tech_id'] ??
+                      scheduleJson['assignedTechId'] ??
+                      '')
+                  .toString(),
+          'additional_tech_ids_json': jsonEncode(
+            (scheduleJson['additional_tech_ids'] is List)
+                ? (scheduleJson['additional_tech_ids'] as List)
+                      .map((e) => e.toString())
+                      .toList()
+                : const <String>[],
+          ),
+          'customer_availability_notes':
+              scheduleJson['customer_availability_notes']?.toString(),
+          'created_at':
+              (scheduleJson['created_at'] ??
+                      scheduleJson['createdAt'] ??
+                      DateTime.now().toIso8601String())
+                  .toString(),
+          'updated_at':
+              (scheduleJson['updated_at'] ??
+                      scheduleJson['updatedAt'] ??
+                      DateTime.now().toIso8601String())
+                  .toString(),
+          'sync_status': 'synced',
+          'last_error': null,
+        },
+      );
+
+      final jobRow = job.toLocalRow(
+        overrideSyncStatus: 'synced',
+        overrideLastError: null,
+      );
+      jobRow['scheduled_date'] = DateTime.tryParse(rawDate)?.toIso8601String();
+      jobRow['preferred_time'] = rawTime;
+      await _db.upsertOperationsJob(row: jobRow);
+    }
+  }
+
+  Future<void> convertirALaAgenda({
+    required String jobId,
+    required String tipoDestino,
+    required String scheduledDate,
+    String? preferredTime,
+    String? assignedTechId,
+    String? note,
+  }) async {
+    final data = await _api.convertirALaAgenda(
+      jobId,
+      tipoDestino: tipoDestino,
+      scheduledDate: scheduledDate,
+      preferredTime: preferredTime,
+      assignedTechId: assignedTechId,
+      note: note,
+    );
+
+    final jobJson = (data['job'] is Map)
+        ? (data['job'] as Map).cast<String, dynamic>()
+        : data;
+    final job = OperationsJob.fromServerJson(jobJson);
+    await _db.upsertOperationsJob(
+      row: job.toLocalRow(
+        overrideSyncStatus: 'synced',
+        overrideLastError: null,
+      ),
+    );
+
+    final schedule = data['schedule'];
+    if (schedule is Map) {
+      final scheduleJson = schedule.cast<String, dynamic>();
+      final rawDate =
+          (scheduleJson['scheduled_date'] ??
+                  scheduleJson['scheduledDate'] ??
+                  '')
+              .toString();
+      final rawTime = scheduleJson['preferred_time']?.toString();
+      await _db.upsertOperationsSchedule(
+        row: {
+          'id': (scheduleJson['id'] ?? '').toString(),
+          'job_id': job.id,
+          'scheduled_date': rawDate,
+          'preferred_time': rawTime,
+          'assigned_tech_id':
+              (scheduleJson['assigned_tech_id'] ??
+                      scheduleJson['assignedTechId'] ??
+                      '')
+                  .toString(),
+          'additional_tech_ids_json': jsonEncode(
+            (scheduleJson['additional_tech_ids'] is List)
+                ? (scheduleJson['additional_tech_ids'] as List)
+                      .map((e) => e.toString())
+                      .toList()
+                : const <String>[],
+          ),
+          'customer_availability_notes':
+              scheduleJson['customer_availability_notes']?.toString(),
+          'created_at':
+              (scheduleJson['created_at'] ??
+                      scheduleJson['createdAt'] ??
+                      DateTime.now().toIso8601String())
+                  .toString(),
+          'updated_at':
+              (scheduleJson['updated_at'] ??
+                      scheduleJson['updatedAt'] ??
+                      DateTime.now().toIso8601String())
+                  .toString(),
+          'sync_status': 'synced',
+          'last_error': null,
+        },
+      );
+
+      final jobRow = job.toLocalRow(
+        overrideSyncStatus: 'synced',
+        overrideLastError: null,
+      );
+      jobRow['scheduled_date'] = DateTime.tryParse(rawDate)?.toIso8601String();
+      jobRow['preferred_time'] = rawTime;
+      await _db.upsertOperationsJob(row: jobRow);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> listJobHistory({
     required String jobId,
   }) async {
@@ -514,6 +742,31 @@ class OperationsRepository {
     final now = DateTime.now();
     final id = _newId();
 
+    final inferredTipoTrabajo = () {
+      final s = initialStatus.trim().toLowerCase();
+      if (s.startsWith('warranty_') || s == 'closed') return 'GARANTIA';
+      if (s.startsWith('pending_survey') || s.startsWith('survey_'))
+        return 'LEVANTAMIENTO';
+      final st = serviceType.trim().toLowerCase();
+      if (st.contains('mantenimiento')) return 'MANTENIMIENTO';
+      return 'INSTALACION';
+    }();
+
+    final inferredEstado = () {
+      final s = initialStatus.trim().toLowerCase();
+      if (s == 'cancelled') return 'CANCELADO';
+      if (s == 'closed') return 'CERRADO';
+      if (s == 'completed') return 'FINALIZADO';
+      if (s == 'scheduled') return 'PROGRAMADO';
+      if (s.endsWith('_in_progress')) return 'EN_EJECUCION';
+      if (s == 'pending_scheduling') {
+        return inferredTipoTrabajo == 'LEVANTAMIENTO'
+            ? 'FINALIZADO'
+            : 'PENDIENTE';
+      }
+      return 'PENDIENTE';
+    }();
+
     final job = OperationsJob(
       id: id,
       empresaId: empresaId,
@@ -524,6 +777,8 @@ class OperationsRepository {
       serviceType: serviceType,
       priority: priority,
       status: initialStatus,
+      tipoTrabajo: inferredTipoTrabajo,
+      estado: inferredEstado,
       notes: notes,
       createdByUserId: createdByUserId,
       assignedTechId: assignedTechId,
@@ -625,6 +880,8 @@ class OperationsRepository {
         serviceType: existingJob.serviceType,
         priority: existingJob.priority,
         status: 'pending_scheduling',
+        tipoTrabajo: existingJob.tipoTrabajo,
+        estado: 'FINALIZADO',
         notes: existingJob.notes,
         createdByUserId: existingJob.createdByUserId,
         assignedTechId: existingJob.assignedTechId,
@@ -714,6 +971,8 @@ class OperationsRepository {
         serviceType: existingJob.serviceType,
         priority: existingJob.priority,
         status: 'scheduled',
+        tipoTrabajo: existingJob.tipoTrabajo,
+        estado: 'PROGRAMADO',
         notes: existingJob.notes,
         createdByUserId: existingJob.createdByUserId,
         assignedTechId: assignedTechId,
@@ -767,6 +1026,8 @@ class OperationsRepository {
         serviceType: existingJob.serviceType,
         priority: existingJob.priority,
         status: 'installation_in_progress',
+        tipoTrabajo: existingJob.tipoTrabajo,
+        estado: 'EN_EJECUCION',
         notes: existingJob.notes,
         createdByUserId: existingJob.createdByUserId,
         assignedTechId: existingJob.assignedTechId,
@@ -840,6 +1101,8 @@ class OperationsRepository {
         serviceType: existingJob.serviceType,
         priority: existingJob.priority,
         status: 'completed',
+        tipoTrabajo: existingJob.tipoTrabajo,
+        estado: 'FINALIZADO',
         notes: existingJob.notes,
         createdByUserId: existingJob.createdByUserId,
         assignedTechId: existingJob.assignedTechId,
@@ -912,6 +1175,8 @@ class OperationsRepository {
         serviceType: existingJob.serviceType,
         priority: existingJob.priority,
         status: 'warranty_pending',
+        tipoTrabajo: 'GARANTIA',
+        estado: 'PENDIENTE',
         notes: existingJob.notes,
         createdByUserId: existingJob.createdByUserId,
         assignedTechId: existingJob.assignedTechId,
@@ -947,6 +1212,91 @@ class OperationsRepository {
     required String jobId,
     Map<String, dynamic> patch = const {},
   }) async {
+    // Update local ticket immediately for better UX.
+    try {
+      final rows = await _db.listOperationsWarrantyTickets(jobId: jobId);
+      Map<String, Object?>? existing;
+      for (final r in rows) {
+        if ((r['id'] ?? '').toString() == ticketId) {
+          existing = r;
+          break;
+        }
+      }
+
+      if (existing != null) {
+        final merged = Map<String, Object?>.from(existing);
+        if (patch.containsKey('status'))
+          merged['status'] = patch['status']?.toString();
+        if (patch.containsKey('assigned_tech_id'))
+          merged['assigned_tech_id'] = patch['assigned_tech_id']?.toString();
+        if (patch.containsKey('resolution_notes'))
+          merged['resolution_notes'] = patch['resolution_notes']?.toString();
+        if (patch.containsKey('resolved_at'))
+          merged['resolved_at'] = patch['resolved_at']?.toString();
+        merged['sync_status'] = 'pending';
+        merged['last_error'] = null;
+        await _db.upsertOperationsWarrantyTicket(row: merged);
+      }
+    } catch (_) {
+      // Best-effort local update; sync queue still ensures eventual consistency.
+    }
+
+    // Patch local job status best-effort based on ticket status.
+    final nextStatus = patch['status']?.toString().trim().toLowerCase();
+    if (nextStatus != null && nextStatus.isNotEmpty) {
+      try {
+        final existingJobRow = await _db.getOperationsJob(id: jobId);
+        if (existingJobRow != null) {
+          final existingJob = OperationsJob.fromLocalRow(existingJobRow);
+
+          String jobStatus = existingJob.status;
+          String jobTipoTrabajo = existingJob.tipoTrabajo;
+          String jobEstado = existingJob.estado;
+          if (nextStatus == 'pending') {
+            jobStatus = 'warranty_pending';
+            jobTipoTrabajo = 'GARANTIA';
+            jobEstado = 'PENDIENTE';
+          } else if (nextStatus == 'in_progress') {
+            jobStatus = 'warranty_in_progress';
+            jobTipoTrabajo = 'GARANTIA';
+            jobEstado = 'EN_EJECUCION';
+          } else if (nextStatus == 'resolved') {
+            jobStatus = 'closed';
+            jobTipoTrabajo = 'GARANTIA';
+            jobEstado = 'CERRADO';
+          }
+
+          final patchedJob = OperationsJob(
+            id: existingJob.id,
+            empresaId: existingJob.empresaId,
+            crmCustomerId: existingJob.crmCustomerId,
+            customerName: existingJob.customerName,
+            customerPhone: existingJob.customerPhone,
+            customerAddress: existingJob.customerAddress,
+            serviceType: existingJob.serviceType,
+            priority: existingJob.priority,
+            status: jobStatus,
+            tipoTrabajo: jobTipoTrabajo,
+            estado: jobEstado,
+            notes: existingJob.notes,
+            createdByUserId: existingJob.createdByUserId,
+            assignedTechId: existingJob.assignedTechId,
+            assignedTeamIds: existingJob.assignedTeamIds,
+            createdAt: existingJob.createdAt,
+            updatedAt: DateTime.now(),
+            deleted: existingJob.deleted,
+            deletedAt: existingJob.deletedAt,
+            syncStatus: 'pending',
+            lastError: null,
+          );
+
+          await _db.upsertOperationsJob(row: patchedJob.toLocalRow());
+        }
+      } catch (_) {
+        // Best-effort; not critical for sync.
+      }
+    }
+
     await _db.enqueueSync(
       module: _syncModule,
       op: 'patch_warranty_ticket',

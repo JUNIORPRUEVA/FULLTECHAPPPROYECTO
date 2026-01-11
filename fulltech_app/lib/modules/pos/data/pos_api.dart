@@ -13,11 +13,12 @@ class PosApi {
     int? skip,
   }) async {
     final res = await _dio.get(
-      'pos/products',
+      '/pos/products',
       queryParameters: {
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (lowStock) 'lowStock': 'true',
-        if (categoryId != null && categoryId.trim().isNotEmpty) 'categoryId': categoryId,
+        if (categoryId != null && categoryId.trim().isNotEmpty)
+          'categoryId': categoryId,
         if (take != null) 'take': take,
         if (skip != null) 'skip': skip,
       },
@@ -37,7 +38,7 @@ class PosApi {
     int offset = 0,
   }) async {
     final res = await _dio.get(
-      'customers',
+      '/customers',
       queryParameters: {
         if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
         'limit': limit,
@@ -48,18 +49,23 @@ class PosApi {
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> createCustomer(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> createCustomer(
+    Map<String, dynamic> payload,
+  ) async {
     final res = await _dio.post(
-      'customers',
+      '/customers',
       data: payload,
       options: Options(extra: {'offlineQueue': false}),
     );
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> patchCustomer(String id, Map<String, dynamic> patch) async {
+  Future<Map<String, dynamic>> patchCustomer(
+    String id,
+    Map<String, dynamic> patch,
+  ) async {
     final res = await _dio.patch(
-      'customers/$id',
+      '/customers/$id',
       data: patch,
       options: Options(extra: {'offlineQueue': false}),
     );
@@ -68,7 +74,7 @@ class PosApi {
 
   Future<Map<String, dynamic>> getCustomer(String id) async {
     final res = await _dio.get(
-      'customers/$id',
+      '/customers/$id',
       options: Options(extra: {'offlineCache': true}),
     );
     return (res.data as Map).cast<String, dynamic>();
@@ -79,24 +85,29 @@ class PosApi {
 
   Future<Map<String, dynamic>> listNcfSequences() async {
     final res = await _dio.get(
-      'pos/fiscal/sequences',
+      '/pos/fiscal/sequences',
       options: Options(extra: {'offlineCache': true}),
     );
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> createNcfSequence(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> createNcfSequence(
+    Map<String, dynamic> payload,
+  ) async {
     final res = await _dio.post(
-      'pos/fiscal/sequences',
+      '/pos/fiscal/sequences',
       data: payload,
       options: Options(extra: {'offlineQueue': false}),
     );
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> updateNcfSequence(String id, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> updateNcfSequence(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
     final res = await _dio.patch(
-      'pos/fiscal/sequences/$id',
+      '/pos/fiscal/sequences/$id',
       data: payload,
       options: Options(extra: {'offlineQueue': false}),
     );
@@ -105,7 +116,7 @@ class PosApi {
 
   Future<Map<String, dynamic>> deleteNcfSequence(String id) async {
     final res = await _dio.delete(
-      'pos/fiscal/sequences/$id',
+      '/pos/fiscal/sequences/$id',
       options: Options(extra: {'offlineQueue': false}),
     );
     return (res.data as Map).cast<String, dynamic>();
@@ -113,16 +124,19 @@ class PosApi {
 
   Future<Map<String, dynamic>> createSale(Map<String, dynamic> payload) async {
     final res = await _dio.post(
-      'pos/sales',
+      '/pos/sales',
       data: payload,
       options: Options(extra: {'offlineQueue': false}),
     );
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> paySale(String saleId, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> paySale(
+    String saleId,
+    Map<String, dynamic> payload,
+  ) async {
     final res = await _dio.post(
-      'pos/sales/$saleId/pay',
+      '/pos/sales/$saleId/pay',
       data: payload,
       options: Options(extra: {'offlineQueue': false}),
     );
@@ -131,7 +145,7 @@ class PosApi {
 
   Future<Map<String, dynamic>> cancelSale(String saleId) async {
     final res = await _dio.post(
-      'pos/sales/$saleId/cancel',
+      '/pos/sales/$saleId/cancel',
       data: {},
       options: Options(extra: {'offlineQueue': false}),
     );
@@ -140,7 +154,7 @@ class PosApi {
 
   Future<Map<String, dynamic>> nextNcf(String docType) async {
     final res = await _dio.post(
-      'pos/fiscal/next-ncf',
+      '/pos/fiscal/next-ncf',
       data: {'doc_type': docType},
       options: Options(extra: {'offlineQueue': false}),
     );
@@ -153,7 +167,7 @@ class PosApi {
     DateTime? to,
   }) async {
     final res = await _dio.get(
-      'pos/purchases',
+      '/pos/purchases',
       queryParameters: {
         if (status != null && status.trim().isNotEmpty) 'status': status,
         if (from != null) 'from': from.toIso8601String(),
@@ -168,7 +182,7 @@ class PosApi {
 
   Future<List<Map<String, dynamic>>> listSuppliers({String? search}) async {
     final res = await _dio.get(
-      'pos/suppliers',
+      '/pos/suppliers',
       queryParameters: {
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       },
@@ -180,48 +194,41 @@ class PosApi {
     return items.map((e) => e.cast<String, dynamic>()).toList();
   }
 
-  Future<Map<String, dynamic>> createSupplier(Map<String, dynamic> payload) async {
-    final res = await _dio.post(
-      'pos/suppliers',
-      data: payload,
-    );
+  Future<Map<String, dynamic>> createSupplier(
+    Map<String, dynamic> payload,
+  ) async {
+    final res = await _dio.post('/pos/suppliers', data: payload);
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> updateSupplier(String supplierId, Map<String, dynamic> payload) async {
-    final res = await _dio.patch(
-      'pos/suppliers/$supplierId',
-      data: payload,
-    );
+  Future<Map<String, dynamic>> updateSupplier(
+    String supplierId,
+    Map<String, dynamic> payload,
+  ) async {
+    final res = await _dio.patch('/pos/suppliers/$supplierId', data: payload);
     return (res.data as Map).cast<String, dynamic>();
   }
 
   Future<Map<String, dynamic>> deleteSupplier(String supplierId) async {
-    final res = await _dio.delete(
-      'pos/suppliers/$supplierId',
-    );
+    final res = await _dio.delete('/pos/suppliers/$supplierId');
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> createPurchase(Map<String, dynamic> payload) async {
-    final res = await _dio.post(
-      'pos/purchases',
-      data: payload,
-    );
+  Future<Map<String, dynamic>> createPurchase(
+    Map<String, dynamic> payload,
+  ) async {
+    final res = await _dio.post('/pos/purchases', data: payload);
     return (res.data as Map).cast<String, dynamic>();
   }
 
   Future<Map<String, dynamic>> receivePurchase(String purchaseId) async {
-    final res = await _dio.post(
-      'pos/purchases/$purchaseId/receive',
-      data: {},
-    );
+    final res = await _dio.post('/pos/purchases/$purchaseId/receive', data: {});
     return (res.data as Map).cast<String, dynamic>();
   }
 
   Future<Map<String, dynamic>> getPurchase(String purchaseId) async {
     final res = await _dio.get(
-      'pos/purchases/$purchaseId',
+      '/pos/purchases/$purchaseId',
       options: Options(extra: {'offlineCache': true}),
     );
     return (res.data as Map).cast<String, dynamic>();
@@ -233,9 +240,10 @@ class PosApi {
     DateTime? to,
   }) async {
     final res = await _dio.get(
-      'pos/inventory/movements',
+      '/pos/inventory/movements',
       queryParameters: {
-        if (productId != null && productId.trim().isNotEmpty) 'product_id': productId,
+        if (productId != null && productId.trim().isNotEmpty)
+          'product_id': productId,
         if (from != null) 'from': from.toIso8601String(),
         if (to != null) 'to': to.toIso8601String(),
       },
@@ -252,7 +260,7 @@ class PosApi {
     String? note,
   }) async {
     final res = await _dio.post(
-      'pos/inventory/adjust',
+      '/pos/inventory/adjust',
       data: {
         'product_id': productId,
         'qty_change': qtyChange,
@@ -267,7 +275,7 @@ class PosApi {
     String? search,
   }) async {
     final res = await _dio.get(
-      'pos/credit',
+      '/pos/credit',
       queryParameters: {
         if (status != null && status.trim().isNotEmpty) 'status': status,
         if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
@@ -281,15 +289,18 @@ class PosApi {
 
   Future<Map<String, dynamic>> getCredit(String id) async {
     final res = await _dio.get(
-      'pos/credit/$id',
+      '/pos/credit/$id',
       options: Options(extra: {'offlineCache': true}),
     );
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<Map<String, dynamic>> salesSummary({DateTime? from, DateTime? to}) async {
+  Future<Map<String, dynamic>> salesSummary({
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final res = await _dio.get(
-      'pos/reports/sales-summary',
+      '/pos/reports/sales-summary',
       queryParameters: {
         if (from != null) 'from': from.toIso8601String(),
         if (to != null) 'to': to.toIso8601String(),
@@ -299,9 +310,12 @@ class PosApi {
     return (res.data as Map).cast<String, dynamic>();
   }
 
-  Future<List<Map<String, dynamic>>> topProducts({DateTime? from, DateTime? to}) async {
+  Future<List<Map<String, dynamic>>> topProducts({
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final res = await _dio.get(
-      'pos/reports/top-products',
+      '/pos/reports/top-products',
       queryParameters: {
         if (from != null) 'from': from.toIso8601String(),
         if (to != null) 'to': to.toIso8601String(),
@@ -315,7 +329,7 @@ class PosApi {
 
   Future<List<Map<String, dynamic>>> lowStockReport() async {
     final res = await _dio.get(
-      'pos/reports/inventory-low-stock',
+      '/pos/reports/inventory-low-stock',
       options: Options(extra: {'offlineCache': true}),
     );
     final data = (res.data as Map?)?.cast<String, dynamic>() ?? const {};
@@ -323,9 +337,12 @@ class PosApi {
     return items.map((e) => e.cast<String, dynamic>()).toList();
   }
 
-  Future<Map<String, dynamic>> purchasesSummary({DateTime? from, DateTime? to}) async {
+  Future<Map<String, dynamic>> purchasesSummary({
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final res = await _dio.get(
-      'pos/reports/purchases-summary',
+      '/pos/reports/purchases-summary',
       queryParameters: {
         if (from != null) 'from': from.toIso8601String(),
         if (to != null) 'to': to.toIso8601String(),
@@ -337,7 +354,7 @@ class PosApi {
 
   Future<List<Map<String, dynamic>>> creditAging() async {
     final res = await _dio.get(
-      'pos/reports/credit-aging',
+      '/pos/reports/credit-aging',
       options: Options(extra: {'offlineCache': true}),
     );
     final data = (res.data as Map?)?.cast<String, dynamic>() ?? const {};

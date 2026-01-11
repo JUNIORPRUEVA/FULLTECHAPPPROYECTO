@@ -9,6 +9,7 @@ import {
 	getQuotation,
 	listQuotations,
 	sendQuotation,
+	sendQuotationWhatsappPdf,
 	updateQuotation,
 } from './quotations.controller';
 
@@ -23,3 +24,7 @@ quotationsRouter.put('/:id', expressAsyncHandler(updateQuotation));
 quotationsRouter.post('/:id/duplicate', expressAsyncHandler(duplicateQuotation));
 quotationsRouter.delete('/:id', expressAsyncHandler(deleteQuotation));
 quotationsRouter.post('/:id/send', expressAsyncHandler(sendQuotation));
+quotationsRouter.post(
+	'/:id/send-whatsapp-pdf',
+	expressAsyncHandler(sendQuotationWhatsappPdf),
+);

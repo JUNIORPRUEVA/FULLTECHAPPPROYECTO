@@ -1230,6 +1230,9 @@ class LocalDbIo implements LocalDb {
       await add('scheduled_date', 'TEXT');
       await add('preferred_time', 'TEXT');
       await add('last_update_by_user_id', 'TEXT');
+
+      await add('tipo_trabajo', 'TEXT');
+      await add('estado', 'TEXT');
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[DB] Failed to ensure operations_jobs schema: $e');
@@ -1549,6 +1552,8 @@ class LocalDbIo implements LocalDb {
     required String empresaId,
     String? q,
     String? status,
+    String? estado,
+    String? tipoTrabajo,
     String? assignedTechId,
     String? fromIso,
     String? toIso,
@@ -1562,6 +1567,18 @@ class LocalDbIo implements LocalDb {
     if (st != null && st.isNotEmpty) {
       where.add('status = ?');
       args.add(st);
+    }
+
+    final es = estado?.trim();
+    if (es != null && es.isNotEmpty) {
+      where.add('estado = ?');
+      args.add(es);
+    }
+
+    final tt = tipoTrabajo?.trim();
+    if (tt != null && tt.isNotEmpty) {
+      where.add('tipo_trabajo = ?');
+      args.add(tt);
     }
 
     final at = assignedTechId?.trim();

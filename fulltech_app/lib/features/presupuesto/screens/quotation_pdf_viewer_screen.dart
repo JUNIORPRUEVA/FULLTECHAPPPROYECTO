@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/platform/file_saver.dart';
 import '../../../core/widgets/module_page.dart';
@@ -114,6 +115,107 @@ class _QuotationPdfViewerScreenState
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  String _digitsOnly(String raw) => raw.replaceAll(RegExp(r'[^0-9]'), '');
+
+  String? _normalizeWhatsAppPhone(String? raw) {
+    if (raw == null) return null;
+    final digits = _digitsOnly(raw.trim());
+    if (digits.isEmpty) return null;
+
+    // Best-effort normalization:
+    // - If 10 digits, assume +1 (RD/US style).
+    // - If 11+ digits, assume already includes country code.
+    if (digits.length == 10) return '1$digits';
+    if (digits.length >= 11) return digits;
+    return null;
+  }
+
+  Future<void> _openWhatsAppChatWithMessage() async {
+    final customer = widget.draft.customer;
+    final phone = _normalizeWhatsAppPhone(customer?.telefono);
+    if (phone == null) {
+      _toast('El cliente no tiene teléfono válido.');
+      return;
+    }
+
+    final numero = (widget.quotationMeta['numero'] ?? '').toString().trim();
+    final id = (widget.quotationMeta['id'] ?? '').toString().trim();
+    final idShort = _shortId(id: id, numero: numero);
+    final quoteNo = numero.isEmpty ? idShort : numero;
+
+    final customerName = (customer?.nombre ?? '').trim();
+    final total = widget.draft.total;
+    final msg =
+        'Hola${customerName.isEmpty ? '' : ' $customerName'}, le comparto su cotización No. $quoteNo. '
+        'Total: RD\$ ${total.toStringAsFixed(2)}.';
+
+    final uri = Uri.parse(
+      'https://wa.me/$phone?text=${Uri.encodeComponent(msg)}',
+    );
+
+    final ok = await canLaunchUrl(uri);
+    if (!ok) {
+      _toast('No se pudo abrir WhatsApp en este dispositivo.');
+      return;
+    }
+
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _whatsAppMenu() async {
+    final bytes = _bytes;
+    final filename = _filename;
+    if (bytes == null || filename == null) {
+      _toast('Generando PDF…');
+      return;
+    }
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Enviar por WhatsApp',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    await _openWhatsAppChatWithMessage();
+                  },
+                  icon: const Icon(Icons.chat_outlined),
+                  label: const Text('Abrir chat (mensaje)'),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.tonalIcon(
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    try {
+                      await Printing.sharePdf(bytes: bytes, filename: filename);
+                    } catch (e) {
+                      _toast('No se pudo compartir: $e');
+                    }
+                  },
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Compartir PDF (selecciona WhatsApp)'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _download() async {
     final bytes = _bytes;
     final filename = _filename;
@@ -213,6 +315,11 @@ class _QuotationPdfViewerScreenState
         return ModulePage(
           title: 'Cotización',
           actions: [
+            IconButton(
+              tooltip: 'WhatsApp',
+              onPressed: _whatsAppMenu,
+              icon: const Icon(Icons.chat),
+            ),
             if (_isDesktopPlatform) ...[
               IconButton(
                 tooltip: 'Zoom -',

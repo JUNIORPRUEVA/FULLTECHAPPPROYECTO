@@ -52,6 +52,92 @@ class OperationsApi {
     return _ensureOk(res.data);
   }
 
+  Future<Map<String, dynamic>> listOperaciones({
+    String? tab, // agenda | levantamientos | historial
+    String? q,
+    String? estado, // PENDIENTE | PROGRAMADO | EN_EJECUCION | FINALIZADO | CERRADO | CANCELADO
+    String? tipo, // INSTALACION | MANTENIMIENTO | LEVANTAMIENTO | GARANTIA
+    String? tecnicoId,
+    String? from,
+    String? to,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _dio.get(
+      '/operations',
+      queryParameters: {
+        if (tab != null && tab.trim().isNotEmpty) 'tab': tab.trim(),
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (estado != null && estado.trim().isNotEmpty) 'estado': estado.trim(),
+        if (tipo != null && tipo.trim().isNotEmpty) 'tipo': tipo.trim(),
+        if (tecnicoId != null && tecnicoId.trim().isNotEmpty) 'tecnicoId': tecnicoId.trim(),
+        if (from != null && from.trim().isNotEmpty) 'from': from.trim(),
+        if (to != null && to.trim().isNotEmpty) 'to': to.trim(),
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+    return _ensureOk(res.data);
+  }
+
+  Future<Map<String, dynamic>> patchOperacionEstado(
+    String id, {
+    required String estado,
+    String? note,
+  }) async {
+    final res = await _dio.patch(
+      '/operations/$id/estado',
+      data: {
+        'estado': estado,
+        if (note != null) 'note': note,
+      },
+      options: _noOfflineQueue,
+    );
+    return _ensureOk(res.data);
+  }
+
+  Future<Map<String, dynamic>> programarOperacion(
+    String id, {
+    required String scheduledDate,
+    String? preferredTime,
+    String? assignedTechId,
+    String? note,
+  }) async {
+    final res = await _dio.post(
+      '/operations/$id/programar',
+      data: {
+        'scheduled_date': scheduledDate,
+        if (preferredTime != null) 'preferred_time': preferredTime,
+        if (assignedTechId != null) 'assigned_tech_id': assignedTechId,
+        if (note != null) 'note': note,
+      },
+      options: _noOfflineQueue,
+    );
+    return _ensureOk(res.data);
+  }
+
+  Future<Map<String, dynamic>> convertirALaAgenda(
+    String id, {
+    required String tipoDestino,
+    required String scheduledDate,
+    String? preferredTime,
+    String? assignedTechId,
+    String? note,
+  }) async {
+    final res = await _dio.post(
+      '/operations/$id/convertir-a-agenda',
+      data: {
+        'tipo_destino': tipoDestino,
+        'scheduled_date': scheduledDate,
+        if (preferredTime != null) 'preferred_time': preferredTime,
+        if (assignedTechId != null) 'assigned_tech_id': assignedTechId,
+        if (note != null) 'note': note,
+      },
+      options: _noOfflineQueue,
+    );
+    return _ensureOk(res.data);
+  }
+
   Future<Map<String, dynamic>> getJob(String id) async {
     final res = await _dio.get('/operations/jobs/$id');
     return _ensureOk(res.data);

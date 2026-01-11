@@ -1,5 +1,31 @@
 import { z } from 'zod';
 
+// =====================
+// Simplified (UI-facing) enums
+// =====================
+
+export const operacionesTipoTrabajoEnum = z.enum([
+  'INSTALACION',
+  'MANTENIMIENTO',
+  'LEVANTAMIENTO',
+  'GARANTIA',
+]);
+
+export const operacionesEstadoEnum = z.enum([
+  'PENDIENTE',
+  'PROGRAMADO',
+  'EN_EJECUCION',
+  'FINALIZADO',
+  'CERRADO',
+  'CANCELADO',
+]);
+
+export const operacionesTabEnum = z.enum([
+  'agenda',
+  'levantamientos',
+  'historial',
+]);
+
 export const operationsJobStatusEnum = z.enum([
   'pending_survey',
   'survey_in_progress',
@@ -36,6 +62,39 @@ export const listJobsQuerySchema = z.object({
   to: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+});
+
+// New canonical list endpoint
+export const listOperacionesQuerySchema = z.object({
+  tab: operacionesTabEnum.optional(),
+  q: z.string().optional(),
+  estado: operacionesEstadoEnum.optional(),
+  tipo: operacionesTipoTrabajoEnum.optional(),
+  tecnicoId: z.string().uuid().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export const patchOperacionesEstadoSchema = z.object({
+  estado: operacionesEstadoEnum,
+  note: z.string().max(5000).optional().nullable(),
+});
+
+export const programarOperacionSchema = z.object({
+  scheduled_date: z.string().min(1), // YYYY-MM-DD
+  preferred_time: z.string().optional().nullable(), // HH:mm
+  assigned_tech_id: z.string().uuid().optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+
+export const convertirALaAgendaSchema = z.object({
+  tipo_destino: z.enum(['INSTALACION', 'MANTENIMIENTO', 'GARANTIA']),
+  scheduled_date: z.string().min(1),
+  preferred_time: z.string().optional().nullable(),
+  assigned_tech_id: z.string().uuid().optional().nullable(),
+  note: z.string().optional().nullable(),
 });
 
 export const patchJobSchema = z.object({
@@ -133,6 +192,7 @@ export const patchWarrantyTicketSchema = z.object({
 
 export type CreateJobDto = z.infer<typeof createJobSchema>;
 export type ListJobsQuery = z.infer<typeof listJobsQuerySchema>;
+export type ListOperacionesQuery = z.infer<typeof listOperacionesQuerySchema>;
 export type PatchJobDto = z.infer<typeof patchJobSchema>;
 export type SubmitSurveyDto = z.infer<typeof submitSurveySchema>;
 export type ScheduleJobDto = z.infer<typeof scheduleJobSchema>;
@@ -141,3 +201,6 @@ export type CompleteInstallationDto = z.infer<typeof completeInstallationSchema>
 export type CreateWarrantyTicketDto = z.infer<typeof createWarrantyTicketSchema>;
 export type PatchWarrantyTicketDto = z.infer<typeof patchWarrantyTicketSchema>;
 export type PatchTaskStatusDto = z.infer<typeof patchTaskStatusSchema>;
+export type PatchOperacionesEstadoDto = z.infer<typeof patchOperacionesEstadoSchema>;
+export type ProgramarOperacionDto = z.infer<typeof programarOperacionSchema>;
+export type ConvertirALaAgendaDto = z.infer<typeof convertirALaAgendaSchema>;

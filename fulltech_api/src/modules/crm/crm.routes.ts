@@ -47,10 +47,37 @@ import {
   sendMessage,
 } from './crm.controller';
 import { listCrmOperationsItems } from './crm_operations.controller';
+import {
+  createInstance,
+  deleteInstance,
+  getActiveInstance,
+  getInstance,
+  listInstances,
+  listUsersForTransfer,
+  testConnection,
+  transferChat,
+  updateInstance,
+} from './crm_instances.controller';
 
 export const crmRouter = Router();
 
 crmRouter.use(authMiddleware);
+
+// =====================
+// CRM Instances (Multi-Instance Support)
+// =====================
+
+crmRouter.get('/instances', expressAsyncHandler(listInstances));
+crmRouter.get('/instances/active', expressAsyncHandler(getActiveInstance));
+crmRouter.get('/instances/:id', expressAsyncHandler(getInstance));
+crmRouter.post('/instances', expressAsyncHandler(createInstance));
+crmRouter.patch('/instances/:id', expressAsyncHandler(updateInstance));
+crmRouter.delete('/instances/:id', expressAsyncHandler(deleteInstance));
+crmRouter.post('/instances/test-connection', expressAsyncHandler(testConnection));
+
+// Chat transfer
+crmRouter.post('/chats/:chatId/transfer', expressAsyncHandler(transferChat));
+crmRouter.get('/users/transfer-list', expressAsyncHandler(listUsersForTransfer));
 
 // =====================
 // WhatsApp-like CRM (new)

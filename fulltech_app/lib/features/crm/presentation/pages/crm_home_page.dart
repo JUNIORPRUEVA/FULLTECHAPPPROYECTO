@@ -7,7 +7,6 @@ import '../../../../core/widgets/module_page.dart';
 import 'crm_chats_page.dart';
 import 'crm_customers_page_enhanced.dart';
 import '../widgets/crm_top_bar.dart';
-import '../widgets/evolution_config_dialog.dart';
 import '../widgets/crm_keyboard_shortcuts.dart';
 import '../../state/crm_providers.dart';
 
@@ -130,15 +129,26 @@ class _CrmTabs extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        IconButton(
-          tooltip: 'Configuración Evolution/WhatsApp',
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (_) => const EvolutionConfigDialog(),
-            );
-          },
+        PopupMenuButton<String>(
+          tooltip: 'Configuración CRM',
           icon: const Icon(Icons.settings),
+          onSelected: (value) {
+            if (value == 'instance') {
+              // Navigate to instance configuration
+              context.push('/crm/settings/instance');
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'instance',
+              child: ListTile(
+                leading: Icon(Icons.cloud),
+                title: Text('Mi Instancia de WhatsApp'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+            ),
+          ],
         ),
       ],
     );

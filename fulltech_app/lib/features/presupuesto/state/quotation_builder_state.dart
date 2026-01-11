@@ -5,6 +5,7 @@ class QuotationTicketDraft {
   final String name;
   final String? quotationId;
   final bool remoteCreated;
+  final String? crmChatId;
   final QuotationCustomerDraft? customer;
   final List<QuotationItemDraft> items;
   final bool itbisEnabled;
@@ -15,6 +16,7 @@ class QuotationTicketDraft {
     required this.name,
     required this.quotationId,
     required this.remoteCreated,
+    required this.crmChatId,
     required this.customer,
     required this.items,
     required this.itbisEnabled,
@@ -30,6 +32,7 @@ class QuotationTicketDraft {
       name: name,
       quotationId: null,
       remoteCreated: false,
+      crmChatId: null,
       customer: null,
       items: const [],
       itbisEnabled: true,
@@ -42,6 +45,7 @@ class QuotationTicketDraft {
     String? name,
     String? quotationId,
     bool? remoteCreated,
+    String? crmChatId,
     QuotationCustomerDraft? customer,
     List<QuotationItemDraft>? items,
     bool? itbisEnabled,
@@ -52,6 +56,7 @@ class QuotationTicketDraft {
       name: name ?? this.name,
       quotationId: quotationId ?? this.quotationId,
       remoteCreated: remoteCreated ?? this.remoteCreated,
+      crmChatId: crmChatId ?? this.crmChatId,
       customer: customer ?? this.customer,
       items: items ?? this.items,
       itbisEnabled: itbisEnabled ?? this.itbisEnabled,
@@ -113,6 +118,8 @@ class QuotationBuilderState {
   }
 
   QuotationCustomerDraft? get customer => activeTicket.customer;
+
+  String? get crmChatId => activeTicket.crmChatId;
 
   List<QuotationItemDraft> get items => activeTicket.items;
 

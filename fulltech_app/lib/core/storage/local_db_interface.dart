@@ -180,6 +180,8 @@ abstract class LocalDb {
     required String empresaId,
     String? q,
     String? status,
+    String? estado,
+    String? tipoTrabajo,
     String? assignedTechId,
     String? fromIso,
     String? toIso,

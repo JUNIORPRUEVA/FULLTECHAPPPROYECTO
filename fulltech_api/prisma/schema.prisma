@@ -976,6 +976,10 @@ model OperationsJob {
   status              OperationsJobStatus @default(pending_survey)
   notes               String? @db.Text
 
+  // Normalized fields (UI-friendly): keep these as the source of truth for the simplified flow.
+  tipo_trabajo        String @default("INSTALACION") @db.Text
+  estado              String @default("PENDIENTE") @db.Text
+
   // CRM (new WhatsApp CRM) linkage
   crm_chat_id         String? @db.Uuid
   crm_task_type       OperationsCrmTaskType?
@@ -1010,6 +1014,8 @@ model OperationsJob {
   @@index([product_id])
   @@index([service_id])
   @@index([status])
+  @@index([tipo_trabajo])
+  @@index([estado])
   @@index([priority])
   @@index([assigned_tech_id])
   @@index([created_at(sort: Desc)])
@@ -1419,6 +1425,10 @@ model CrmChat {
   purchased_at         DateTime?
   active_client_message_pending Boolean @default(false)
   post_sale_state      CrmPostSaleState @default(NORMAL)
+  // Multi-instance support
+  instancia_id         String?   @db.Uuid
+  owner_user_id        String?   @db.Uuid
+  asignado_a_user_id   String?   @db.Uuid
   created_at           DateTime  @default(now())
   updated_at           DateTime  @updatedAt
 
@@ -1429,6 +1439,9 @@ model CrmChat {
   @@unique([empresa_id, wa_id])
   @@index([last_message_at])
   @@index([empresa_id])
+  @@index([instancia_id])
+  @@index([owner_user_id])
+  @@index([asignado_a_user_id])
   @@map("crm_chats")
 }
 
@@ -1444,6 +1457,8 @@ model CrmChatMessage {
   status            String   @default("received")
   error             String?
   timestamp         DateTime
+  // Multi-instance support (for audit)
+  instancia_id      String?  @db.Uuid
   created_at        DateTime @default(now())
 
   empresa Empresa  @relation("CrmChatMessageToEmpresa", fields: [empresa_id], references: [id])
@@ -1452,6 +1467,7 @@ model CrmChatMessage {
   @@unique([empresa_id, remote_message_id])
   @@index([chat_id, timestamp(sort: Desc)])
   @@index([empresa_id])
+  @@index([instancia_id])
   @@map("crm_messages")
 }
 

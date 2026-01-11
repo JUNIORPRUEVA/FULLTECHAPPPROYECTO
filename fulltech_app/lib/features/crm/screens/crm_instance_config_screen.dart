@@ -1,24 +1,18 @@
-/// CRM Instance Configuration Page - Multi-Instance Support
-/// Allows each user to configure their own Evolution API instance
-/// with complete data isolation and per-user settings.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/crm_instance.dart';
+import '../state/crm_instances_providers.dart';
 
-import '../../../../core/widgets/module_page.dart';
-import '../../models/crm_instance.dart';
-import '../../state/crm_instances_providers.dart';
-
-class CrmInstanceSettingsPage extends ConsumerStatefulWidget {
-  const CrmInstanceSettingsPage({super.key});
+class CrmInstanceConfigScreen extends ConsumerStatefulWidget {
+  const CrmInstanceConfigScreen({super.key});
 
   @override
-  ConsumerState<CrmInstanceSettingsPage> createState() =>
-      _CrmInstanceSettingsPageState();
+  ConsumerState<CrmInstanceConfigScreen> createState() =>
+      _CrmInstanceConfigScreenState();
 }
 
-class _CrmInstanceSettingsPageState
-    extends ConsumerState<CrmInstanceSettingsPage> {
+class _CrmInstanceConfigScreenState
+    extends ConsumerState<CrmInstanceConfigScreen> {
   final _formKey = GlobalKey<FormState>();
   final _instanceNameController = TextEditingController();
   final _baseUrlController = TextEditingController();
@@ -30,14 +24,6 @@ class _CrmInstanceSettingsPageState
   CrmInstance? _currentInstance;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadCurrentInstance();
-    });
-  }
-
-  @override
   void dispose() {
     _instanceNameController.dispose();
     _baseUrlController.dispose();
@@ -46,21 +32,18 @@ class _CrmInstanceSettingsPageState
   }
 
   Future<void> _loadCurrentInstance() async {
-    setState(() => _isLoading = true);
     try {
       final instance = await ref.read(crmActiveInstanceProvider.future);
-      if (instance != null && mounted) {
+      if (instance != null) {
         setState(() {
           _currentInstance = instance;
           _instanceNameController.text = instance.nombreInstancia;
           _baseUrlController.text = instance.evolutionBaseUrl;
-          // Don't populate API key for security
+          // Don't populate API key for security - user must re-enter to update
         });
       }
     } catch (e) {
       // No active instance yet
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -120,6 +103,7 @@ class _CrmInstanceSettingsPageState
           _currentInstance!.id,
           nombreInstancia: _instanceNameController.text.trim(),
           evolutionBaseUrl: _baseUrlController.text.trim(),
+          // Only update API key if provided
           evolutionApiKey: _apiKeyController.text.isNotEmpty
               ? _apiKeyController.text.trim()
               : null,
@@ -139,8 +123,7 @@ class _CrmInstanceSettingsPageState
         ),
       );
 
-      // Reload to show updated data
-      _loadCurrentInstance();
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
 
@@ -159,16 +142,12 @@ class _CrmInstanceSettingsPageState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return ModulePage(
-      title: 'Configuración de Instancia',
-      actions: [
-        IconButton(
-          tooltip: 'Recargar',
-          onPressed: _isLoading ? null : _loadCurrentInstance,
-          icon: const Icon(Icons.refresh),
-        ),
-      ],
-      child: SingleChildScrollView(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Configurar Instancia Evolution'),
+        backgroundColor: const Color(0xFF0D47A1), // Corporate dark blue
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
@@ -185,13 +164,10 @@ class _CrmInstanceSettingsPageState
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            Icons.cloud_outlined,
-                            color: Colors.blue.shade700,
-                          ),
+                          Icon(Icons.info_outline, color: Colors.blue.shade700),
                           const SizedBox(width: 8),
                           Text(
-                            'Tu Instancia de WhatsApp',
+                            'Configuración de Instancia',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Colors.blue.shade700,
@@ -202,19 +178,9 @@ class _CrmInstanceSettingsPageState
                       const SizedBox(height: 8),
                       Text(
                         'Configura tu propia instancia de Evolution API. '
-                        'Todos tus chats y mensajes estarán aislados de otros usuarios.',
+                        'Todos los chats y mensajes estarán aislados por instancia.',
                         style: theme.textTheme.bodySmall,
                       ),
-                      if (_currentInstance != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Estado: Configurado ✅',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.green.shade700,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -224,11 +190,9 @@ class _CrmInstanceSettingsPageState
               // Instance Name
               TextFormField(
                 controller: _instanceNameController,
-                enabled: !_isLoading,
                 decoration: const InputDecoration(
                   labelText: 'Nombre de Instancia *',
                   hintText: 'Ejemplo: junior01',
-                  helperText: 'Identificador único de tu instancia Evolution',
                   prefixIcon: Icon(Icons.label_outline),
                   border: OutlineInputBorder(),
                 ),
@@ -247,11 +211,9 @@ class _CrmInstanceSettingsPageState
               // Base URL
               TextFormField(
                 controller: _baseUrlController,
-                enabled: !_isLoading,
                 decoration: const InputDecoration(
                   labelText: 'URL Base de Evolution API *',
                   hintText: 'https://tu-evolution-api.com',
-                  helperText: 'URL completa del servidor Evolution',
                   prefixIcon: Icon(Icons.link),
                   border: OutlineInputBorder(),
                 ),
@@ -272,30 +234,25 @@ class _CrmInstanceSettingsPageState
               // API Key
               TextFormField(
                 controller: _apiKeyController,
-                enabled: !_isLoading,
                 decoration: InputDecoration(
                   labelText: _currentInstance == null
                       ? 'API Key *'
                       : 'API Key (dejar vacío para mantener actual)',
                   hintText: 'Tu clave API de Evolution',
-                  helperText: _currentInstance == null
-                      ? 'Clave de acceso a tu instancia Evolution'
-                      : 'Solo completa si deseas cambiar la API Key',
                   prefixIcon: const Icon(Icons.key),
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscureApiKey ? Icons.visibility_off : Icons.visibility,
                     ),
-                    onPressed: _isLoading
-                        ? null
-                        : () {
-                            setState(() => _obscureApiKey = !_obscureApiKey);
-                          },
+                    onPressed: () {
+                      setState(() => _obscureApiKey = !_obscureApiKey);
+                    },
                   ),
                 ),
                 obscureText: _obscureApiKey,
                 validator: (value) {
+                  // Only required for new instances
                   if (_currentInstance == null &&
                       (value == null || value.trim().isEmpty)) {
                     return 'La API Key es requerida';
@@ -307,7 +264,7 @@ class _CrmInstanceSettingsPageState
 
               // Test Connection Button
               OutlinedButton.icon(
-                onPressed: (_isTesting || _isLoading) ? null : _testConnection,
+                onPressed: _isTesting ? null : _testConnection,
                 icon: _isTesting
                     ? const SizedBox(
                         width: 16,
@@ -322,11 +279,11 @@ class _CrmInstanceSettingsPageState
                   padding: const EdgeInsets.all(16),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               // Save Button
               FilledButton.icon(
-                onPressed: (_isLoading || _isTesting) ? null : _saveInstance,
+                onPressed: _isLoading ? null : _saveInstance,
                 icon: _isLoading
                     ? const SizedBox(
                         width: 16,
@@ -339,11 +296,10 @@ class _CrmInstanceSettingsPageState
                         ),
                       )
                     : const Icon(Icons.save),
-                label: Text(
-                  _isLoading ? 'Guardando...' : 'Guardar Configuración',
-                ),
+                label: Text(_isLoading ? 'Guardando...' : 'Guardar'),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.all(16),
+                  backgroundColor: const Color(0xFF0D47A1),
                 ),
               ),
             ],
@@ -351,5 +307,13 @@ class _CrmInstanceSettingsPageState
         ),
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCurrentInstance();
+    });
   }
 }

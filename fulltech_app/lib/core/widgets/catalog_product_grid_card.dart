@@ -35,28 +35,22 @@ class CatalogProductGridCard extends StatelessWidget {
     final cs = theme.colorScheme;
 
     final min = minStock ?? 0;
+    final label = qty.toStringAsFixed(0);
 
+    // 3 colores: rojo (0 o menos), ámbar (bajo), verde (ok)
     if (qty <= 0) {
-      return (
-        bg: cs.errorContainer,
-        fg: cs.onErrorContainer,
-        text: 'Stock: ${qty.toStringAsFixed(0)}',
-      );
+      return (bg: cs.errorContainer, fg: cs.onErrorContainer, text: label);
     }
 
     if (qty <= min) {
       return (
         bg: cs.tertiaryContainer,
         fg: cs.onTertiaryContainer,
-        text: 'Stock: ${qty.toStringAsFixed(0)}',
+        text: label,
       );
     }
 
-    return (
-      bg: cs.primaryContainer,
-      fg: cs.onPrimaryContainer,
-      text: 'Stock: ${qty.toStringAsFixed(0)}',
-    );
+    return (bg: cs.primaryContainer, fg: cs.onPrimaryContainer, text: label);
   }
 
   String _publicUrlFromMaybeRelative(String raw) {
@@ -164,27 +158,45 @@ class CatalogProductGridCard extends StatelessWidget {
             buildImage(),
             if (stockBadge != null)
               Positioned(
-                left: 8,
+                right: 8,
                 top: 8,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: stockBadge.bg.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.35),
+                      color: cs.outlineVariant.withValues(alpha: 0.28),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.shadow.withValues(alpha: 0.18),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
+                      horizontal: 8,
                       vertical: 6,
                     ),
-                    child: Text(
-                      stockBadge.text,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: stockBadge.fg,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 14,
+                          color: stockBadge.fg,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          stockBadge.text,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: stockBadge.fg,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -194,9 +206,9 @@ class CatalogProductGridCard extends StatelessWidget {
               right: 0,
               bottom: 0,
               child: Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                 decoration: BoxDecoration(
-                  color: cs.surface.withValues(alpha: 0.88),
+                  color: cs.surface.withValues(alpha: 0.90),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,13 +216,13 @@ class CatalogProductGridCard extends StatelessWidget {
                   children: [
                     Text(
                       nombre,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Row(
                       children: [
                         Expanded(

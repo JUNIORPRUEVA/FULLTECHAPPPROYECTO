@@ -17,6 +17,8 @@ class OperationsJob {
   final String serviceType;
   final String priority;
   final String status;
+  final String tipoTrabajo;
+  final String estado;
   final String? notes;
   final String? technicianNotes;
   final String? cancelReason;
@@ -41,6 +43,8 @@ class OperationsJob {
     required this.serviceType,
     required this.priority,
     required this.status,
+    required this.tipoTrabajo,
+    required this.estado,
     this.crmChatId,
     this.crmTaskType,
     this.productId,
@@ -67,8 +71,47 @@ class OperationsJob {
     required this.lastError,
   });
 
+  static String _inferTipoTrabajoFromLegacy({
+    String? crmTaskType,
+    required String serviceType,
+  }) {
+    final t = (crmTaskType ?? '').trim().toUpperCase();
+    if (t == 'LEVANTAMIENTO') return 'LEVANTAMIENTO';
+    if (t == 'GARANTIA') return 'GARANTIA';
+    if (t == 'SERVICIO_RESERVADO') return 'MANTENIMIENTO';
+    if (t == 'INSTALACION') return 'INSTALACION';
+
+    final s = serviceType.trim().toLowerCase();
+    if (s.contains('mantenimiento')) return 'MANTENIMIENTO';
+    return 'INSTALACION';
+  }
+
+  static String _inferEstadoFromLegacy({
+    required String legacyStatus,
+    required String tipoTrabajo,
+  }) {
+    final s = legacyStatus.trim().toLowerCase();
+    if (s == 'cancelled') return 'CANCELADO';
+    if (s == 'closed') return 'CERRADO';
+    if (s == 'completed') return 'FINALIZADO';
+    if (s == 'scheduled') return 'PROGRAMADO';
+    if (s == 'installation_in_progress' ||
+        s == 'survey_in_progress' ||
+        s == 'warranty_in_progress') {
+      return 'EN_EJECUCION';
+    }
+    if (s == 'survey_completed') return 'FINALIZADO';
+    if (s == 'pending_scheduling') {
+      return tipoTrabajo.toUpperCase() == 'LEVANTAMIENTO'
+          ? 'FINALIZADO'
+          : 'PENDIENTE';
+    }
+    return 'PENDIENTE';
+  }
+
   factory OperationsJob.fromServerJson(Map<String, dynamic> json) {
-    String s(String a, [String? b]) => (json[a] ?? (b == null ? null : json[b]) ?? '').toString();
+    String s(String a, [String? b]) =>
+        (json[a] ?? (b == null ? null : json[b]) ?? '').toString();
     String? so(String a, [String? b]) {
       final v = json[a] ?? (b == null ? null : json[b]);
       if (v == null) return null;
@@ -76,10 +119,13 @@ class OperationsJob {
       return out.trim().isEmpty ? null : out;
     }
 
-    final createdAt = DateTime.tryParse(s('created_at', 'createdAt')) ?? DateTime.now();
-    final updatedAt = DateTime.tryParse(s('updated_at', 'updatedAt')) ?? createdAt;
+    final createdAt =
+        DateTime.tryParse(s('created_at', 'createdAt')) ?? DateTime.now();
+    final updatedAt =
+        DateTime.tryParse(s('updated_at', 'updatedAt')) ?? createdAt;
 
-    final assignedTeamIdsRaw = json['assigned_team_ids'] ?? json['assignedTeamIds'];
+    final assignedTeamIdsRaw =
+        json['assigned_team_ids'] ?? json['assignedTeamIds'];
     final assignedTeamIds = assignedTeamIdsRaw is List
         ? assignedTeamIdsRaw.map((e) => e.toString()).toList(growable: false)
         : const <String>[];
@@ -97,31 +143,74 @@ class OperationsJob {
         scheduledDate = DateTime.tryParse(rawDate);
       }
       preferredTime = (sc['preferred_time'] ?? sc['preferredTime'])?.toString();
-      if (preferredTime != null && preferredTime.trim().isEmpty) preferredTime = null;
+      if (preferredTime != null && preferredTime.trim().isEmpty)
+        preferredTime = null;
 
-      locationText = (sc['location_text'] ?? sc['locationText'] ?? sc['location'])?.toString();
-      if (locationText != null && locationText.trim().isEmpty) locationText = null;
+      locationText =
+          (sc['location_text'] ?? sc['locationText'] ?? sc['location'])
+              ?.toString();
+      if (locationText != null && locationText.trim().isEmpty)
+        locationText = null;
 
-      final rawLat = sc['lat'] ?? sc['latitude'] ?? sc['location_lat'] ?? sc['locationLat'];
-      final rawLng = sc['lng'] ?? sc['longitude'] ?? sc['location_lng'] ?? sc['locationLng'];
+      final rawLat =
+          sc['lat'] ??
+          sc['latitude'] ??
+          sc['location_lat'] ??
+          sc['locationLat'];
+      final rawLng =
+          sc['lng'] ??
+          sc['longitude'] ??
+          sc['location_lng'] ??
+          sc['locationLng'];
       if (rawLat is num) locationLat = rawLat.toDouble();
       if (rawLng is num) locationLng = rawLng.toDouble();
     }
 
     // Some backends may expose location fields at the job level.
-    locationText ??= (json['location_text'] ?? json['locationText'] ?? json['location'])?.toString();
-    if (locationText != null && locationText!.trim().isEmpty) locationText = null;
-    final rawLat2 = json['lat'] ?? json['latitude'] ?? json['location_lat'] ?? json['locationLat'];
-    final rawLng2 = json['lng'] ?? json['longitude'] ?? json['location_lng'] ?? json['locationLng'];
+    locationText ??=
+        (json['location_text'] ?? json['locationText'] ?? json['location'])
+            ?.toString();
+    if (locationText != null && locationText.trim().isEmpty)
+      locationText = null;
+    final rawLat2 =
+        json['lat'] ??
+        json['latitude'] ??
+        json['location_lat'] ??
+        json['locationLat'];
+    final rawLng2 =
+        json['lng'] ??
+        json['longitude'] ??
+        json['location_lng'] ??
+        json['locationLng'];
     if (locationLat == null && rawLat2 is num) locationLat = rawLat2.toDouble();
     if (locationLng == null && rawLng2 is num) locationLng = rawLng2.toDouble();
+
+    final legacyStatus = so('status') ?? 'pending_survey';
+    final crmTaskType = so('crm_task_type', 'crmTaskType');
+    final serviceType = s('service_type', 'serviceType');
+
+    final tipoTrabajo =
+        (so('tipo_trabajo', 'tipoTrabajo') ??
+                _inferTipoTrabajoFromLegacy(
+                  crmTaskType: crmTaskType,
+                  serviceType: serviceType,
+                ))
+            .toUpperCase();
+
+    final estado =
+        (so('estado') ??
+                _inferEstadoFromLegacy(
+                  legacyStatus: legacyStatus,
+                  tipoTrabajo: tipoTrabajo,
+                ))
+            .toUpperCase();
 
     return OperationsJob(
       id: s('id'),
       empresaId: s('empresa_id', 'empresaId'),
       crmCustomerId: s('crm_customer_id', 'crmCustomerId'),
       crmChatId: so('crm_chat_id', 'crmChatId'),
-      crmTaskType: so('crm_task_type', 'crmTaskType'),
+      crmTaskType: crmTaskType,
       productId: so('product_id', 'productId'),
       serviceId: so('service_id', 'serviceId'),
       customerName: s('customer_name', 'customerName'),
@@ -130,9 +219,11 @@ class OperationsJob {
       locationText: locationText,
       locationLat: locationLat,
       locationLng: locationLng,
-      serviceType: s('service_type', 'serviceType'),
+      serviceType: serviceType,
       priority: so('priority') ?? 'normal',
-      status: so('status') ?? 'pending_survey',
+      status: legacyStatus,
+      tipoTrabajo: tipoTrabajo,
+      estado: estado,
       notes: so('notes'),
       technicianNotes: so('technician_notes', 'technicianNotes'),
       cancelReason: so('cancel_reason', 'cancelReason'),
@@ -152,15 +243,22 @@ class OperationsJob {
   }
 
   factory OperationsJob.fromLocalRow(Map<String, Object?> row) {
-    final assignedTeamIdsJson = (row['assigned_team_ids_json'] as String?) ?? '[]';
-    final assignedTeamIds = (jsonDecode(assignedTeamIdsJson) as List?)
+    final assignedTeamIdsJson =
+        (row['assigned_team_ids_json'] as String?) ?? '[]';
+    final assignedTeamIds =
+        (jsonDecode(assignedTeamIdsJson) as List?)
             ?.map((e) => e.toString())
             .toList(growable: false) ??
         const <String>[];
 
-    final createdAt = DateTime.tryParse((row['created_at'] ?? '').toString()) ?? DateTime.now();
-    final updatedAt = DateTime.tryParse((row['updated_at'] ?? '').toString()) ?? createdAt;
-    final scheduledDate = DateTime.tryParse((row['scheduled_date'] ?? '').toString());
+    final createdAt =
+        DateTime.tryParse((row['created_at'] ?? '').toString()) ??
+        DateTime.now();
+    final updatedAt =
+        DateTime.tryParse((row['updated_at'] ?? '').toString()) ?? createdAt;
+    final scheduledDate = DateTime.tryParse(
+      (row['scheduled_date'] ?? '').toString(),
+    );
 
     return OperationsJob(
       id: (row['id'] ?? '').toString(),
@@ -179,6 +277,38 @@ class OperationsJob {
       serviceType: (row['service_type'] ?? '').toString(),
       priority: (row['priority'] ?? 'normal').toString(),
       status: (row['status'] ?? 'pending_survey').toString(),
+      tipoTrabajo:
+          ((row['tipo_trabajo'] as String?)?.trim().isNotEmpty == true
+                  ? (row['tipo_trabajo'] as String?)
+                  : _inferTipoTrabajoFromLegacy(
+                      crmTaskType: row['crm_task_type'] as String?,
+                      serviceType: (row['service_type'] ?? '').toString(),
+                    ))
+              .toString()
+              .toUpperCase(),
+      estado:
+          ((row['estado'] as String?)?.trim().isNotEmpty == true
+                  ? (row['estado'] as String?)
+                  : _inferEstadoFromLegacy(
+                      legacyStatus: (row['status'] ?? 'pending_survey')
+                          .toString(),
+                      tipoTrabajo:
+                          ((row['tipo_trabajo'] as String?)
+                                          ?.trim()
+                                          .isNotEmpty ==
+                                      true
+                                  ? (row['tipo_trabajo'] as String?)
+                                  : _inferTipoTrabajoFromLegacy(
+                                      crmTaskType:
+                                          row['crm_task_type'] as String?,
+                                      serviceType: (row['service_type'] ?? '')
+                                          .toString(),
+                                    ))
+                              .toString()
+                              .toUpperCase(),
+                    ))
+              .toString()
+              .toUpperCase(),
       notes: (row['notes'] as String?),
       technicianNotes: (row['technician_notes'] as String?),
       cancelReason: (row['cancel_reason'] as String?),
@@ -215,6 +345,8 @@ class OperationsJob {
       'service_type': serviceType,
       'priority': priority,
       'status': status,
+      'tipo_trabajo': tipoTrabajo,
+      'estado': estado,
       'notes': notes,
       'technician_notes': technicianNotes,
       'cancel_reason': cancelReason,
@@ -233,9 +365,7 @@ class OperationsJob {
     };
   }
 
-  Map<String, dynamic> toCreatePayload({
-    required String initialStatus,
-  }) {
+  Map<String, dynamic> toCreatePayload({required String initialStatus}) {
     return {
       'id': id,
       'crm_customer_id': crmCustomerId,
@@ -310,7 +440,9 @@ class OperationsSurvey {
       productsToUse: decode(row['products_to_use_json'] as String?),
       futureOpportunities: row['future_opportunities'] as String?,
       createdByTechId: row['created_by_tech_id'] as String?,
-      createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()) ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse((row['created_at'] ?? '').toString()) ??
+          DateTime.now(),
       syncStatus: (row['sync_status'] ?? 'pending').toString(),
       lastError: row['last_error'] as String?,
     );
@@ -368,7 +500,9 @@ class OperationsSurveyMedia {
       type: (row['type'] ?? 'image').toString(),
       urlOrPath: (row['url_or_path'] ?? '').toString(),
       caption: row['caption'] as String?,
-      createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()) ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse((row['created_at'] ?? '').toString()) ??
+          DateTime.now(),
       syncStatus: (row['sync_status'] ?? 'pending').toString(),
       lastError: row['last_error'] as String?,
     );
@@ -417,12 +551,15 @@ class OperationsSchedule {
 
   factory OperationsSchedule.fromLocalRow(Map<String, Object?> row) {
     final additionalJson = (row['additional_tech_ids_json'] as String?) ?? '[]';
-    final additional = (jsonDecode(additionalJson) as List?)
+    final additional =
+        (jsonDecode(additionalJson) as List?)
             ?.map((e) => e.toString())
             .toList(growable: false) ??
         const <String>[];
 
-    final scheduledDate = DateTime.tryParse((row['scheduled_date'] ?? '').toString()) ?? DateTime.now();
+    final scheduledDate =
+        DateTime.tryParse((row['scheduled_date'] ?? '').toString()) ??
+        DateTime.now();
 
     return OperationsSchedule(
       id: (row['id'] ?? '').toString(),
@@ -432,8 +569,12 @@ class OperationsSchedule {
       assignedTechId: (row['assigned_tech_id'] ?? '').toString(),
       additionalTechIds: additional,
       customerAvailabilityNotes: row['customer_availability_notes'] as String?,
-      createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()) ?? DateTime.now(),
-      updatedAt: DateTime.tryParse((row['updated_at'] ?? '').toString()) ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse((row['created_at'] ?? '').toString()) ??
+          DateTime.now(),
+      updatedAt:
+          DateTime.tryParse((row['updated_at'] ?? '').toString()) ??
+          DateTime.now(),
       syncStatus: (row['sync_status'] ?? 'pending').toString(),
       lastError: row['last_error'] as String?,
     );
@@ -498,7 +639,8 @@ class OperationsInstallationReport {
     }
 
     final mediaJson = (row['media_urls_json'] as String?) ?? '[]';
-    final mediaUrls = (jsonDecode(mediaJson) as List?)
+    final mediaUrls =
+        (jsonDecode(mediaJson) as List?)
             ?.map((e) => e.toString())
             .toList(growable: false) ??
         const <String>[];
@@ -514,7 +656,9 @@ class OperationsInstallationReport {
       mediaUrls: mediaUrls,
       signatureName: row['signature_name'] as String?,
       createdByTechId: row['created_by_tech_id'] as String?,
-      createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()) ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse((row['created_at'] ?? '').toString()) ??
+          DateTime.now(),
       syncStatus: (row['sync_status'] ?? 'pending').toString(),
       lastError: row['last_error'] as String?,
     );
@@ -569,7 +713,9 @@ class OperationsWarrantyTicket {
   });
 
   factory OperationsWarrantyTicket.fromLocalRow(Map<String, Object?> row) {
-    final reportedAt = DateTime.tryParse((row['reported_at'] ?? '').toString()) ?? DateTime.now();
+    final reportedAt =
+        DateTime.tryParse((row['reported_at'] ?? '').toString()) ??
+        DateTime.now();
 
     return OperationsWarrantyTicket(
       id: (row['id'] ?? '').toString(),
@@ -580,7 +726,8 @@ class OperationsWarrantyTicket {
       assignedTechId: row['assigned_tech_id'] as String?,
       resolutionNotes: row['resolution_notes'] as String?,
       resolvedAt: DateTime.tryParse((row['resolved_at'] ?? '').toString()),
-      createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()) ?? reportedAt,
+      createdAt:
+          DateTime.tryParse((row['created_at'] ?? '').toString()) ?? reportedAt,
       syncStatus: (row['sync_status'] ?? 'pending').toString(),
       lastError: row['last_error'] as String?,
     );

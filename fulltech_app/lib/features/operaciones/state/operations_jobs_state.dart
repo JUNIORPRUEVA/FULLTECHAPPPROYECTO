@@ -10,9 +10,12 @@ class OperationsJobsState {
   final bool hasMore;
 
   final String search;
-  final String? status;
+  final String tab; // agenda | levantamientos | historial
+  final String? estado;
+  final String? tipoTrabajo;
   final String? assignedTechId;
-  final String? serviceId;
+  final DateTime? from;
+  final DateTime? to;
 
   const OperationsJobsState({
     required this.loading,
@@ -22,9 +25,12 @@ class OperationsJobsState {
     required this.pageSize,
     required this.hasMore,
     required this.search,
-    required this.status,
+    required this.tab,
+    required this.estado,
+    required this.tipoTrabajo,
     required this.assignedTechId,
-    required this.serviceId,
+    required this.from,
+    required this.to,
   });
 
   factory OperationsJobsState.initial() {
@@ -36,9 +42,12 @@ class OperationsJobsState {
       pageSize: 20,
       hasMore: true,
       search: '',
-      status: null,
+      tab: 'agenda',
+      estado: null,
+      tipoTrabajo: null,
       assignedTechId: null,
-      serviceId: null,
+      from: null,
+      to: null,
     );
   }
 
@@ -50,9 +59,12 @@ class OperationsJobsState {
     int? pageSize,
     bool? hasMore,
     String? search,
-    String? status,
+    String? tab,
+    String? estado,
+    String? tipoTrabajo,
     String? assignedTechId,
-    String? serviceId,
+    DateTime? from,
+    DateTime? to,
   }) {
     return OperationsJobsState(
       loading: loading ?? this.loading,
@@ -62,9 +74,12 @@ class OperationsJobsState {
       pageSize: pageSize ?? this.pageSize,
       hasMore: hasMore ?? this.hasMore,
       search: search ?? this.search,
-      status: status ?? this.status,
+      tab: tab ?? this.tab,
+      estado: estado ?? this.estado,
+      tipoTrabajo: tipoTrabajo ?? this.tipoTrabajo,
       assignedTechId: assignedTechId ?? this.assignedTechId,
-      serviceId: serviceId ?? this.serviceId,
+      from: from ?? this.from,
+      to: to ?? this.to,
     );
   }
 }

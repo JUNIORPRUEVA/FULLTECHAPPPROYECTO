@@ -37,6 +37,13 @@ export const sendQuotationSchema = z.object({
   message: z.string().optional().nullable(),
 });
 
+export const sendQuotationWhatsappPdfSchema = z.object({
+  chat_id: z.string().uuid(),
+  pdf_base64: z.string().min(20),
+  filename: z.string().min(1).optional().nullable(),
+  caption: z.string().optional().nullable(),
+});
+
 export const listQuotationsQuerySchema = z.object({
   q: z.string().optional(),
   status: z.string().optional(),

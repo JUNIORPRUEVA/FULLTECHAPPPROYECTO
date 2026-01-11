@@ -96,6 +96,9 @@ class PosTpvController extends StateNotifier<PosTpvState> {
               itbisRate: 0.18,
               ncfEnabled: false,
               selectedNcfDocType: null,
+              warrantyEnabled: false,
+              selectedWarrantyId: null,
+              selectedWarrantyName: null,
               items: [],
             ),
           ],
@@ -194,6 +197,9 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       itbisRate: 0.18,
       ncfEnabled: false,
       selectedNcfDocType: null,
+      warrantyEnabled: false,
+      selectedWarrantyId: null,
+      selectedWarrantyName: null,
       items: const [],
     );
 
@@ -280,13 +286,43 @@ class PosTpvController extends StateNotifier<PosTpvState> {
 
   void setNcfEnabled(bool enabled) {
     final t = state.activeTicket;
-    _updateTicket(t.copyWith(ncfEnabled: enabled));
+    _updateTicket(
+      t.copyWith(
+        ncfEnabled: enabled,
+        selectedNcfDocType: enabled ? t.selectedNcfDocType : null,
+      ),
+    );
   }
 
   void setSelectedNcfDocType(String? docType) {
     final t = state.activeTicket;
     final next = (docType ?? '').trim();
     _updateTicket(t.copyWith(selectedNcfDocType: next.isEmpty ? null : next));
+  }
+
+  void setWarrantyEnabled(bool enabled) {
+    final t = state.activeTicket;
+    _updateTicket(
+      t.copyWith(
+        warrantyEnabled: enabled,
+        selectedWarrantyId: enabled ? t.selectedWarrantyId : null,
+        selectedWarrantyName: enabled ? t.selectedWarrantyName : null,
+      ),
+    );
+  }
+
+  void setSelectedWarranty({
+    required String? warrantyId,
+    required String? warrantyName,
+  }) {
+    final t = state.activeTicket;
+    _updateTicket(
+      t.copyWith(
+        selectedWarrantyId: warrantyId,
+        selectedWarrantyName: warrantyName,
+        warrantyEnabled: warrantyId != null,
+      ),
+    );
   }
 
   void addProduct(PosProduct product) {
@@ -351,6 +387,9 @@ class PosTpvController extends StateNotifier<PosTpvState> {
       discountValue: 0,
       ncfEnabled: false,
       selectedNcfDocType: null,
+      warrantyEnabled: false,
+      selectedWarrantyId: null,
+      selectedWarrantyName: null,
     );
     _updateTicket(cleared);
     state = state.copyWith(error: null);

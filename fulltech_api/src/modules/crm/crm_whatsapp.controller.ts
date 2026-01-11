@@ -167,6 +167,41 @@ async function createAndSendTextForChat(opts: {
 }): Promise<any> {
   const createdAt = new Date();
 
+  // ========================================================
+  // GET INSTANCE CONFIG FOR THIS CHAT
+  // ========================================================
+  let instanciaId: string | null = null;
+  let evolutionConfig: { baseUrl: string; apiKey: string; instanceName: string } | null = null;
+
+  try {
+    const chat = await prisma.crmChat.findUnique({
+      where: { id: opts.chatId },
+      select: { instancia_id: true },
+    });
+
+    if (chat?.instancia_id) {
+      instanciaId = chat.instancia_id;
+      const instances = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT nombre_instancia, evolution_base_url, evolution_api_key 
+         FROM crm_instancias 
+         WHERE id = $1 
+         LIMIT 1`,
+        instanciaId
+      );
+
+      if (instances.length > 0) {
+        const inst = instances[0];
+        evolutionConfig = {
+          baseUrl: inst.evolution_base_url,
+          apiKey: inst.evolution_api_key,
+          instanceName: inst.nombre_instancia,
+        };
+      }
+    }
+  } catch (e: any) {
+    console.error('[CRM] Error fetching instance config:', e?.message || e);
+  }
+
   const pending = await prisma.crmChatMessage.create({
     data: {
       empresa_id: opts.empresaId,
@@ -176,6 +211,8 @@ async function createAndSendTextForChat(opts: {
       text: opts.text.trim(),
       status: 'sent',
       timestamp: createdAt,
+      // Link message to instance for audit
+      instancia_id: instanciaId ?? null,
     },
   });
 
@@ -207,7 +244,15 @@ async function createAndSendTextForChat(opts: {
       return updated;
     }
 
-    const evo = new EvolutionClient();
+    // Use instance config if available, otherwise fall back to env defaults
+    const evo = evolutionConfig
+      ? new EvolutionClient({
+          baseUrl: evolutionConfig.baseUrl,
+          apiKey: evolutionConfig.apiKey,
+          instanceName: evolutionConfig.instanceName,
+        })
+      : new EvolutionClient();
+
     const send = await evo.sendText({
       toWaId: opts.waId,
       toPhone: opts.phoneE164 ?? undefined,
@@ -439,10 +484,27 @@ async function fetchVipStatsByPhoneDigits(params: {
 
 export async function getChat(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
 
   const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
   if (!chat) throw new ApiError(404, 'Chat not found');
+
+  // ========================================================
+  // INSTANCE SECURITY - Verify user has access to this chat
+  // ========================================================
+  if (chat.instancia_id) {
+    const instances = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id FROM crm_instancias WHERE id = $1 AND user_id = $2 LIMIT 1`,
+      chat.instancia_id,
+      userId
+    );
+    
+    if (instances.length === 0) {
+      // User doesn't own this instance
+      throw new ApiError(403, 'You do not have access to this chat');
+    }
+  }
 
   // Enrich with meta if available.
   let merged: any = chat;
@@ -790,16 +852,60 @@ export async function editChatMessage(req: Request, res: Response) {
 
 export async function listChats(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const parsed = crmChatsListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
 
   const { search, status, productId, product_id, page, limit } = parsed.data;
   const skip = (page - 1) * limit;
 
+  // ========================================================
+  // INSTANCE FILTERING - Get user's active instance
+  // ========================================================
+  let userInstanceId: string | null = null;
+  try {
+    const instance = await prisma.crmChat.findFirst({
+      where: { 
+        owner_user_id: userId,
+        instancia_id: { not: null },
+      },
+      select: { instancia_id: true },
+    });
+    
+    if (instance?.instancia_id) {
+      userInstanceId = instance.instancia_id;
+    }
+  } catch (e: any) {
+    console.error('[CRM] Error fetching user instance:', e?.message || e);
+  }
+
+  // If user has no chats with instance, try to get active instance from crm_instancias table
+  if (!userInstanceId) {
+    try {
+      const instances = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id FROM crm_instancias WHERE user_id = $1 AND is_active = TRUE LIMIT 1`,
+        userId
+      );
+      if (instances.length > 0) {
+        userInstanceId = instances[0].id;
+      }
+    } catch (e: any) {
+      console.error('[CRM] Error fetching instance from crm_instancias:', e?.message || e);
+    }
+  }
+
+  // If user has no active instance, return empty list
+  if (!userInstanceId) {
+    res.json({ items: [], total: 0, page, limit });
+    return;
+  }
+
   // "COMPRO" (purchased) and "eliminado" are excluded from the normal CRM list.
   const where: any = {
     empresa_id,
     status: { notIn: ['compro', 'eliminado'] },
+    // CRITICAL: Only show chats from user's instance
+    instancia_id: userInstanceId,
   };
 
   if (status && status.trim().length > 0) {

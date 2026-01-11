@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
 class QuotationApi {
   final Dio _dio;
@@ -37,11 +39,7 @@ class QuotationApi {
     int limit = 20,
     int offset = 0,
   }) async {
-    final data = await listQuotationsPaged(
-      q: q,
-      limit: limit,
-      offset: offset,
-    );
+    final data = await listQuotationsPaged(q: q, limit: limit, offset: offset);
     final items = (data['items'] as List).cast<Map<String, dynamic>>();
     return items;
   }
@@ -83,10 +81,7 @@ class QuotationApi {
   }
 
   Future<void> deleteQuotation(String id) async {
-    await _dio.delete(
-      '/quotations/$id',
-      options: _noOfflineQueue,
-    );
+    await _dio.delete('/quotations/$id', options: _noOfflineQueue);
   }
 
   Future<Map<String, dynamic>> sendQuotation(
@@ -101,6 +96,27 @@ class QuotationApi {
         'channel': channel,
         if (to != null) 'to': to,
         if (message != null) 'message': message,
+      },
+      options: _noOfflineQueue,
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> sendQuotationWhatsappPdf(
+    String id, {
+    required String chatId,
+    required Uint8List pdfBytes,
+    required String filename,
+    String? caption,
+  }) async {
+    final b64 = base64Encode(pdfBytes);
+    final res = await _dio.post(
+      '/quotations/$id/send-whatsapp-pdf',
+      data: {
+        'chat_id': chatId,
+        'pdf_base64': b64,
+        'filename': filename,
+        if (caption != null) 'caption': caption,
       },
       options: _noOfflineQueue,
     );
