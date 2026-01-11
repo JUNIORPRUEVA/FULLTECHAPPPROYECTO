@@ -15,6 +15,9 @@ import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
 import '../../catalogo/models/producto.dart';
 import '../../configuracion/state/company_profile_providers.dart';
+import '../../cotizaciones/data/quotation_repository.dart';
+import '../../cotizaciones/state/cotizaciones_providers.dart'
+    hide quotationApiProvider;
 import '../../crm/data/models/crm_thread.dart';
 import '../models/quotation_models.dart';
 import '../services/quotation_pdf_service.dart';
@@ -48,7 +51,9 @@ Future<bool> _openWhatsAppChat(String phoneDigits, String message) async {
 }
 
 class PresupuestoDetailScreen extends ConsumerStatefulWidget {
-  const PresupuestoDetailScreen({super.key});
+  final String? quotationId;
+
+  const PresupuestoDetailScreen({super.key, this.quotationId});
 
   @override
   ConsumerState<PresupuestoDetailScreen> createState() =>
@@ -68,6 +73,9 @@ class _PresupuestoDetailScreenState
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(presupuestoCatalogControllerProvider.notifier).bootstrap();
+      if (widget.quotationId != null) {
+        _loadQuotation(widget.quotationId!);
+      }
     });
   }
 
@@ -84,6 +92,98 @@ class _PresupuestoDetailScreenState
     final pos = _productsScroll.position;
     if (pos.pixels > pos.maxScrollExtent - 600) {
       ref.read(presupuestoCatalogControllerProvider.notifier).loadMore();
+    }
+  }
+
+  Future<void> _loadQuotation(String quotationId) async {
+    try {
+      final repo = ref.read(quotationRepositoryProvider);
+      final quotation = await repo.getLocal(quotationId);
+
+      if (quotation == null) {
+        // Try to load from server
+        final session = await ref.read(localDbProvider).readSession();
+        if (session == null) return;
+
+        await repo.refreshFromServer(
+          empresaId: session.user.empresaId,
+          limit: 1,
+          offset: 0,
+        );
+
+        final retryQuotation = await repo.getLocal(quotationId);
+        if (retryQuotation == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('❌ Cotización no encontrada')),
+            );
+          }
+          return;
+        }
+
+        await _populateBuilderFromQuotation(retryQuotation, quotationId);
+      } else {
+        await _populateBuilderFromQuotation(quotation, quotationId);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Error cargando cotización: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _populateBuilderFromQuotation(
+    Map<String, dynamic> quotation,
+    String quotationId,
+  ) async {
+    final ctrl = ref.read(quotationBuilderControllerProvider.notifier);
+    final repo = ref.read(quotationRepositoryProvider);
+
+    // Load customer info
+    final customerName = quotation['customer_name'] as String?;
+    if (customerName != null && customerName.isNotEmpty) {
+      final customer = QuotationCustomerDraft(
+        id: quotation['customer_id'] as String?,
+        nombre: customerName,
+        telefono: quotation['customer_phone'] as String?,
+        email: quotation['customer_email'] as String?,
+      );
+      ctrl.setCustomer(customer);
+    }
+
+    // Load items
+    final items = await repo.listLocalItems(quotationId);
+    final current = ref.read(quotationBuilderControllerProvider);
+    for (final it in current.items) {
+      ctrl.removeItem(it.localId);
+    }
+
+    for (final item in items) {
+      final localId = ctrl.addManualItem(
+        nombre: item['name'] as String? ?? 'Item',
+        unitPrice: (item['price'] as num?)?.toDouble() ?? 0.0,
+        unitCost: 0.0,
+      );
+
+      final qty = (item['quantity'] as num?)?.toDouble() ?? 1.0;
+      if (qty != 1.0) {
+        final afterAdd = ref.read(quotationBuilderControllerProvider);
+        final added = afterAdd.items
+            .where((it) => it.localId == localId)
+            .cast<QuotationItemDraft?>()
+            .firstWhere((it) => it != null, orElse: () => null);
+        if (added != null) {
+          ctrl.updateItem(localId, added.copyWith(cantidad: qty));
+        }
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('✅ Cotización cargada')));
     }
   }
 

@@ -221,6 +221,10 @@ class QuotationRepository {
     );
   }
 
+  Future<Map<String, dynamic>> convertToTicket(String quotationId) async {
+    return await _api.convertToTicket(quotationId);
+  }
+
   bool _isNetworkError(DioException e) {
     return e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||

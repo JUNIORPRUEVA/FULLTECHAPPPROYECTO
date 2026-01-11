@@ -122,4 +122,12 @@ class QuotationApi {
     );
     return (res.data as Map).cast<String, dynamic>();
   }
+
+  Future<Map<String, dynamic>> convertToTicket(String id) async {
+    final res = await _dio.post(
+      '/quotations/$id/convert-to-ticket',
+      options: _noOfflineQueue,
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
 }

@@ -536,3 +536,77 @@ export async function sendQuotationWhatsappPdf(req: Request, res: Response) {
 
   res.json({ ok: true, messageId: result.messageId, channel: 'whatsapp', to: toWaId || toPhone, filename, raw: result.raw });
 }
+
+export async function convertQuotationToTicket(req: Request, res: Response) {
+  const { id } = quotationIdParamsSchema.parse(req.params);
+  const empresaId = req.user!.empresaId;
+  const userId = req.user!.userId;
+
+  // Get quotation with items
+  const quotation = await prismaAny.quotation.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+
+  if (!quotation) {
+    throw new ApiError(404, 'Quotation not found');
+  }
+
+  if (quotation.empresa_id !== empresaId) {
+    throw new ApiError(403, 'Not authorized');
+  }
+
+  // Check if already converted
+  if (quotation.status === 'converted') {
+    throw new ApiError(400, 'Quotation already converted to ticket');
+  }
+
+  // Create sale record (using SalesRecord model which is the active one)
+  const sale = await prisma.salesRecord.create({
+    data: {
+      empresa_id: empresaId,
+      user_id: userId,
+      customer_name: quotation.customer_name || undefined,
+      customer_phone: quotation.customer_phone || undefined,
+      customer_document: quotation.customer_email || undefined, // Using email field for document
+      product_or_service: `Cotización ${quotation.numero || quotation.id}`,
+      amount: quotation.total,
+      details: {
+        quotation_id: quotation.id,
+        quotation_numero: quotation.numero,
+        items: quotation.items.map((item: any) => ({
+          id: item.id,
+          product_id: item.product_id,
+          nombre: item.nombre,
+          cantidad: Number(item.cantidad),
+          unit_price: Number(item.unit_price),
+          unit_cost: Number(item.unit_cost),
+          discount_pct: Number(item.discount_pct),
+          line_total: Number(item.line_total),
+        })),
+        subtotal: Number(quotation.subtotal),
+        itbis_amount: Number(quotation.itbis_amount),
+        total: Number(quotation.total),
+      },
+      payment_method: 'pending',
+      channel: 'presupuesto',
+      status: 'pending',
+      notes: quotation.notes || undefined,
+      sold_at: new Date(),
+      evidence_required: false,
+    },
+  });
+
+  // Mark quotation as converted
+  await prismaAny.quotation.update({
+    where: { id },
+    data: { status: 'converted' },
+  });
+
+  res.json({
+    success: true,
+    ticketId: sale.id,
+    message: 'Quotation converted to ticket successfully',
+    sale,
+  });
+}

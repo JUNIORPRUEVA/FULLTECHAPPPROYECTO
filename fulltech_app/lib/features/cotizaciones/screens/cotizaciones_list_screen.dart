@@ -10,10 +10,12 @@ class CotizacionesListScreen extends ConsumerStatefulWidget {
   const CotizacionesListScreen({super.key});
 
   @override
-  ConsumerState<CotizacionesListScreen> createState() => _CotizacionesListScreenState();
+  ConsumerState<CotizacionesListScreen> createState() =>
+      _CotizacionesListScreenState();
 }
 
-class _CotizacionesListScreenState extends ConsumerState<CotizacionesListScreen> {
+class _CotizacionesListScreenState
+    extends ConsumerState<CotizacionesListScreen> {
   final _qCtrl = TextEditingController();
   bool _loading = true;
   String? _error;
@@ -93,8 +95,14 @@ class _CotizacionesListScreenState extends ConsumerState<CotizacionesListScreen>
         title: const Text('Eliminar cotización'),
         content: const Text('¿Deseas eliminar esta cotización?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Eliminar')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
+          ),
         ],
       ),
     );
@@ -106,11 +114,103 @@ class _CotizacionesListScreenState extends ConsumerState<CotizacionesListScreen>
     await _load();
   }
 
+  void _edit(BuildContext context, String id) {
+    // Navigate to presupuesto with quotation ID to edit
+    context.go('/presupuesto?quotationId=$id');
+  }
+
+  Future<void> _duplicate(BuildContext context, id) async {
+    final session = await ref.read(localDbProvider).readSession();
+    if (session == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('❌ No hay sesión activa')));
+      }
+      return;
+    }
+
+    try {
+      await ref
+          .read(quotationRepositoryProvider)
+          .duplicateRemoteToLocal(id, empresaId: session.user.empresaId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('✅ Cotización duplicada')));
+      }
+      await _load();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _convertToTicket(BuildContext context, String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Convertir a Ticket'),
+        content: const Text(
+          '¿Deseas convertir esta cotización en un ticket de venta?\n\n'
+          'Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Convertir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final repo = ref.read(quotationRepositoryProvider);
+      final result = await repo.convertToTicket(id);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Cotización convertida a ticket'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        // Reload list to show updated status
+        await _load();
+
+        // Optionally navigate to sales/ticket view
+        // final ticketId = result['ticketId'] as String?;
+        // if (ticketId != null) {
+        //   context.go('/ventas/$ticketId');
+        // }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        final message = e.toString().contains('already converted')
+            ? '⚠️ Esta cotización ya fue convertida'
+            : '❌ Error: $e';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+  }
+
   Future<void> _send(BuildContext context, String id) async {
     final toCtrl = TextEditingController();
     String channel = 'whatsapp';
 
-    final res = await showDialog<Map<String, dynamic>?> (
+    final res = await showDialog<Map<String, dynamic>?>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -132,14 +232,24 @@ class _CotizacionesListScreenState extends ConsumerState<CotizacionesListScreen>
                 controller: toCtrl,
                 decoration: InputDecoration(
                   labelText: channel == 'whatsapp' ? 'Teléfono' : 'Correo',
-                  hintText: channel == 'whatsapp' ? '521XXXXXXXXXX' : 'cliente@correo.com',
+                  hintText: channel == 'whatsapp'
+                      ? '521XXXXXXXXXX'
+                      : 'cliente@correo.com',
                 ),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.of(context).pop({'channel': channel, 'to': toCtrl.text.trim()}), child: const Text('Continuar')),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).pop({'channel': channel, 'to': toCtrl.text.trim()}),
+              child: const Text('Continuar'),
+            ),
           ],
         ),
       ),
@@ -191,10 +301,7 @@ class _CotizacionesListScreenState extends ConsumerState<CotizacionesListScreen>
                   ),
                 ),
                 const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: _load,
-                  child: const Text('Buscar'),
-                ),
+                FilledButton(onPressed: _load, child: const Text('Buscar')),
               ],
             ),
           ),
@@ -202,59 +309,96 @@ class _CotizacionesListScreenState extends ConsumerState<CotizacionesListScreen>
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? Center(child: Text(_error!))
-                    : _items.isEmpty
-                        ? const Center(child: Text('Sin cotizaciones'))
-                        : ListView.separated(
-                            itemCount: _items.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final it = _items[index];
-                              final id = it['id']?.toString() ?? '';
+                ? Center(child: Text(_error!))
+                : _items.isEmpty
+                ? const Center(child: Text('Sin cotizaciones'))
+                : ListView.separated(
+                    itemCount: _items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final it = _items[index];
+                      final id = it['id']?.toString() ?? '';
+                      final status = it['status']?.toString() ?? '';
+                      final isConverted = status == 'converted';
 
-                              return ListTile(
-                                title: Text(it['numero']?.toString() ?? ''),
-                                subtitle: Text(
-                                  '${it['customer_name'] ?? ''} • ${it['status'] ?? ''}',
+                      return ListTile(
+                        title: Text(it['numero']?.toString() ?? ''),
+                        subtitle: Text(
+                          '${it['customer_name'] ?? ''} • ${it['status'] ?? ''}',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!isConverted)
+                              IconButton(
+                                tooltip: 'Editar',
+                                onPressed: id.isEmpty
+                                    ? null
+                                    : () => _edit(context, id),
+                                icon: const Icon(Icons.edit),
+                              ),
+                            if (!isConverted)
+                              IconButton(
+                                tooltip: 'Convertir a Ticket',
+                                onPressed: id.isEmpty
+                                    ? null
+                                    : () => _convertToTicket(context, id),
+                                icon: const Icon(Icons.point_of_sale),
+                              ),
+                            PopupMenuButton<String>(
+                              onSelected: (value) async {
+                                if (value == 'ver') {
+                                  context.go('/cotizaciones/$id');
+                                } else if (value == 'editar') {
+                                  _edit(context, id);
+                                } else if (value == 'duplicar') {
+                                  await _duplicate(context, id);
+                                } else if (value == 'convertir' &&
+                                    !isConverted) {
+                                  await _convertToTicket(context, id);
+                                } else if (value == 'enviar') {
+                                  await _send(context, id);
+                                } else if (value == 'eliminar') {
+                                  await _confirmDelete(context, id);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'ver',
+                                  child: Text('Ver Detalle'),
                                 ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      tooltip: 'Enviar',
-                                      onPressed: id.isEmpty ? null : () => _send(context, id),
-                                      icon: const Icon(Icons.send),
-                                    ),
-                                    PopupMenuButton<String>(
-                                      onSelected: (value) async {
-                                        if (value == 'ver') {
-                                          context.go('/cotizaciones/$id');
-                                        } else if (value == 'duplicar') {
-                                          final session = await ref
-                                              .read(localDbProvider)
-                                              .readSession();
-                                          if (session == null) return;
-                                          await ref.read(quotationRepositoryProvider).duplicateRemoteToLocal(
-                                                id,
-                                                empresaId: session.user.empresaId,
-                                              );
-                                          await _load();
-                                        } else if (value == 'eliminar') {
-                                          await _confirmDelete(context, id);
-                                        }
-                                      },
-                                      itemBuilder: (context) => const [
-                                        PopupMenuItem(value: 'ver', child: Text('Ver')),
-                                        PopupMenuItem(value: 'duplicar', child: Text('Duplicar')),
-                                        PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
-                                      ],
-                                    ),
-                                  ],
+                                if (!isConverted)
+                                  const PopupMenuItem(
+                                    value: 'editar',
+                                    child: Text('Editar'),
+                                  ),
+                                const PopupMenuItem(
+                                  value: 'duplicar',
+                                  child: Text('Duplicar'),
                                 ),
-                                onTap: id.isEmpty ? null : () => context.go('/cotizaciones/$id'),
-                              );
-                            },
-                          ),
+                                if (!isConverted)
+                                  const PopupMenuItem(
+                                    value: 'convertir',
+                                    child: Text('Convertir a Ticket'),
+                                  ),
+                                const PopupMenuItem(
+                                  value: 'enviar',
+                                  child: Text('Enviar'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'eliminar',
+                                  child: Text('Eliminar'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        onTap: id.isEmpty
+                            ? null
+                            : () => context.go('/cotizaciones/$id'),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

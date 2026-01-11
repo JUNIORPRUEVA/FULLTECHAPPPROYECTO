@@ -20,6 +20,7 @@ import '../../features/cotizaciones/screens/cotizaciones_list_screen.dart';
 import '../../features/cotizaciones/screens/cotizacion_detail_screen.dart';
 import '../../features/cotizaciones/screens/informe_cotizaciones_screen.dart';
 import '../../features/cotizaciones/screens/crear_cartas_screen.dart';
+import '../../features/cartas/screens/letter_detail_screen.dart';
 import '../../features/operaciones/screens/operaciones_list_screen.dart';
 import '../../features/operaciones/screens/operaciones_detail_screen.dart';
 import '../../features/operations/presentation/pages/agenda_page.dart';
@@ -141,7 +142,10 @@ GoRouter createRouter(Ref ref) {
       ),
       GoRoute(
         path: AppRoutes.presupuesto,
-        builder: (c, s) => const PresupuestoDetailScreen(),
+        builder: (c, s) {
+          final quotationId = s.uri.queryParameters['quotationId'];
+          return PresupuestoDetailScreen(quotationId: quotationId);
+        },
         routes: [
           GoRoute(path: 'new', redirect: (c, s) => AppRoutes.presupuesto),
         ],
@@ -164,6 +168,13 @@ GoRouter createRouter(Ref ref) {
       GoRoute(
         path: AppRoutes.crearCartas,
         builder: (c, s) => const CrearCartasScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (c, s) =>
+                LetterDetailScreen(letterId: s.pathParameters['id']!),
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.operaciones,
