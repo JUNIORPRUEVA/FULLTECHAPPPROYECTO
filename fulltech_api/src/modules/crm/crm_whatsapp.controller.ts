@@ -244,14 +244,9 @@ async function createAndSendTextForChat(opts: {
       return updated;
     }
 
-    // Use instance config if available, otherwise fall back to env defaults
-    const evo = evolutionConfig
-      ? new EvolutionClient({
-          baseUrl: evolutionConfig.baseUrl,
-          apiKey: evolutionConfig.apiKey,
-          instanceName: evolutionConfig.instanceName,
-        })
-      : new EvolutionClient();
+    // Use standard EvolutionClient (uses env config)
+    // TODO: Implement instance-specific client in future phase
+    const evo = new EvolutionClient();
 
     const send = await evo.sendText({
       toWaId: opts.waId,
