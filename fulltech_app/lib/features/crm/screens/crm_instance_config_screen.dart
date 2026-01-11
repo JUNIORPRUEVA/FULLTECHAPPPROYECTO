@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/crm_instance.dart';
 import '../state/crm_instances_providers.dart';
+import '../../../core/services/app_config.dart';
 
 class CrmInstanceConfigScreen extends ConsumerStatefulWidget {
   const CrmInstanceConfigScreen({super.key});
@@ -22,6 +24,30 @@ class _CrmInstanceConfigScreenState
   bool _isTesting = false;
   bool _obscureApiKey = true;
   CrmInstance? _currentInstance;
+
+  String _evolutionWebhookUrl() {
+    final apiBase = AppConfig.crmApiBaseUrl.trim();
+    final uri = Uri.tryParse(apiBase);
+
+    String base;
+    if (uri == null || uri.scheme.isEmpty || uri.host.isEmpty) {
+      base = apiBase.replaceAll(RegExp(r'/api/?$'), '');
+    } else {
+      final segments = List<String>.from(uri.pathSegments);
+      if (segments.isNotEmpty && segments.last == 'api') {
+        segments.removeLast();
+      }
+      base = uri
+          .replace(pathSegments: segments, query: '', fragment: '')
+          .toString();
+    }
+
+    while (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+
+    return '$base/webhooks/evolution';
+  }
 
   @override
   void dispose() {
@@ -149,11 +175,11 @@ class _CrmInstanceConfigScreenState
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
               // Info card
               Card(
                 color: Colors.blue.shade50,
@@ -179,6 +205,62 @@ class _CrmInstanceConfigScreenState
                       Text(
                         'Configura tu propia instancia de Evolution API. '
                         'Todos los chats y mensajes estarán aislados por instancia.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Webhook URL helper (Evolution -> Backend)
+              Card(
+                color: Colors.green.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.link, color: Colors.green.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'URL para configurar Webhook en Evolution',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Copiar',
+                            onPressed: () async {
+                              final url = _evolutionWebhookUrl();
+                              await Clipboard.setData(ClipboardData(text: url));
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('URL copiada al portapapeles'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.copy),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        _evolutionWebhookUrl(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Configura esta URL como webhook en tu instancia de Evolution (debe enviar el campo "instance" en el payload).',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],

@@ -340,6 +340,21 @@ class PosRepository {
     return PosSale.fromJson(data);
   }
 
+  Future<List<PosSale>> listSales({
+    String? status,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final rows = await _api.listSales(status: status, from: from, to: to);
+    return rows.map(PosSale.fromJson).toList();
+  }
+
+  Future<PosSale> getSale(String saleId) async {
+    final res = await _api.getSale(saleId);
+    final data = (res['data'] as Map).cast<String, dynamic>();
+    return PosSale.fromJson(data);
+  }
+
   // === Clientes (customers) ===
 
   Future<Map<String, dynamic>?> findCustomerByPhone(String phone) async {
@@ -407,7 +422,7 @@ class PosRepository {
 
   Future<List<Map<String, dynamic>>> listNcfSequences() async {
     final res = await _api.listNcfSequences();
-    final items = (res['items'] as List?)?.cast<Map>() ?? const [];
+    final items = (res['data'] as List?)?.cast<Map>() ?? const [];
     return items.map((e) => e.cast<String, dynamic>()).toList();
   }
 
@@ -426,6 +441,46 @@ class PosRepository {
 
   Future<void> deleteNcfSequence(String id) async {
     await _api.deleteNcfSequence(id);
+  }
+
+  // === Caja (POS) ===
+
+  Future<Map<String, dynamic>?> getCurrentCashbox() async {
+    final res = await _api.getCurrentCashbox();
+    final data = (res['data'] as Map?)?.cast<String, dynamic>();
+    return data;
+  }
+
+  Future<Map<String, dynamic>> openCashbox({
+    double openingAmount = 0,
+    String? note,
+  }) async {
+    final res = await _api.openCashbox(openingAmount: openingAmount, note: note);
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> cashboxMovement({
+    required String type,
+    required double amount,
+    String? reason,
+  }) async {
+    final res = await _api.postCashboxMovement(type: type, amount: amount, reason: reason);
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> closeCashbox({
+    required double countedCash,
+    String? note,
+  }) async {
+    final res = await _api.closeCashbox(countedCash: countedCash, note: note);
+    return (res['data'] as Map).cast<String, dynamic>();
+  }
+
+  Future<List<Map<String, dynamic>>> listCashboxClosures({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    return _api.listCashboxClosures(from: from, to: to);
   }
 
   Future<List<PosPurchaseOrder>> listPurchases({

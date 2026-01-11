@@ -21,6 +21,9 @@ import '../../features/cotizaciones/screens/cotizacion_detail_screen.dart';
 import '../../features/cotizaciones/screens/informe_cotizaciones_screen.dart';
 import '../../features/cotizaciones/screens/crear_cartas_screen.dart';
 import '../../features/cartas/screens/letter_detail_screen.dart';
+import '../../features/cartas/screens/cartas_list_screen.dart';
+import '../../features/cartas/screens/carta_detail_screen.dart';
+import '../../features/cartas/screens/carta_pdf_viewer_screen.dart';
 import '../../features/operaciones/screens/operaciones_list_screen.dart';
 import '../../features/operaciones/screens/operaciones_detail_screen.dart';
 import '../../features/operations/presentation/pages/agenda_page.dart';
@@ -30,11 +33,15 @@ import '../../features/nomina/screens/payroll_run_detail_screen.dart';
 import '../../features/ventas/screens/ventas_list_screen.dart';
 import '../../features/catalogo/screens/catalogo_screen.dart';
 import '../../modules/pos/presentation/pages/pos_credit_page.dart';
+import '../../modules/pos/presentation/pages/pos_cashbox_page.dart';
 import '../../modules/pos/presentation/pages/pos_inventory_page.dart';
+import '../../modules/pos/presentation/pages/pos_ncf_sequences_page.dart';
 import '../../modules/pos/presentation/pages/pos_purchases_page.dart';
 import '../../modules/pos/presentation/pages/pos_reports_page.dart';
+import '../../modules/pos/presentation/pages/pos_sales_history_page.dart';
 import '../../modules/pos/presentation/pages/pos_suppliers_page.dart';
 import '../../modules/pos/presentation/pages/pos_tpv_page.dart';
+import '../../modules/pos/presentation/widgets/pos_cashbox_guard.dart';
 import '../../features/tecnico/screens/tecnico_list_screen.dart';
 import '../../features/contrato/screens/contrato_list_screen.dart';
 import '../../features/guagua/screens/guagua_list_screen.dart';
@@ -166,6 +173,27 @@ GoRouter createRouter(Ref ref) {
         builder: (c, s) => const InformeCotizacionesScreen(),
       ),
       GoRoute(
+        path: AppRoutes.cartas,
+        builder: (c, s) {
+          final presupuestoId = s.uri.queryParameters['presupuestoId'];
+          return CartasListScreen(presupuestoId: presupuestoId);
+        },
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (c, s) =>
+                CartaDetailScreen(cartaId: s.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                path: 'pdf',
+                builder: (c, s) =>
+                    CartaPdfViewerScreen(cartaId: s.pathParameters['id']!),
+              ),
+            ],
+          ),
+        ],
+      ),
+      GoRoute(
         path: AppRoutes.crearCartas,
         builder: (c, s) => const CrearCartasScreen(),
         routes: [
@@ -217,22 +245,25 @@ GoRouter createRouter(Ref ref) {
       ),
       GoRoute(
         path: AppRoutes.pos,
-        builder: (c, s) => const PosTpvPage(),
+        builder: (c, s) => const PosCashboxGuard(child: PosTpvPage()),
         routes: [
+          GoRoute(path: 'caja', builder: (c, s) => const PosCashboxPage()),
+          GoRoute(path: 'ncf', builder: (c, s) => const PosNcfSequencesPage()),
+          GoRoute(path: 'sales', builder: (c, s) => const PosSalesHistoryPage()),
           GoRoute(
             path: 'purchases',
-            builder: (c, s) => const PosPurchasesPage(),
+            builder: (c, s) => const PosCashboxGuard(child: PosPurchasesPage()),
           ),
           GoRoute(
             path: 'suppliers',
-            builder: (c, s) => const PosSuppliersPage(),
+            builder: (c, s) => const PosCashboxGuard(child: PosSuppliersPage()),
           ),
           GoRoute(
             path: 'inventory',
-            builder: (c, s) => const PosInventoryPage(),
+            builder: (c, s) => const PosCashboxGuard(child: PosInventoryPage()),
           ),
-          GoRoute(path: 'credit', builder: (c, s) => const PosCreditPage()),
-          GoRoute(path: 'reports', builder: (c, s) => const PosReportsPage()),
+          GoRoute(path: 'credit', builder: (c, s) => const PosCashboxGuard(child: PosCreditPage())),
+          GoRoute(path: 'reports', builder: (c, s) => const PosCashboxGuard(child: PosReportsPage())),
         ],
       ),
       GoRoute(

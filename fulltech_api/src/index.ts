@@ -13,6 +13,7 @@ import { apiRouter } from './routes';
 import { webhooksRouter } from './modules/webhooks/webhooks.routes';
 import { runSqlMigrations } from './scripts/runSqlMigrations';
 import { bootstrapAdmin } from './scripts/bootstrap_admin';
+import { startCrmFollowupsWorker } from './modules/crm/crm_followups.worker';
 
 function truthy(value: string | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase());
@@ -28,6 +29,7 @@ fs.mkdirSync(path.join(uploadsRoot, 'company'), { recursive: true });
 fs.mkdirSync(path.join(uploadsRoot, 'crm'), { recursive: true });
 fs.mkdirSync(path.join(uploadsRoot, 'sales'), { recursive: true });
 fs.mkdirSync(path.join(uploadsRoot, 'operations'), { recursive: true });
+fs.mkdirSync(path.join(uploadsRoot, 'letters'), { recursive: true });
 
 app.use(helmet());
 const corsOriginRaw = String(env.CORS_ORIGIN ?? '').trim();
@@ -111,6 +113,9 @@ app.use(errorHandler);
 
 void (async () => {
   await runSqlMigrations();
+
+  // Background worker: scheduled follow-ups (best-effort).
+  startCrmFollowupsWorker();
 
   if (truthy(process.env.BOOTSTRAP_ADMIN)) {
     // eslint-disable-next-line no-console

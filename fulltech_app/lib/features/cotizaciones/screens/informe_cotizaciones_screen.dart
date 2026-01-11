@@ -228,9 +228,9 @@ class _InformeCotizacionesScreenState
       await _load(reset: true, refreshServer: false);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo eliminar: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
     }
   }
 
@@ -254,13 +254,10 @@ class _InformeCotizacionesScreenState
       title: 'Cartas',
       actions: [
         IconButton(
-          tooltip: 'Nueva carta',
-          onPressed: () => context.go(AppRoutes.crearCartas),
-          icon: const Icon(Icons.add),
-        ),
-        IconButton(
           tooltip: 'Refrescar',
-          onPressed: _loading ? null : () => _load(reset: true, refreshServer: true),
+          onPressed: _loading
+              ? null
+              : () => _load(reset: true, refreshServer: true),
           icon: _serverRefreshing
               ? const SizedBox(
                   width: 18,
@@ -300,10 +297,7 @@ class _InformeCotizacionesScreenState
                       isDense: true,
                     ),
                     items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Todos'),
-                      ),
+                      const DropdownMenuItem(value: null, child: Text('Todos')),
                       for (final t in LetterType.all)
                         DropdownMenuItem(value: t, child: Text(t)),
                     ],
@@ -322,10 +316,7 @@ class _InformeCotizacionesScreenState
                       isDense: true,
                     ),
                     items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Todos'),
-                      ),
+                      const DropdownMenuItem(value: null, child: Text('Todos')),
                       for (final s in LetterStatus.all)
                         DropdownMenuItem(value: s, child: Text(s)),
                     ],
@@ -343,91 +334,91 @@ class _InformeCotizacionesScreenState
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
-                    ? Center(
-                        child: Text(
-                          _error ?? 'No hay cartas',
-                          style: TextStyle(color: _error != null ? cs.error : null),
+                ? Center(
+                    child: Text(
+                      _error ?? 'No hay cartas',
+                      style: TextStyle(color: _error != null ? cs.error : null),
+                    ),
+                  )
+                : ListView.separated(
+                    controller: _scrollCtrl,
+                    itemCount: _items.length + (_loadingMore ? 1 : 0),
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      if (_loadingMore && index == _items.length) {
+                        return const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+
+                      final it = _items[index];
+                      final subtitle =
+                          '${it.customerName} • ${it.letterType} • ${it.status} • ${_fmtDate(it.createdAt)}';
+
+                      return ListTile(
+                        leading: Icon(
+                          _syncIcon(it.syncStatus),
+                          color: it.syncStatus == SyncStatus.error
+                              ? cs.error
+                              : cs.primary,
                         ),
-                      )
-                    : ListView.separated(
-                        controller: _scrollCtrl,
-                        itemCount: _items.length + (_loadingMore ? 1 : 0),
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          if (_loadingMore && index == _items.length) {
-                            return const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: Center(child: CircularProgressIndicator()),
-                            );
-                          }
-
-                          final it = _items[index];
-                          final subtitle =
-                              '${it.customerName} • ${it.letterType} • ${it.status} • ${_fmtDate(it.createdAt)}';
-
-                          return ListTile(
-                            leading: Icon(
-                              _syncIcon(it.syncStatus),
-                              color: it.syncStatus == SyncStatus.error
-                                  ? cs.error
-                                  : cs.primary,
+                        title: Text(
+                          it.subject,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Wrap(
+                          spacing: 4,
+                          children: [
+                            IconButton(
+                              tooltip: 'Editar',
+                              onPressed: () => context.go(
+                                '${AppRoutes.crearCartas}?id=${Uri.encodeComponent(it.id)}',
+                              ),
+                              icon: const Icon(Icons.edit_outlined),
                             ),
-                            title: Text(
-                              it.subject,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            IconButton(
+                              tooltip: 'Ver PDF',
+                              onPressed: () => context.go(
+                                '${AppRoutes.crearCartas}?id=${Uri.encodeComponent(it.id)}&openPdf=1',
+                              ),
+                              icon: const Icon(Icons.picture_as_pdf_outlined),
                             ),
-                            subtitle: Text(
-                              subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: Wrap(
-                              spacing: 4,
-                              children: [
-                                IconButton(
-                                  tooltip: 'Editar',
-                                  onPressed: () => context.go(
-                                    '${AppRoutes.crearCartas}?id=${Uri.encodeComponent(it.id)}',
-                                  ),
-                                  icon: const Icon(Icons.edit_outlined),
-                                ),
-                                IconButton(
-                                  tooltip: 'Ver PDF',
-                                  onPressed: () => context.go(
-                                    '${AppRoutes.crearCartas}?id=${Uri.encodeComponent(it.id)}&openPdf=1',
-                                  ),
-                                  icon: const Icon(Icons.picture_as_pdf_outlined),
-                                ),
-                                IconButton(
-                                  tooltip: 'Marcar enviada',
-                                  onPressed: it.status == LetterStatus.sent
-                                      ? null
-                                      : () async {
-                                          await ref
-                                              .read(lettersRepositoryProvider)
-                                              .markSent(
-                                                empresaId: auth.user.empresaId,
-                                                id: it.id,
-                                              );
-                                          if (!mounted) return;
-                                          await _load(
-                                            reset: true,
-                                            refreshServer: false,
+                            IconButton(
+                              tooltip: 'Marcar enviada',
+                              onPressed: it.status == LetterStatus.sent
+                                  ? null
+                                  : () async {
+                                      await ref
+                                          .read(lettersRepositoryProvider)
+                                          .markSent(
+                                            empresaId: auth.user.empresaId,
+                                            id: it.id,
                                           );
-                                        },
-                                  icon: const Icon(Icons.send_outlined),
-                                ),
-                                IconButton(
-                                  tooltip: 'Eliminar',
-                                  onPressed: () => _confirmAndDelete(it.id),
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
-                              ],
+                                      if (!mounted) return;
+                                      await _load(
+                                        reset: true,
+                                        refreshServer: false,
+                                      );
+                                    },
+                              icon: const Icon(Icons.send_outlined),
                             ),
-                          );
-                        },
-                      ),
+                            IconButton(
+                              tooltip: 'Eliminar',
+                              onPressed: () => _confirmAndDelete(it.id),
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
           if (_error != null && _items.isNotEmpty)
             Container(

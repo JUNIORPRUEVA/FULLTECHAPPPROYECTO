@@ -310,6 +310,44 @@ class CrmRepository {
   Future<void> saveEvolutionConfig(Map<String, dynamic> config) =>
       _remote.saveEvolutionConfig(config);
 
+  // Follow-ups (scheduled messages)
+  Future<int> createChatFollowups({
+    required String chatId,
+    required DateTime runAt,
+    required int repeatCount,
+    required int intervalMinutes,
+    required Map<String, dynamic> payload,
+    Map<String, dynamic>? constraints,
+  }) =>
+      _remote.createChatFollowups(
+        chatId: chatId,
+        runAt: runAt,
+        repeatCount: repeatCount,
+        intervalMinutes: intervalMinutes,
+        payload: payload,
+        constraints: constraints,
+      );
+
+  Future<int> cancelChatFollowups({required String chatId}) =>
+      _remote.cancelChatFollowups(chatId: chatId);
+
+  Future<Map<String, dynamic>> createBulkFollowups({
+    required DateTime runAt,
+    required int repeatCount,
+    required int intervalMinutes,
+    required Map<String, dynamic> payload,
+    required Map<String, dynamic> filter,
+    Map<String, dynamic>? constraints,
+  }) =>
+      _remote.createBulkFollowups(
+        runAt: runAt,
+        repeatCount: repeatCount,
+        intervalMinutes: intervalMinutes,
+        payload: payload,
+        filter: filter,
+        constraints: constraints,
+      );
+
   // Mark chat as read
   Future<void> markChatRead(String chatId) => _remote.markChatRead(chatId);
 

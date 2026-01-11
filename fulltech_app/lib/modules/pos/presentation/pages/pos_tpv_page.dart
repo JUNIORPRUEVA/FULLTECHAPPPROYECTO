@@ -138,8 +138,9 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
                     onAddProduct: (producto) =>
                         ctrl.addProduct(_convertToTPVProduct(producto)),
                     canSeeCost: canSeeCost,
-                    onOpenVentas: () => context.go(AppRoutes.ventas),
+                    onOpenVentas: () => context.go(AppRoutes.posSales),
                     onOpenDevoluciones: () {
+                      context.go(AppRoutes.posSales);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text(
@@ -208,8 +209,9 @@ class _PosTpvPageState extends ConsumerState<PosTpvPage> {
                   onAddProduct: (producto) =>
                       ctrl.addProduct(_convertToTPVProduct(producto)),
                   canSeeCost: canSeeCost,
-                  onOpenVentas: () => context.go(AppRoutes.ventas),
+                  onOpenVentas: () => context.go(AppRoutes.posSales),
                   onOpenDevoluciones: () {
+                    context.go(AppRoutes.posSales);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(

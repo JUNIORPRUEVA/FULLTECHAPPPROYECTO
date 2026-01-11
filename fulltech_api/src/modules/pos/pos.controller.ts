@@ -6,6 +6,9 @@ import { ApiError } from '../../middleware/errorHandler';
 import {
   posCreatePurchaseSchema,
   posCreateSaleSchema,
+  posCreateFiscalSequenceSchema,
+  posUpdateFiscalSequenceSchema,
+  posListFiscalSequencesSchema,
   posInventoryAdjustSchema,
   posListCreditSchema,
   posListMovementsSchema,
@@ -19,6 +22,10 @@ import {
   posListSuppliersSchema,
   posCreateSupplierSchema,
   posUpdateSupplierSchema,
+  posOpenCashboxSchema,
+  posCashboxMovementSchema,
+  posCloseCashboxSchema,
+  posListCashboxClosuresSchema,
 } from './pos.schema';
 import { parseDateOrNull, round2, suggestReorderQty, wouldBlockStock } from './pos.logic';
 
@@ -33,6 +40,12 @@ function actorUserId(req: Request): string | null {
   return actor?.userId ?? null;
 }
 
+function actorUserIdRequired(req: Request): string {
+  const id = actorUserId(req);
+  if (!id) throw new ApiError(401, 'Unauthorized');
+  return id;
+}
+
 function ok(res: Response, data: any, message = 'OK', status = 200): void {
   res.status(status).json({ ok: true, data, message });
 }
@@ -44,6 +57,105 @@ function formatNcf(docType: string, num: bigint, series?: string | null, prefix?
   // We keep it predictable and configurable with optional series/prefix.
   const padded = String(num).padStart(8, '0');
   return `${series ?? ''}${prefix ?? ''}${docType}${padded}`;
+}
+
+async function getOpenCashbox(
+  tx: PrismaTypes.TransactionClient,
+  empresa_id: string,
+  user_id: string,
+) {
+  return tx.posCashbox.findFirst({
+    where: { empresa_id, user_id, status: 'OPEN', closed_at: null },
+    orderBy: { opened_at: 'desc' },
+  });
+}
+
+async function requireOpenCashbox(
+  tx: PrismaTypes.TransactionClient,
+  empresa_id: string,
+  user_id: string,
+) {
+  const cashbox = await getOpenCashbox(tx, empresa_id, user_id);
+  if (!cashbox) throw new ApiError(403, 'Para usar POS debes abrir caja');
+  return cashbox;
+}
+
+async function computeCashboxSummary(
+  tx: PrismaTypes.TransactionClient,
+  empresa_id: string,
+  cashboxId: string,
+) {
+  const cashbox = await tx.posCashbox.findFirst({
+    where: { id: cashboxId, empresa_id },
+  });
+  if (!cashbox) throw new ApiError(404, 'Cashbox not found');
+
+  const movements = await tx.posCashboxMovement.findMany({
+    where: { empresa_id, cashbox_id: cashboxId },
+    orderBy: { created_at: 'desc' },
+    take: 500,
+  });
+
+  let manualIn = 0;
+  let manualOut = 0;
+  for (const m of movements) {
+    const amt = Number(m.amount);
+    if (m.type === 'IN') manualIn += amt;
+    if (m.type === 'OUT') manualOut += amt;
+  }
+
+  const sales = await tx.posSale.findMany({
+    where: {
+      empresa_id,
+      cashbox_id: cashboxId,
+      status: { in: ['PAID', 'CREDIT'] },
+    },
+    select: { payment_method: true, total: true, paid_amount: true },
+  });
+
+  const byMethod: Record<string, { count: number; total: number }> = {};
+  let cashSales = 0;
+  let creditInitial = 0;
+
+  for (const s of sales) {
+    const method = (s.payment_method ?? 'UNKNOWN').toUpperCase();
+    if (!byMethod[method]) byMethod[method] = { count: 0, total: 0 };
+    byMethod[method].count += 1;
+    byMethod[method].total += Number(s.total);
+
+    if (method === 'CASH') cashSales += Number(s.total);
+    if (method === 'CREDIT') creditInitial += Number(s.paid_amount ?? 0);
+  }
+
+  const expectedCash =
+    Number(cashbox.opening_amount) + manualIn - manualOut + cashSales + creditInitial;
+
+  return {
+    cashbox: {
+      id: cashbox.id,
+      status: cashbox.status,
+      opened_at: cashbox.opened_at,
+      closed_at: cashbox.closed_at,
+      opening_amount: Number(cashbox.opening_amount),
+      counted_cash: cashbox.counted_cash == null ? null : Number(cashbox.counted_cash),
+      note: cashbox.note ?? null,
+    },
+    movements: movements.map((m) => ({
+      id: m.id,
+      type: m.type,
+      amount: Number(m.amount),
+      reason: m.reason ?? null,
+      created_at: m.created_at,
+    })),
+    sales_by_method: byMethod,
+    totals: {
+      manual_in: round2(manualIn),
+      manual_out: round2(manualOut),
+      cash_sales: round2(cashSales),
+      credit_initial_cash: round2(creditInitial),
+      expected_cash: round2(expectedCash),
+    },
+  };
 }
 
 async function generateNextNcf(tx: PrismaTypes.TransactionClient, empresa_id: string, doc_type: string) {
@@ -77,8 +189,313 @@ async function generateNextNcf(tx: PrismaTypes.TransactionClient, empresa_id: st
   return {
     sequence_id: row.id,
     ncf: formatNcf(doc_type, row.current_number, row.series, row.prefix),
-    current_number: row.current_number,
+    current_number: Number(row.current_number),
   };
+}
+
+// =====================
+// Cashbox (Caja)
+// =====================
+
+export async function getCurrentCashbox(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const user_id = actorUserIdRequired(req);
+
+  const data = await prisma.$transaction(async (tx) => {
+    const cashbox = await getOpenCashbox(tx, empresa_id, user_id);
+    if (!cashbox) return null;
+    return computeCashboxSummary(tx, empresa_id, cashbox.id);
+  });
+
+  ok(res, data);
+}
+
+export async function openCashbox(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const user_id = actorUserIdRequired(req);
+
+  const parsed = posOpenCashboxSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const created = await prisma.$transaction(async (tx) => {
+    const existing = await getOpenCashbox(tx, empresa_id, user_id);
+    if (existing) throw new ApiError(409, 'Ya tienes una caja abierta');
+
+    const cashbox = await tx.posCashbox.create({
+      data: {
+        empresa_id,
+        user_id,
+        status: 'OPEN',
+        opening_amount: round2(parsed.data.opening_amount ?? 0),
+        note: parsed.data.note ?? null,
+        updated_at: new Date(),
+      },
+    });
+
+    try {
+      await tx.auditLog.create({
+        data: {
+          empresa_id,
+          actor_user_id: user_id,
+          action: 'pos.cashbox.open',
+          entity: 'pos_cashboxes',
+          entity_id: cashbox.id,
+          meta: { opening_amount: Number(cashbox.opening_amount) },
+        },
+      });
+    } catch (_) {}
+
+    return computeCashboxSummary(tx, empresa_id, cashbox.id);
+  });
+
+  ok(res, created, 'Created', 201);
+}
+
+export async function postCashboxMovement(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const user_id = actorUserIdRequired(req);
+
+  const parsed = posCashboxMovementSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const result = await prisma.$transaction(async (tx) => {
+    const cashbox = await requireOpenCashbox(tx, empresa_id, user_id);
+
+    const created = await tx.posCashboxMovement.create({
+      data: {
+        empresa_id,
+        cashbox_id: cashbox.id,
+        user_id,
+        type: parsed.data.type,
+        amount: round2(parsed.data.amount),
+        reason: parsed.data.reason ?? null,
+      },
+    });
+
+    try {
+      await tx.auditLog.create({
+        data: {
+          empresa_id,
+          actor_user_id: user_id,
+          action: 'pos.cashbox.movement',
+          entity: 'pos_cashbox_movements',
+          entity_id: created.id,
+          meta: {
+            cashbox_id: cashbox.id,
+            type: created.type,
+            amount: Number(created.amount),
+            reason: created.reason ?? null,
+          },
+        },
+      });
+    } catch (_) {}
+
+    return computeCashboxSummary(tx, empresa_id, cashbox.id);
+  });
+
+  ok(res, result);
+}
+
+export async function closeCashbox(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const user_id = actorUserIdRequired(req);
+
+  const parsed = posCloseCashboxSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const result = await prisma.$transaction(async (tx) => {
+    const cashbox = await requireOpenCashbox(tx, empresa_id, user_id);
+
+    const summary = await computeCashboxSummary(tx, empresa_id, cashbox.id);
+    const expected = Number(summary.totals.expected_cash);
+    const counted = round2(parsed.data.counted_cash);
+    const difference = round2(counted - expected);
+
+    const closure = await tx.posCashboxClosure.create({
+      data: {
+        empresa_id,
+        cashbox_id: cashbox.id,
+        user_id,
+        summary_json: {
+          ...summary,
+          closed: {
+            counted_cash: counted,
+            expected_cash: expected,
+            difference,
+            note: parsed.data.note ?? null,
+          },
+        },
+      },
+    });
+
+    await tx.posCashbox.update({
+      where: { id: cashbox.id },
+      data: {
+        status: 'CLOSED',
+        closed_at: new Date(),
+        counted_cash: counted,
+        note: parsed.data.note ?? cashbox.note ?? null,
+        updated_at: new Date(),
+      },
+    });
+
+    try {
+      await tx.auditLog.create({
+        data: {
+          empresa_id,
+          actor_user_id: user_id,
+          action: 'pos.cashbox.close',
+          entity: 'pos_cashboxes',
+          entity_id: cashbox.id,
+          meta: {
+            closure_id: closure.id,
+            expected_cash: expected,
+            counted_cash: counted,
+            difference,
+          },
+        },
+      });
+    } catch (_) {}
+
+    return { ...summary, closure_id: closure.id, closed: { expected_cash: expected, counted_cash: counted, difference } };
+  });
+
+  ok(res, result);
+}
+
+export async function listPosCashboxClosures(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const user_id = actorUserIdRequired(req);
+
+  const parsed = posListCashboxClosuresSchema.safeParse(req.query);
+  if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
+
+  const from = parseDateOrNull(parsed.data.from);
+  const to = parseDateOrNull(parsed.data.to);
+
+  const items = await prisma.posCashboxClosure.findMany({
+    where: {
+      empresa_id,
+      user_id,
+      ...(from || to
+        ? {
+            created_at: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+    },
+    orderBy: { created_at: 'desc' },
+    take: 200,
+  });
+
+  ok(res, items);
+}
+
+// =====================
+// Fiscal sequences (CRUD)
+// =====================
+
+export async function listFiscalSequences(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+
+  const parsed = posListFiscalSequencesSchema.safeParse(req.query);
+  if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
+
+  const items = await prisma.posFiscalSequence.findMany({
+    where: {
+      empresa_id,
+      ...(parsed.data.active !== undefined ? { active: parsed.data.active } : {}),
+    },
+    orderBy: [{ active: 'desc' }, { doc_type: 'asc' }],
+    take: 200,
+  });
+
+  ok(
+    res,
+    items.map((s) => ({
+      ...s,
+      current_number: Number(s.current_number),
+      max_number: s.max_number == null ? null : Number(s.max_number),
+    })),
+  );
+}
+
+export async function createFiscalSequence(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+
+  const parsed = posCreateFiscalSequenceSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const body = parsed.data;
+
+  const created = await prisma.posFiscalSequence.create({
+    data: {
+      empresa_id,
+      doc_type: body.doc_type,
+      series: body.series ?? null,
+      prefix: body.prefix ?? null,
+      current_number: body.current_number ?? 0n,
+      max_number: body.max_number ?? null,
+      active: body.active ?? true,
+      updated_at: new Date(),
+    },
+  });
+
+  ok(
+    res,
+    {
+      ...created,
+      current_number: Number(created.current_number),
+      max_number: created.max_number == null ? null : Number(created.max_number),
+    },
+    'Created',
+    201,
+  );
+}
+
+export async function updateFiscalSequence(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const id = String(req.params.id);
+
+  const parsed = posUpdateFiscalSequenceSchema.safeParse(req.body);
+  if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  const existing = await prisma.posFiscalSequence.findFirst({ where: { id, empresa_id } });
+  if (!existing) throw new ApiError(404, 'Sequence not found');
+
+  const body = parsed.data;
+
+  const updated = await prisma.posFiscalSequence.update({
+    where: { id },
+    data: {
+      ...(body.doc_type !== undefined ? { doc_type: body.doc_type } : {}),
+      ...(body.series !== undefined ? { series: body.series } : {}),
+      ...(body.prefix !== undefined ? { prefix: body.prefix } : {}),
+      ...(body.current_number !== undefined ? { current_number: body.current_number } : {}),
+      ...(body.max_number !== undefined ? { max_number: body.max_number } : {}),
+      ...(body.active !== undefined ? { active: body.active } : {}),
+      updated_at: new Date(),
+    },
+  });
+
+  ok(res, {
+    ...updated,
+    current_number: Number(updated.current_number),
+    max_number: updated.max_number == null ? null : Number(updated.max_number),
+  });
+}
+
+export async function deleteFiscalSequence(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const id = String(req.params.id);
+
+  const existing = await prisma.posFiscalSequence.findFirst({ where: { id, empresa_id } });
+  if (!existing) throw new ApiError(404, 'Sequence not found');
+
+  await prisma.posFiscalSequence.delete({ where: { id } });
+  ok(res, { id });
 }
 
 export async function listPosProducts(req: Request, res: Response) {
@@ -232,7 +649,7 @@ export async function deletePosSupplier(req: Request, res: Response) {
 
 export async function createPosSale(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
-  const createdBy = actorUserId(req);
+  const createdBy = actorUserIdRequired(req);
 
   const parsed = posCreateSaleSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -288,9 +705,11 @@ export async function createPosSale(req: Request, res: Response) {
   const total = round2(taxable + itbis_total);
 
   const created = await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    const cashbox = await requireOpenCashbox(tx, empresa_id, createdBy);
     const sale = await tx.posSale.create({
       data: {
         empresa_id,
+        cashbox_id: cashbox.id,
         invoice_no,
         invoice_type: body.invoice_type,
         ncf: null,
@@ -377,7 +796,7 @@ export async function listPosSales(req: Request, res: Response) {
 
 export async function payPosSale(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
-  const actorId = actorUserId(req);
+  const actorId = actorUserIdRequired(req);
 
   const saleId = String(req.params.id);
 
@@ -387,6 +806,7 @@ export async function payPosSale(req: Request, res: Response) {
   const body = parsed.data;
 
   const result = await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    const cashbox = await requireOpenCashbox(tx, empresa_id, actorId);
     const sale = await tx.posSale.findFirst({
       where: { id: saleId, empresa_id },
       include: { items: true },
@@ -490,6 +910,7 @@ export async function payPosSale(req: Request, res: Response) {
     const updated = await tx.posSale.update({
       where: { id: sale.id },
       data: {
+        cashbox_id: sale.cashbox_id ?? cashbox.id,
         ncf: ncfToUse,
         customer_rnc: body.customer_rnc ?? sale.customer_rnc,
         status,
@@ -501,6 +922,49 @@ export async function payPosSale(req: Request, res: Response) {
       },
       include: { items: true },
     });
+
+    // Store fiscal usage history (best-effort; doesn't block sale pay)
+    if (sale.invoice_type === 'FISCAL' && ncfToUse) {
+      const usedDocType = (body.doc_type ?? '').trim() || 'UNKNOWN';
+      try {
+        await tx.posFiscalNcfUsed.upsert({
+          where: { sale_id: sale.id },
+          create: {
+            empresa_id,
+            sale_id: sale.id,
+            ncf: ncfToUse,
+            doc_type: usedDocType,
+            user_id: actorId,
+          },
+          update: {
+            ncf: ncfToUse,
+            doc_type: usedDocType,
+            user_id: actorId,
+          },
+        });
+      } catch (_) {}
+    }
+
+    // Register cash movements (cashbox) for cash-based inflows.
+    const cashIn =
+      body.payment_method === 'CASH'
+        ? round2(total)
+        : body.payment_method === 'CREDIT'
+          ? round2(Number(body.initial_payment ?? 0))
+          : 0;
+
+    if (cashIn > 0) {
+      await tx.posCashboxMovement.create({
+        data: {
+          empresa_id,
+          cashbox_id: cashbox.id,
+          user_id: actorId,
+          type: 'IN',
+          amount: cashIn,
+          reason: `Venta POS ${updated.invoice_no} (${body.payment_method})`,
+        },
+      });
+    }
 
     if (status === 'CREDIT') {
       const due = parseDateOrNull(body.due_date) ?? null;
@@ -530,10 +994,11 @@ export async function payPosSale(req: Request, res: Response) {
 
 export async function cancelPosSale(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
-  const actorId = actorUserId(req);
+  const actorId = actorUserIdRequired(req);
   const saleId = String(req.params.id);
 
   const result = await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    const cashbox = await requireOpenCashbox(tx, empresa_id, actorId);
     const sale = await tx.posSale.findFirst({
       where: { id: saleId, empresa_id },
       include: { items: true },
@@ -546,6 +1011,14 @@ export async function cancelPosSale(req: Request, res: Response) {
     const shouldRevert = sale.status === 'PAID' || sale.status === 'CREDIT';
 
     if (shouldRevert) {
+      // If this sale belongs to a different cashbox, do not allow cancellation.
+      if (sale.cashbox_id && sale.cashbox_id !== cashbox.id) {
+        throw new ApiError(
+          409,
+          'No se puede cancelar una venta de un turno/caja diferente. Use devoluciones/reembolso.',
+        );
+      }
+
       const qtyByProduct = new Map<string, number>();
       for (const it of sale.items) {
         qtyByProduct.set(it.product_id, (qtyByProduct.get(it.product_id) ?? 0) + Number(it.qty));
@@ -589,6 +1062,23 @@ export async function cancelPosSale(req: Request, res: Response) {
 
       // If credit exists, remove it.
       await tx.posCreditAccount.deleteMany({ where: { empresa_id, sale_id: sale.id } });
+
+      // Cashbox movement reversal (cash out) if money entered as cash.
+      const pm = (sale.payment_method ?? '').toUpperCase();
+      const cashOut = pm === 'CASH' ? round2(Number(sale.total)) : pm === 'CREDIT' ? round2(Number(sale.paid_amount ?? 0)) : 0;
+
+      if (cashOut > 0) {
+        await tx.posCashboxMovement.create({
+          data: {
+            empresa_id,
+            cashbox_id: cashbox.id,
+            user_id: actorId,
+            type: 'OUT',
+            amount: cashOut,
+            reason: `Cancelación POS ${sale.invoice_no}`,
+          },
+        });
+      }
     }
 
     const updated = await tx.posSale.update({
@@ -620,7 +1110,7 @@ export async function nextFiscalNcf(req: Request, res: Response) {
 
 export async function createPurchase(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
-  const createdBy = actorUserId(req);
+  const createdBy = actorUserIdRequired(req);
 
   const parsed = posCreatePurchaseSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -659,33 +1149,37 @@ export async function createPurchase(req: Request, res: Response) {
 
   const expected = parseDateOrNull(body.expected_date) ?? null;
 
-  const created = await prisma.posPurchaseOrder.create({
-    data: {
-      empresa_id,
-      supplier_id: body.supplier_id ?? null,
-      supplier_name: body.supplier_name,
-      status: body.status,
-      expected_date: expected,
-      subtotal,
-      itbis_total,
-      total,
-      note: body.note ?? null,
-      created_by_user_id: createdBy,
-      updated_at: new Date(),
-      items: {
-        createMany: {
-          data: itemsComputed.map((it) => ({
-            empresa_id,
-            product_id: it.product_id,
-            product_name: it.product_name,
-            qty: it.qty,
-            unit_cost: it.unit_cost,
-            line_total: it.line_total,
-          })),
+  const created = await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    await requireOpenCashbox(tx, empresa_id, createdBy);
+
+    return tx.posPurchaseOrder.create({
+      data: {
+        empresa_id,
+        supplier_id: body.supplier_id ?? null,
+        supplier_name: body.supplier_name,
+        status: body.status,
+        expected_date: expected,
+        subtotal,
+        itbis_total,
+        total,
+        note: body.note ?? null,
+        created_by_user_id: createdBy,
+        updated_at: new Date(),
+        items: {
+          createMany: {
+            data: itemsComputed.map((it) => ({
+              empresa_id,
+              product_id: it.product_id,
+              product_name: it.product_name,
+              qty: it.qty,
+              unit_cost: it.unit_cost,
+              line_total: it.line_total,
+            })),
+          },
         },
       },
-    },
-    include: { items: true },
+      include: { items: true },
+    });
   });
 
   ok(res, created, 'Created', 201);
@@ -736,7 +1230,7 @@ export async function getPurchase(req: Request, res: Response) {
 
 export async function receivePurchase(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
-  const actorId = actorUserId(req);
+  const actorId = actorUserIdRequired(req);
 
   const poId = String(req.params.id);
 
@@ -744,6 +1238,7 @@ export async function receivePurchase(req: Request, res: Response) {
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
 
   const result = await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    await requireOpenCashbox(tx, empresa_id, actorId);
     const po = await tx.posPurchaseOrder.findFirst({
       where: { id: poId, empresa_id },
       include: { items: true },
@@ -816,7 +1311,7 @@ export async function receivePurchase(req: Request, res: Response) {
 
 export async function inventoryAdjust(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
-  const actorId = actorUserId(req);
+  const actorId = actorUserIdRequired(req);
 
   const parsed = posInventoryAdjustSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -824,6 +1319,7 @@ export async function inventoryAdjust(req: Request, res: Response) {
   const { product_id, qty_change, note } = parsed.data;
 
   const result = await prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
+    await requireOpenCashbox(tx, empresa_id, actorId);
     const locked = await tx.$queryRaw<Array<{ id: string; stock_qty: any; allow_negative_stock: boolean }>>`
       SELECT id, stock_qty, allow_negative_stock
       FROM "Producto"

@@ -57,6 +57,63 @@ export const posNextNcfSchema = z.object({
   doc_type: z.string().trim().min(2),
 });
 
+// === NCF sequences (CRUD) ===
+export const posCreateFiscalSequenceSchema = z.object({
+  doc_type: z.string().trim().min(2),
+  series: z.string().trim().optional().nullable(),
+  prefix: z.string().trim().optional().nullable(),
+  current_number: z
+    .preprocess((v) => {
+      if (v === undefined || v === null || v === '') return undefined;
+      if (typeof v === 'bigint') return v;
+      if (typeof v === 'number') return BigInt(Math.max(0, Math.floor(v)));
+      if (typeof v === 'string') return BigInt(v);
+      return v;
+    }, z.bigint().min(0n))
+    .optional(),
+  max_number: z
+    .preprocess((v) => {
+      if (v === null || v === undefined || v === '') return null;
+      if (typeof v === 'bigint') return v;
+      if (typeof v === 'number') return BigInt(Math.max(0, Math.floor(v)));
+      if (typeof v === 'string') return BigInt(v);
+      return v;
+    }, z.bigint().min(0n).nullable())
+    .optional(),
+  active: z.boolean().optional(),
+});
+
+export const posUpdateFiscalSequenceSchema = posCreateFiscalSequenceSchema.partial();
+
+export const posListFiscalSequencesSchema = z.object({
+  active: z
+    .union([z.string(), z.boolean()])
+    .optional()
+    .transform((v) => (v === true || v === 'true' ? true : v === false || v === 'false' ? false : undefined)),
+});
+
+// === Cashbox (Caja) ===
+export const posOpenCashboxSchema = z.object({
+  opening_amount: z.number().min(0).optional().default(0),
+  note: z.string().trim().optional().nullable(),
+});
+
+export const posCashboxMovementSchema = z.object({
+  type: z.enum(['IN', 'OUT']),
+  amount: z.number().positive(),
+  reason: z.string().trim().optional().nullable(),
+});
+
+export const posCloseCashboxSchema = z.object({
+  counted_cash: z.number(),
+  note: z.string().trim().optional().nullable(),
+});
+
+export const posListCashboxClosuresSchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+});
+
 export const posCreatePurchaseSchema = z.object({
   supplier_id: z.string().uuid().optional().nullable(),
   supplier_name: z.string().trim().min(1),

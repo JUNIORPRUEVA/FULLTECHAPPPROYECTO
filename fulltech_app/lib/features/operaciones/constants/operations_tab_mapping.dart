@@ -29,6 +29,7 @@ String operationsTabLabel(OperationsTab tab) {
   }
 }
 
+// ignore: unused_element
 bool _isHistorialEstado(String estado) {
   final e = estado.trim().toUpperCase();
   return e == 'FINALIZADO' || e == 'CERRADO' || e == 'CANCELADO';

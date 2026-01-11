@@ -23,6 +23,9 @@ class MaintenanceRepository {
 
   bool _isNetworkError(Object e) {
     if (e is DioException) {
+      // Treat 5xx as transient for offline-first UI: if we have local cache, show it.
+      final status = e.response?.statusCode;
+      if (status != null && status >= 500) return true;
       if (e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
@@ -421,13 +424,17 @@ class MaintenanceRepository {
           from: from,
           to: to,
         );
-        return MaintenanceListResponse(
-          items: local,
-          total: local.length,
-          page: 1,
-          limit: local.length,
-          totalPages: 1,
-        );
+
+        // Only fallback to local if there's something to show.
+        if (local.isNotEmpty) {
+          return MaintenanceListResponse(
+            items: local,
+            total: local.length,
+            page: 1,
+            limit: local.length,
+            totalPages: 1,
+          );
+        }
       }
       rethrow;
     }

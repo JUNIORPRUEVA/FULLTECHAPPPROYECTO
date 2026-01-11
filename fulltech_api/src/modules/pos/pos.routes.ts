@@ -7,23 +7,32 @@ import {
   cancelPosSale,
   createPosSale,
   createPurchase,
+  createFiscalSequence,
   getCredit,
+  getCurrentCashbox,
   getPosSale,
   getPurchase,
   inventoryAdjust,
   listCredit,
+  listFiscalSequences,
   listInventoryMovements,
+  listPosCashboxClosures,
   listPosProducts,
   listPosSales,
   listPurchases,
   nextFiscalNcf,
+  openCashbox,
   payPosSale,
+  postCashboxMovement,
   reportCreditAging,
   reportInventoryLowStock,
   reportPurchasesSummary,
   reportSalesSummary,
   reportTopProducts,
   receivePurchase,
+  closeCashbox,
+  updateFiscalSequence,
+  deleteFiscalSequence,
 } from './pos.controller';
 import {
   createPosSupplier,
@@ -36,6 +45,13 @@ export const posRouter = Router();
 
 posRouter.use(authMiddleware);
 
+// Cashbox (Caja)
+posRouter.get('/caja/actual', requirePermission('pos.sell'), expressAsyncHandler(getCurrentCashbox));
+posRouter.post('/caja/abrir', requirePermission('pos.cashbox.manage'), expressAsyncHandler(openCashbox));
+posRouter.post('/caja/movimiento', requirePermission('pos.cashbox.manage'), expressAsyncHandler(postCashboxMovement));
+posRouter.post('/caja/cerrar', requirePermission('pos.cashbox.manage'), expressAsyncHandler(closeCashbox));
+posRouter.get('/caja/cierres', requirePermission('pos.cashbox.manage'), expressAsyncHandler(listPosCashboxClosures));
+
 // Products
 posRouter.get('/products', expressAsyncHandler(listPosProducts));
 
@@ -47,6 +63,10 @@ posRouter.post('/sales/:id/pay', requirePermission('pos.sell'), expressAsyncHand
 posRouter.post('/sales/:id/cancel', requirePermission('pos.sell'), expressAsyncHandler(cancelPosSale));
 
 // Fiscal
+posRouter.get('/fiscal/sequences', requirePermission('pos.sell'), expressAsyncHandler(listFiscalSequences));
+posRouter.post('/fiscal/sequences', requirePermission('pos.sell'), expressAsyncHandler(createFiscalSequence));
+posRouter.patch('/fiscal/sequences/:id', requirePermission('pos.sell'), expressAsyncHandler(updateFiscalSequence));
+posRouter.delete('/fiscal/sequences/:id', requirePermission('pos.sell'), expressAsyncHandler(deleteFiscalSequence));
 posRouter.post('/fiscal/next-ncf', requirePermission('pos.sell'), expressAsyncHandler(nextFiscalNcf));
 
 // Purchases

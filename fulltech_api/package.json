@@ -25,7 +25,8 @@
     "delete-instance-chats": "tsx scripts/delete_instance_number_chats.ts",
     "clear-crm-chats": "tsx scripts/clear_crm_chats.ts",
     "crm:verify": "tsx scripts/verify_crm_integrity.ts",
-    "crm:check-multi-instance": "node scripts/check_and_apply_crm_multi_instance_sql.js"
+    "crm:check-multi-instance": "node scripts/check_and_apply_crm_multi_instance_sql.js",
+    "maintenance:verify": "tsx scripts/verify_maintenance_schema.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

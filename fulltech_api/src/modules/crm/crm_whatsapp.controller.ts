@@ -33,6 +33,166 @@ export function actorUserId(req: Request): string {
   return userId;
 }
 
+function isUndefinedTableError(err: unknown, tableName: string): boolean {
+  const lower = tableName.toLowerCase();
+  const message = String((err as any)?.message ?? '');
+  const metaMessage = String((err as any)?.meta?.message ?? '');
+  const metaCode = String((err as any)?.meta?.code ?? '');
+
+  // Postgres undefined_table
+  if (metaCode === '42P01') return true;
+
+  const haystack = `${message}\n${metaMessage}`.toLowerCase();
+  return (
+    haystack.includes(`relation "${lower}" does not exist`) ||
+    haystack.includes(`table "${lower}" does not exist`) ||
+    haystack.includes(`no such table: ${lower}`)
+  );
+}
+
+async function getUserActiveInstanceId(userId: string): Promise<string | null> {
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM crm_instancias WHERE user_id = $1 AND is_active = TRUE LIMIT 1`,
+      userId,
+    );
+    return rows.length > 0 ? String(rows[0].id) : null;
+  } catch (e) {
+    if (isUndefinedTableError(e, 'crm_instancias')) return null;
+    throw e;
+  }
+}
+
+async function getUserInstanceIdForLists(userId: string): Promise<string | null> {
+  // Prefer explicit "active instance" setting.
+  const active = await getUserActiveInstanceId(userId);
+  if (active) return active;
+
+  // Fallback for legacy data: derive from chats.
+  try {
+    const instance = await prisma.crmChat.findFirst({
+      where: {
+        owner_user_id: userId,
+        instancia_id: { not: null },
+      },
+      select: { instancia_id: true },
+      orderBy: [{ updated_at: 'desc' }, { created_at: 'desc' }],
+    });
+
+    return instance?.instancia_id ? String(instance.instancia_id) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function requireChatAccess(opts: {
+  empresaId: string;
+  userId: string;
+  chatId: string;
+}): Promise<{
+  id: string;
+  wa_id: string;
+  phone: string | null;
+  last_message_at: Date | null;
+  instancia_id: string | null;
+  owner_user_id: string | null;
+  asignado_a_user_id: string | null;
+}> {
+  const chat = await prisma.crmChat.findFirst({
+    where: { id: opts.chatId, empresa_id: opts.empresaId },
+    select: {
+      id: true,
+      wa_id: true,
+      phone: true,
+      last_message_at: true,
+      instancia_id: true,
+      owner_user_id: true,
+      asignado_a_user_id: true,
+    },
+  });
+  if (!chat) throw new ApiError(404, 'Chat not found');
+
+  if (chat.instancia_id) {
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id FROM crm_instancias WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        chat.instancia_id,
+        opts.userId,
+      );
+      if (rows.length === 0) throw new ApiError(403, 'You do not have access to this chat');
+    } catch (e) {
+      if (isUndefinedTableError(e, 'crm_instancias')) {
+        throw new ApiError(409, 'CRM multi-instancia no est\u00e1 instalado (falta crm_instancias). Ejecuta las migraciones SQL.');
+      }
+      throw e;
+    }
+    return chat;
+  }
+
+  // Legacy chats without instancia_id: require explicit ownership/assignment.
+  if (chat.owner_user_id !== opts.userId && chat.asignado_a_user_id !== opts.userId) {
+    throw new ApiError(403, 'You do not have access to this chat');
+  }
+
+  return chat;
+}
+
+async function getEvolutionClientForChat(chatId: string): Promise<EvolutionClient> {
+  const chat = await prisma.crmChat.findUnique({
+    where: { id: chatId },
+    select: { instancia_id: true },
+  });
+
+  const instanciaId = chat?.instancia_id ? String(chat.instancia_id) : '';
+  if (!instanciaId) {
+    // Backwards compatibility for environments that still use env-based Evolution config.
+    return new EvolutionClient();
+  }
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT nombre_instancia, evolution_base_url, evolution_api_key
+       FROM crm_instancias
+       WHERE id = $1
+       LIMIT 1`,
+      instanciaId,
+    );
+
+    const inst = rows[0];
+    if (!inst?.evolution_base_url || !inst?.evolution_api_key) {
+      throw new ApiError(409, 'Evolution no est\u00e1 configurado para esta instancia');
+    }
+
+    return new EvolutionClient({
+      baseUrl: String(inst.evolution_base_url),
+      apiKey: String(inst.evolution_api_key),
+      instanceName: String(inst.nombre_instancia ?? ''),
+    });
+  } catch (e) {
+    if (isUndefinedTableError(e, 'crm_instancias')) {
+      throw new ApiError(409, 'CRM multi-instancia no est\u00e1 instalado (falta crm_instancias). Ejecuta las migraciones SQL.');
+    }
+    throw e;
+  }
+}
+
+async function isChatLockedByOperations(chatId: string): Promise<boolean> {
+  try {
+    const active = await prisma.operationsJob.findFirst({
+      where: {
+        crm_chat_id: chatId,
+        deleted_at: null,
+        status: { notIn: ['completed', 'closed', 'cancelled'] as any },
+      } as any,
+      select: { id: true },
+    });
+    return Boolean(active?.id);
+  } catch {
+    // If operations tables are missing or Prisma model isn't available, don't lock.
+    return false;
+  }
+}
+
 let aiMessageAuditsExistsCache: boolean | null = null;
 let aiMessageAuditsExistsAtMs = 0;
 async function aiMessageAuditsTableExists(): Promise<boolean> {
@@ -244,9 +404,20 @@ async function createAndSendTextForChat(opts: {
       return updated;
     }
 
-    // Use standard EvolutionClient (uses env config)
-    // TODO: Implement instance-specific client in future phase
-    const evo = new EvolutionClient();
+    if (instanciaId && !evolutionConfig) {
+      throw new ApiError(
+        409,
+        'No se encontr\u00f3 la configuraci\u00f3n de Evolution para la instancia de este chat.',
+      );
+    }
+
+    const evo = evolutionConfig
+      ? new EvolutionClient({
+          baseUrl: evolutionConfig.baseUrl,
+          apiKey: evolutionConfig.apiKey,
+          instanceName: evolutionConfig.instanceName,
+        })
+      : new EvolutionClient();
 
     const send = await evo.sendText({
       toWaId: opts.waId,
@@ -485,21 +656,7 @@ export async function getChat(req: Request, res: Response) {
   const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
   if (!chat) throw new ApiError(404, 'Chat not found');
 
-  // ========================================================
-  // INSTANCE SECURITY - Verify user has access to this chat
-  // ========================================================
-  if (chat.instancia_id) {
-    const instances = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT id FROM crm_instancias WHERE id = $1 AND user_id = $2 LIMIT 1`,
-      chat.instancia_id,
-      userId
-    );
-    
-    if (instances.length === 0) {
-      // User doesn't own this instance
-      throw new ApiError(403, 'You do not have access to this chat');
-    }
-  }
+  await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   // Enrich with meta if available.
   let merged: any = chat;
@@ -682,12 +839,14 @@ function toMessageApiItem(m: any) {
     type,
     messageType: type,
     text: m.text ?? null,
+    mediaUrl: m.media_url ?? null,
     status: m.status ?? 'received',
     createdAt,
 
     // backward compatible snake_case
     chat_id: m.chat_id,
     message_type: m.message_type ?? type,
+    media_url: m.media_url ?? null,
     remote_message_id: m.remote_message_id ?? null,
     quoted_message_id: m.quoted_message_id ?? null,
     timestamp: m.timestamp ?? null,
@@ -697,6 +856,8 @@ function toMessageApiItem(m: any) {
 }
 
 export async function deleteChatMessage(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = String(req.params.chatId ?? '').trim();
   const messageId = String(req.params.messageId ?? '').trim();
 
@@ -721,15 +882,14 @@ export async function deleteChatMessage(req: Request, res: Response) {
     return;
   }
 
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
-  if (!chat) throw new ApiError(404, 'Chat not found');
+  const chat = await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   const remoteMessageId = (msg.remote_message_id ?? '').trim();
   if (!remoteMessageId) {
     throw new ApiError(409, 'Message has no remote_message_id; cannot delete on WhatsApp');
   }
 
-  const evo = new EvolutionClient();
+  const evo = await getEvolutionClientForChat(chatId);
   try {
     await evo.deleteMessage({
       remoteMessageId,
@@ -771,6 +931,7 @@ export async function deleteChatMessage(req: Request, res: Response) {
 
 export async function editChatMessage(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = String(req.params.chatId ?? '').trim();
   const messageId = String(req.params.messageId ?? '').trim();
 
@@ -800,15 +961,14 @@ export async function editChatMessage(req: Request, res: Response) {
     throw new ApiError(409, 'Deleted messages cannot be edited');
   }
 
-  const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
-  if (!chat) throw new ApiError(404, 'Chat not found');
+  const chat = await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   const remoteMessageId = (msg.remote_message_id ?? '').trim();
   if (!remoteMessageId) {
     throw new ApiError(409, 'Message has no remote_message_id; cannot edit on WhatsApp');
   }
 
-  const evo = new EvolutionClient();
+  const evo = await getEvolutionClientForChat(chatId);
   try {
     await evo.editTextMessage({
       remoteMessageId,
@@ -857,37 +1017,7 @@ export async function listChats(req: Request, res: Response) {
   // ========================================================
   // INSTANCE FILTERING - Get user's active instance
   // ========================================================
-  let userInstanceId: string | null = null;
-  try {
-    const instance = await prisma.crmChat.findFirst({
-      where: { 
-        owner_user_id: userId,
-        instancia_id: { not: null },
-      },
-      select: { instancia_id: true },
-    });
-    
-    if (instance?.instancia_id) {
-      userInstanceId = instance.instancia_id;
-    }
-  } catch (e: any) {
-    console.error('[CRM] Error fetching user instance:', e?.message || e);
-  }
-
-  // If user has no chats with instance, try to get active instance from crm_instancias table
-  if (!userInstanceId) {
-    try {
-      const instances = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id FROM crm_instancias WHERE user_id = $1 AND is_active = TRUE LIMIT 1`,
-        userId
-      );
-      if (instances.length > 0) {
-        userInstanceId = instances[0].id;
-      }
-    } catch (e: any) {
-      console.error('[CRM] Error fetching instance from crm_instancias:', e?.message || e);
-    }
-  }
+  const userInstanceId = await getUserInstanceIdForLists(userId);
 
   // If user has no active instance, return empty list
   if (!userInstanceId) {
@@ -1004,16 +1134,24 @@ export async function listChats(req: Request, res: Response) {
  */
 export async function listPurchasedClients(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const parsed = crmChatsListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
 
   const { search, page, limit } = parsed.data;
   const skip = (page - 1) * limit;
 
+  const userInstanceId = await getUserInstanceIdForLists(userId);
+  if (!userInstanceId) {
+    res.json({ items: [], total: 0, page, limit });
+    return;
+  }
+
   // STRICT FILTER: Only chats with status = "compro"
   const where: any = {
     empresa_id,
     status: 'compro',
+    instancia_id: userInstanceId,
   };
 
   if (search && search.trim().length > 0) {
@@ -1106,16 +1244,24 @@ export async function listBoughtChats(req: Request, res: Response) {
 // GET /api/crm/chats/bought/inbox
 export async function listBoughtInbox(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const parsed = crmChatsListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
 
   const { search, page, limit } = parsed.data;
   const skip = (page - 1) * limit;
 
+  const userInstanceId = await getUserInstanceIdForLists(userId);
+  if (!userInstanceId) {
+    res.json({ items: [], total: 0, page, limit });
+    return;
+  }
+
   const where: any = {
     empresa_id,
     status: 'compro',
     active_client_message_pending: true,
+    instancia_id: userInstanceId,
   };
 
   if (search && search.trim().length > 0) {
@@ -1191,7 +1337,10 @@ export async function listBoughtInbox(req: Request, res: Response) {
 // PATCH /api/crm/chats/:chatId/bought/inbox/clear
 export async function clearBoughtInboxFlag(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
+
+  await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   const chat = await prisma.crmChat.findFirst({
     where: { id: chatId, empresa_id, status: 'compro' },
@@ -1211,10 +1360,13 @@ export async function clearBoughtInboxFlag(req: Request, res: Response) {
 // PATCH /api/crm/chats/:chatId/post-sale-state
 export async function patchPostSaleState(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
 
   const parsed = crmPostSaleStateSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
+
+  await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   const chat = await prisma.crmChat.findFirst({
     where: { id: chatId, empresa_id },
@@ -1457,11 +1609,21 @@ export async function deleteChat(req: Request, res: Response) {
 
 export async function patchChat(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
 
   const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
   if (!chat) throw new ApiError(404, 'Chat not found');
   if (chat.empresa_id !== empresa_id) throw new ApiError(403, 'Forbidden');
+
+  await requireChatAccess({ empresaId: empresa_id, userId, chatId });
+
+  if (await isChatLockedByOperations(chatId)) {
+    throw new ApiError(
+      422,
+      'Este chat ya fue pasado a Operaciones. En CRM solo puedes enviar mensajes al cliente.',
+    );
+  }
 
   const parsed = crmChatPatchSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -1641,8 +1803,9 @@ async function ensureCustomerForChat(params: {
   empresaId: string;
   chat: { id: string; wa_id: string; phone: string | null; display_name: string | null };
   phoneOverride?: string | null;
+  addressText?: string | null;
 }): Promise<{ id: string; nombre: string; telefono: string; direccion: string | null; ubicacion_mapa: string | null }> {
-  const { tx, empresaId, chat, phoneOverride } = params;
+  const { tx, empresaId, chat, phoneOverride, addressText } = params;
 
   const phoneCandidate = chat.phone ?? phoneOverride ?? phoneFromWaId(String(chat.wa_id ?? ''));
   const telefono = toPhoneE164(phoneCandidate);
@@ -1656,7 +1819,22 @@ async function ensureCustomerForChat(params: {
   const existing = await tx.customer.findFirst({
     where: { empresa_id: empresaId, telefono, deleted_at: null },
   });
-  if (existing) return existing;
+  if (existing) {
+    const addr = String(addressText ?? '').trim();
+    if (addr) {
+      const hasAddress =
+        (existing.direccion && String(existing.direccion).trim().length > 0) ||
+        (existing.ubicacion_mapa && String(existing.ubicacion_mapa).trim().length > 0);
+
+      if (!hasAddress) {
+        return await tx.customer.update({
+          where: { id: existing.id },
+          data: { direccion: addr },
+        });
+      }
+    }
+    return existing;
+  }
 
   const created = await tx.customer.create({
     data: {
@@ -1664,6 +1842,7 @@ async function ensureCustomerForChat(params: {
       nombre: name,
       telefono,
       origen: 'whatsapp',
+      ...(addressText && String(addressText).trim().length > 0 ? { direccion: String(addressText).trim() } : {}),
     },
   });
   return created;
@@ -1677,6 +1856,16 @@ export async function postChatStatus(req: Request, res: Response) {
   const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
   if (!chat) throw new ApiError(404, 'Chat not found');
   if (chat.empresa_id !== empresa_id) throw new ApiError(403, 'Forbidden');
+
+  await requireChatAccess({ empresaId: empresa_id, userId: user_id, chatId });
+
+  // Once a job exists in Operaciones, CRM becomes read-only (except messaging).
+  if (await isChatLockedByOperations(chatId)) {
+    throw new ApiError(
+      422,
+      'Este chat ya fue pasado a Operaciones. En CRM solo puedes enviar mensajes al cliente.',
+    );
+  }
 
   const parsed = crmChatStatusSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -1843,6 +2032,7 @@ export async function postChatStatus(req: Request, res: Response) {
         display_name: chat.display_name ?? null,
       },
       phoneOverride: phoneOverride ?? null,
+      addressText: locationResolved.length > 0 ? locationResolved : null,
     });
 
     if (wantsSchedulingPayload) {
@@ -2062,6 +2252,7 @@ export async function postChatStatus(req: Request, res: Response) {
 
 export async function convertChatToCustomer(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
 
   // Extract status from query to set appropriate tags
@@ -2078,7 +2269,9 @@ export async function convertChatToCustomer(req: Request, res: Response) {
 
   const crmStatus = normalizeCustomerTag(crmStatusRaw);
 
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
+  await requireChatAccess({ empresaId: empresa_id, userId, chatId });
+
+  const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
   if (!chat) throw new ApiError(404, 'Chat not found');
 
   const phoneCandidate = chat.phone ?? phoneFromWaId(String(chat.wa_id ?? ''));
@@ -2141,15 +2334,29 @@ export async function convertChatToCustomer(req: Request, res: Response) {
 
 export async function listChatStats(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
+
+  const userInstanceId = await getUserInstanceIdForLists(userId);
+  if (!userInstanceId) {
+    res.json({
+      total: 0,
+      boughtTotal: 0,
+      byStatus: {},
+      importantCount: 0,
+      unreadTotal: 0,
+    });
+    return;
+  }
 
   const whereNormal: any = {
     empresa_id,
     status: { notIn: ['compro', 'eliminado'] },
+    instancia_id: userInstanceId,
   };
 
   const [total, boughtTotal, byStatusRows, unreadAgg] = await Promise.all([
     prisma.crmChat.count({ where: whereNormal }),
-    prisma.crmChat.count({ where: { empresa_id, status: 'compro' } }),
+    prisma.crmChat.count({ where: { empresa_id, status: 'compro', instancia_id: userInstanceId } }),
     prisma.crmChat.groupBy({
       by: ['status'],
       where: whereNormal,
@@ -2171,9 +2378,11 @@ export async function listChatStats(req: Request, res: Response) {
       JOIN crm_chats c ON c.id = m.chat_id
       WHERE c.empresa_id = $1::uuid
         AND c.status NOT IN ('compro','eliminado')
+        AND c.instancia_id = $2::uuid
         AND m.important = TRUE
       `,
       empresa_id,
+      userInstanceId,
     );
     importantCount = importantRows?.[0]?.count ?? 0;
   }
@@ -2195,13 +2404,11 @@ export async function listChatStats(req: Request, res: Response) {
 }
 
 export async function listChatMessages(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
 
-  // Temporary debug logs for production verification.
-  console.log('[CRM] listChatMessages called', { chatId });
-
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
-  if (!chat) throw new ApiError(404, 'Chat not found');
+  await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   const parsed = crmChatMessagesListQuerySchema.safeParse(req.query);
   if (!parsed.success) throw new ApiError(400, 'Invalid query', parsed.error.flatten());
@@ -2220,8 +2427,6 @@ export async function listChatMessages(req: Request, res: Response) {
   const items = itemsDesc.slice().reverse();
   const nextBefore = itemsDesc.length > 0 ? itemsDesc[itemsDesc.length - 1].timestamp : null;
 
-  console.log('[CRM] listChatMessages result', { chatId, count: items.length });
-
   const mapped = items.map(toMessageApiItem);
 
   res.json({
@@ -2239,10 +2444,10 @@ export async function postUpload(req: Request, res: Response) {
 
 export async function sendTextMessage(req: Request, res: Response) {
   const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
 
-  const chat = await prisma.crmChat.findFirst({ where: { id: chatId, empresa_id } });
-  if (!chat) throw new ApiError(404, 'Chat not found');
+  const chat = await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   const parsed = crmSendTextSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -2264,7 +2469,7 @@ export async function sendTextMessage(req: Request, res: Response) {
     aiSuggestionId,
     aiSuggestedText,
     aiUsedKnowledge,
-    empresaId: chat.empresa_id,
+    empresaId: empresa_id,
   });
 
   res.status(201).json({
@@ -2276,6 +2481,7 @@ export async function sendTextMessage(req: Request, res: Response) {
 
 export async function sendOutboundTextMessage(req: Request, res: Response) {
   const empresaId = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const parsed = crmOutboundSendTextSchema.safeParse(req.body);
   if (!parsed.success) throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
 
@@ -2286,24 +2492,63 @@ export async function sendOutboundTextMessage(req: Request, res: Response) {
 
   const normalized = normalizeOutboundPhone(parsed.data.phone);
 
-  // Upsert so user can message a number even if it was not in the list yet.
-  const chat = await prisma.crmChat.upsert({
+  const activeInstanceId = await getUserActiveInstanceId(userId);
+  if (!activeInstanceId) {
+    throw new ApiError(
+      409,
+      'No tienes una instancia activa configurada. Configura tu Instancia Evolution antes de enviar mensajes.',
+    );
+  }
+
+  // Allow user to message a number even if it was not in the list yet, but keep instance isolation.
+  const existing = await prisma.crmChat.findUnique({
     where: ({ empresa_id_wa_id: { empresa_id: empresaId, wa_id: normalized.waId } } as any),
-    create: {
-      wa_id: normalized.waId,
-      phone: normalized.phoneE164,
-      status: status ?? 'primer_contacto',
-      display_name: displayName,
-      empresa: {
-        connect: { id: empresaId },
-      },
-    },
-    update: {
-      phone: normalized.phoneE164,
-      ...(displayName ? { display_name: displayName } : null),
-      ...(status ? { status } : null),
+    select: {
+      id: true,
+      instancia_id: true,
+      owner_user_id: true,
+      asignado_a_user_id: true,
     },
   });
+
+  if (existing?.id) {
+    // Ensure current user can access the chat and it belongs to the same instance.
+    await requireChatAccess({ empresaId, userId, chatId: existing.id });
+
+    if (existing.instancia_id && String(existing.instancia_id) !== activeInstanceId) {
+      throw new ApiError(
+        409,
+        'Este chat pertenece a otra instancia. Transfi\u00e9relo para poder gestionarlo desde tu instancia.',
+      );
+    }
+  }
+
+  const chat = existing?.id
+    ? await prisma.crmChat.update({
+        where: { id: existing.id },
+        data: {
+          phone: normalized.phoneE164,
+          ...(displayName ? { display_name: displayName } : {}),
+          ...(status ? { status } : {}),
+          ...(existing.instancia_id ? {} : {
+            instancia_id: activeInstanceId,
+            owner_user_id: userId,
+            asignado_a_user_id: userId,
+          }),
+        },
+      })
+    : await prisma.crmChat.create({
+        data: {
+          wa_id: normalized.waId,
+          phone: normalized.phoneE164,
+          status: status ?? 'primer_contacto',
+          display_name: displayName,
+          instancia_id: activeInstanceId,
+          owner_user_id: userId,
+          asignado_a_user_id: userId,
+          empresa: { connect: { id: empresaId } },
+        },
+      });
 
   const skipEvolution = Boolean((parsed.data as any).skipEvolution ?? false);
   const remoteMessageId = ((parsed.data as any).remoteMessageId ?? null) as string | null;
@@ -2318,7 +2563,7 @@ export async function sendOutboundTextMessage(req: Request, res: Response) {
     aiSuggestionId: parsed.data.aiSuggestionId ?? null,
     aiSuggestedText: parsed.data.aiSuggestedText ?? null,
     aiUsedKnowledge: (parsed.data.aiUsedKnowledge ?? null) as any,
-    empresaId: chat.empresa_id,
+    empresaId: empresaId,
   });
 
   res.status(201).json({
@@ -2339,10 +2584,11 @@ export async function recordMediaMessage(req: Request, res: Response) {
 }
 
 export async function markChatRead(req: Request, res: Response) {
+  const empresa_id = actorEmpresaId(req);
+  const userId = actorUserId(req);
   const chatId = req.params.chatId;
 
-  const chat = await prisma.crmChat.findUnique({ where: { id: chatId } });
-  if (!chat) throw new ApiError(404, 'Chat not found');
+  await requireChatAccess({ empresaId: empresa_id, userId, chatId });
 
   await prisma.crmChat.update({
     where: { id: chatId },

@@ -7,6 +7,7 @@ const ROLE_DEFAULTS: Record<string, PermissionCode[]> = {
   admin: ['*'],
   administrador: ['*'],
   vendedor: [
+    'pos.cashbox.manage',
     'pos.sell',
     'pos.reports.view',
     'printing.use',

@@ -59,9 +59,24 @@ const primarySidebarItems = <SidebarItem>[
     route: AppRoutes.pos,
     children: [
       SidebarItem(
+        label: 'Caja',
+        icon: Icons.point_of_sale_outlined,
+        route: AppRoutes.posCaja,
+      ),
+      SidebarItem(
+        label: 'NCF',
+        icon: Icons.receipt_long_outlined,
+        route: AppRoutes.posNcf,
+      ),
+      SidebarItem(
         label: 'TPV',
         icon: Icons.point_of_sale_outlined,
         route: AppRoutes.pos,
+      ),
+      SidebarItem(
+        label: 'Ventas POS',
+        icon: Icons.receipt_long_outlined,
+        route: AppRoutes.posSales,
       ),
       SidebarItem(
         label: 'Compras',

@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/routing/app_routes.dart';
 import '../../models/operations_models.dart';
-import '../../data/operations_repository.dart';
 import '../../state/operations_providers.dart';
 
 /// Compact operation card with:

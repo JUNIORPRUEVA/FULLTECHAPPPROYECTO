@@ -1477,6 +1477,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     );
   }
 
+  // ignore: unused_element
   Future<void> _openCategoriaDialog(BuildContext context) async {
     final controller = ref.read(catalogControllerProvider.notifier);
     final nameCtrl = TextEditingController();

@@ -738,6 +738,17 @@ class _MaintenanceListViewState extends ConsumerState<MaintenanceListView> {
             'Error al cargar mantenimientos',
             style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
           ),
+          if (error.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Text(
+                error,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: () {

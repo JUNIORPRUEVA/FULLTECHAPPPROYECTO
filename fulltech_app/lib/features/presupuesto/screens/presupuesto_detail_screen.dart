@@ -15,10 +15,10 @@ import '../../auth/state/auth_providers.dart';
 import '../../auth/state/auth_state.dart';
 import '../../catalogo/models/producto.dart';
 import '../../configuracion/state/company_profile_providers.dart';
-import '../../cotizaciones/data/quotation_repository.dart';
 import '../../cotizaciones/state/cotizaciones_providers.dart'
     hide quotationApiProvider;
 import '../../crm/data/models/crm_thread.dart';
+import '../../cartas/widgets/create_carta_dialog.dart';
 import '../models/quotation_models.dart';
 import '../services/quotation_pdf_service.dart';
 import '../state/presupuesto_catalog_controller.dart';
@@ -107,6 +107,7 @@ class _PresupuestoDetailScreenState
 
         await repo.refreshFromServer(
           empresaId: session.user.empresaId,
+          userId: session.user.id,
           limit: 1,
           offset: 0,
         );
@@ -115,7 +116,7 @@ class _PresupuestoDetailScreenState
         if (retryQuotation == null) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('❌ Cotización no encontrada')),
+              const SnackBar(content: Text('Cotización no encontrada')),
             );
           }
           return;
@@ -128,10 +129,52 @@ class _PresupuestoDetailScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Error cargando cotización: $e')),
+          const SnackBar(content: Text('No se pudo cargar la cotización.')),
         );
       }
     }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  void _openCartas() {
+    final presupuestoId = (widget.quotationId ?? '').trim();
+    if (presupuestoId.isEmpty) {
+      _toast('Guarda la cotización primero para ver sus cartas.');
+      return;
+    }
+    context.go(
+      '${AppRoutes.cartas}?presupuestoId=${Uri.encodeComponent(presupuestoId)}',
+    );
+  }
+
+  Future<void> _openCrearCarta() async {
+    final presupuestoId = (widget.quotationId ?? '').trim();
+    if (presupuestoId.isEmpty) {
+      _toast('Guarda la cotización primero para crear una carta.');
+      return;
+    }
+
+    final quote = ref.read(quotationBuilderControllerProvider);
+    final customer = quote.customer;
+
+    final createdId = await showDialog<String>(
+      context: context,
+      builder: (context) => CreateCartaDialog(
+        presupuestoId: presupuestoId,
+        defaultCotizacionId: presupuestoId,
+        defaultClienteId: customer?.id,
+        defaultCustomerName: customer?.nombre,
+        defaultCustomerPhone: customer?.telefono,
+      ),
+    );
+
+    if (createdId == null || createdId.trim().isEmpty) return;
+    if (!mounted) return;
+    context.go(AppRoutes.cartaDetail(createdId));
   }
 
   Future<void> _populateBuilderFromQuotation(
@@ -352,9 +395,8 @@ class _PresupuestoDetailScreenState
                     canSeeCost: canSeeCost,
                     onOpenCotizaciones: () =>
                         context.go(AppRoutes.cotizaciones),
-                    onOpenCartas: () =>
-                        context.go(AppRoutes.informeCotizaciones),
-                    onOpenCrearCartas: () => context.go(AppRoutes.crearCartas),
+                    onOpenCartas: _openCartas,
+                    onOpenCrearCartas: _openCrearCarta,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -409,8 +451,8 @@ class _PresupuestoDetailScreenState
                   onAddProduct: _addProduct,
                   canSeeCost: canSeeCost,
                   onOpenCotizaciones: () => context.go(AppRoutes.cotizaciones),
-                  onOpenCartas: () => context.go(AppRoutes.informeCotizaciones),
-                  onOpenCrearCartas: () => context.go(AppRoutes.crearCartas),
+                  onOpenCartas: _openCartas,
+                  onOpenCrearCartas: _openCrearCarta,
                 ),
               ),
               const SizedBox(height: 12),
@@ -645,7 +687,7 @@ class _CatalogPane extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: onOpenCrearCartas,
                 icon: const Icon(Icons.auto_awesome_outlined),
-                label: const Text('Crear cartas'),
+                label: const Text('Crear carta'),
               ),
             ),
           ],

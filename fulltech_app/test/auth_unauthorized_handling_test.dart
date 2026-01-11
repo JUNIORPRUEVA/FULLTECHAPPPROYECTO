@@ -60,6 +60,9 @@ class FakeLocalDb implements LocalDb {
   }) async {}
 
   @override
+  Future<void> requeueErroredSyncItems({required String module}) async {}
+
+  @override
   Future<List<SyncQueueItem>> getPendingSyncItems() async => const [];
 
   @override

@@ -1425,6 +1425,16 @@ class LocalDbWeb implements LocalDb {
   }
 
   @override
+  Future<void> requeueErroredSyncItems({required String module}) async {
+    await _database.update(
+      'sync_queue',
+      {'status': 0},
+      where: 'module = ? AND status = 2',
+      whereArgs: [module],
+    );
+  }
+
+  @override
   Future<void> upsertEntity({
     required String store,
     required String id,

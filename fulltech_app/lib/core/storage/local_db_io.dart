@@ -1165,7 +1165,8 @@ class LocalDbIo implements LocalDb {
         return AuthSession.fromJson({
           'token': row['token'] as String,
           'refresh_token': row['refresh_token'] as String?,
-          'user': jsonDecode(row['user_json'] as String) as Map<String, dynamic>,
+          'user':
+              jsonDecode(row['user_json'] as String) as Map<String, dynamic>,
         });
       } catch (e) {
         // Corrupted JSON/session data: clear and force login.
@@ -1177,7 +1178,9 @@ class LocalDbIo implements LocalDb {
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[DB] Failed to read session: $e (preserving persisted session)');
+        debugPrint(
+          '[DB] Failed to read session: $e (preserving persisted session)',
+        );
       }
       return null;
     }
@@ -1815,6 +1818,16 @@ class LocalDbIo implements LocalDb {
       {'status': 2},
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  @override
+  Future<void> requeueErroredSyncItems({required String module}) async {
+    await _database.update(
+      'sync_queue',
+      {'status': 0},
+      where: 'module = ? AND status = 2',
+      whereArgs: [module],
     );
   }
 

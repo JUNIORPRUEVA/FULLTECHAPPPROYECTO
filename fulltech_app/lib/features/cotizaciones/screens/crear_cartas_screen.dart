@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fulltech_app/core/widgets/module_page.dart';
-import 'package:fulltech_app/features/cartas/data/letters_api.dart';
 import 'package:fulltech_app/features/cartas/models/letter_models.dart';
 import 'package:fulltech_app/features/cartas/state/letters_providers.dart';
-import 'package:fulltech_app/features/cotizaciones/data/quotation_repository.dart';
 import 'package:fulltech_app/features/cotizaciones/state/cotizaciones_providers.dart';
 import 'package:fulltech_app/features/auth/state/auth_providers.dart';
 
@@ -49,17 +47,6 @@ class _CrearCartasScreenState extends ConsumerState<CrearCartasScreen> {
     }
   }
 
-  Future<void> _showCreateDialog() async {
-    await showDialog(
-      context: context,
-      builder: (context) => CreateLetterDialog(
-        onCreated: () {
-          _loadLetters();
-        },
-      ),
-    );
-  }
-
   Future<void> _deleteLetter(String letterId) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -100,13 +87,7 @@ class _CrearCartasScreenState extends ConsumerState<CrearCartasScreen> {
   Widget build(BuildContext context) {
     return ModulePage(
       title: 'Cartas',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.add),
-          tooltip: 'Crear nueva carta',
-          onPressed: _showCreateDialog,
-        ),
-      ],
+      actions: const [],
       child: Column(
         children: [
           Padding(
@@ -137,12 +118,6 @@ class _CrearCartasScreenState extends ConsumerState<CrearCartasScreen> {
                         ),
                         const SizedBox(height: 16),
                         const Text('No hay cartas'),
-                        const SizedBox(height: 8),
-                        FilledButton.icon(
-                          onPressed: _showCreateDialog,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Crear primera carta'),
-                        ),
                       ],
                     ),
                   )
@@ -164,7 +139,7 @@ class _CrearCartasScreenState extends ConsumerState<CrearCartasScreen> {
                           trailing: PopupMenuButton<String>(
                             onSelected: (value) {
                               if (value == 'ver') {
-                                context.go('/cartas/${letter.id}');
+                                context.go('/crear-cartas/${letter.id}');
                               } else if (value == 'eliminar') {
                                 _deleteLetter(letter.id);
                               }
@@ -195,7 +170,7 @@ class _CrearCartasScreenState extends ConsumerState<CrearCartasScreen> {
                               ),
                             ],
                           ),
-                          onTap: () => context.go('/cartas/${letter.id}'),
+                          onTap: () => context.go('/crear-cartas/${letter.id}'),
                         ),
                       );
                     },
@@ -363,7 +338,7 @@ class _CreateLetterDialogState extends ConsumerState<CreateLetterDialog> {
         status: 'SAVED',
       );
 
-      final letter = await api.createLetter(request);
+      await api.createLetter(request);
 
       setState(() => _loading = false);
 
@@ -371,7 +346,7 @@ class _CreateLetterDialogState extends ConsumerState<CreateLetterDialog> {
         Navigator.pop(context);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('✅ Carta guardada')));
+        ).showSnackBar(const SnackBar(content: Text('Carta guardada')));
         widget.onCreated();
       }
     } catch (e) {

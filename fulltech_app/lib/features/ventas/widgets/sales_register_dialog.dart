@@ -1,7 +1,4 @@
 import 'dart:async';
-
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -14,7 +11,6 @@ import '../../catalogo/state/catalog_providers.dart';
 import '../../customers/data/models/customer_response.dart';
 import '../../customers/providers/customers_provider.dart';
 import '../../presupuesto/widgets/manual_item_dialog.dart';
-import '../data/sales_repository.dart';
 import '../models/sales_models.dart';
 
 class SalesRegisterDialogResult {
@@ -22,14 +18,12 @@ class SalesRegisterDialogResult {
   final List<SalesLineItem> items;
   final DateTime soldAt;
   final String? notes;
-  final List<EvidenceDraft> evidences;
 
   const SalesRegisterDialogResult({
     required this.customer,
     required this.items,
     required this.soldAt,
     required this.notes,
-    required this.evidences,
   });
 }
 
@@ -37,14 +31,11 @@ class SalesRegisterDialog extends ConsumerStatefulWidget {
   final String title;
   final SalesRecord? existing;
 
-  const SalesRegisterDialog({
-    super.key,
-    required this.title,
-    this.existing,
-  });
+  const SalesRegisterDialog({super.key, required this.title, this.existing});
 
   @override
-  ConsumerState<SalesRegisterDialog> createState() => _SalesRegisterDialogState();
+  ConsumerState<SalesRegisterDialog> createState() =>
+      _SalesRegisterDialogState();
 }
 
 class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
@@ -66,8 +57,6 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
 
   bool _saving = false;
   String? _error;
-
-  final List<EvidenceDraft> _evidences = [];
 
   @override
   void initState() {
@@ -148,7 +137,11 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
 
     try {
       final api = ref.read(catalogApiProvider);
-      final items = await api.listProductos(q: _productSearchCtrl.text.trim(), limit: 50, page: 1);
+      final items = await api.listProductos(
+        q: _productSearchCtrl.text.trim(),
+        limit: 50,
+        page: 1,
+      );
       setState(() {
         _products = items;
         _loadingProducts = false;
@@ -163,7 +156,8 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
 
   double get _total => _items.fold<double>(0, (acc, it) => acc + it.total);
 
-  String _formatMoney(num v) => NumberFormat.currency(symbol: r'$', decimalDigits: 2).format(v);
+  String _formatMoney(num v) =>
+      NumberFormat.currency(symbol: r'$', decimalDigits: 2).format(v);
 
   String _publicUrlFromMaybeRelative(String raw) {
     final v = raw.trim();
@@ -316,7 +310,9 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
 
   Future<void> _editItemDetails(SalesLineItem it) async {
     final qtyCtrl = TextEditingController(text: it.quantity.toString());
-    final priceCtrl = TextEditingController(text: it.unitPrice.toStringAsFixed(2));
+    final priceCtrl = TextEditingController(
+      text: it.unitPrice.toStringAsFixed(2),
+    );
 
     int? parseQty(String s) {
       final v = int.tryParse(s.trim());
@@ -347,13 +343,19 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                 TextField(
                   controller: qtyCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Cantidad vendida'),
+                  decoration: const InputDecoration(
+                    labelText: 'Cantidad vendida',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: priceCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Precio vendido (unitario)'),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Precio vendido (unitario)',
+                  ),
                 ),
               ],
             ),
@@ -397,64 +399,32 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
     });
   }
 
-  Future<void> _pickEvidenceFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        // En desktop/mobile preferimos usar `path` para no cargar bytes en memoria.
-        // En web necesitamos `bytes`.
-        withData: kIsWeb,
-        type: FileType.custom,
-        allowedExtensions: const ['png', 'jpg', 'jpeg', 'pdf'],
-      );
-
-      if (result == null || result.files.isEmpty) return;
-      final f = result.files.single;
-      const maxBytes = 8 * 1024 * 1024; // backend limit
-      if (f.size > maxBytes) {
-        setState(() {
-          _error = 'El archivo excede 8MB. Selecciona uno más pequeño.';
-        });
-        return;
-      }
-      final bytes = f.bytes;
-      final path = f.path;
-
-      final hasBytes = bytes != null && bytes.isNotEmpty;
-      final hasPath = path != null && path.trim().isNotEmpty;
-      if (!hasBytes && !hasPath) {
-        setState(() => _error = 'No se pudo leer el archivo.');
-        return;
-      }
-
-      final ext = (f.extension ?? '').toLowerCase();
-      final type =
-          ext == 'pdf' ? SalesEvidenceType.pdf : SalesEvidenceType.image;
-      final filename = f.name;
-
-      final String? mimeType = switch (ext) {
-        'pdf' => 'application/pdf',
-        'png' => 'image/png',
-        'jpg' => 'image/jpeg',
-        'jpeg' => 'image/jpeg',
-        _ => null,
-      };
-
-      setState(() {
-        _error = null;
-        _evidences.add(
-          EvidenceDraft.file(
-            type: type,
-            filename: filename,
-            mimeType: mimeType,
-            bytes: bytes ?? const [],
-            localPath: path,
+  Future<void> _showEvidenceInstructions() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Evidencia de ventas'),
+          content: const SizedBox(
+            width: 560,
+            child: Text(
+              'En este formulario no es necesario adjuntar evidencias.\n\n'
+              'Para tener respaldo si se solicita evidencia, cada usuario debe mantener mínimo 3 fotos guardadas en una carpeta llamada “Gestión de ventas” dentro de su computadora, ordenadas por fecha (por ejemplo: 2026-01-11).\n\n'
+              'Recomendación:\n'
+              '• Guardar las fotos por día o por cliente\n'
+              '• Usar nombres claros (cliente_fecha_01.jpg, etc.)',
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
         );
-      });
-    } catch (e) {
-      setState(() => _error = 'Error seleccionando archivo: $e');
-    }
+      },
+    );
   }
 
   Future<void> _submit() async {
@@ -470,11 +440,6 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
       return;
     }
 
-    if (_evidences.isEmpty) {
-      setState(() => _error = 'Debe adjuntar al menos una evidencia.');
-      return;
-    }
-
     setState(() {
       _saving = true;
       _error = null;
@@ -487,7 +452,6 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
           items: List.of(_items),
           soldAt: _soldAt,
           notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-          evidences: List.of(_evidences),
         ),
       );
     } finally {
@@ -544,7 +508,11 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                   final p = _products[i];
                   return ListTile(
                     leading: _tinyProductThumb(p),
-                    title: Text(p.nombre, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    title: Text(
+                      p.nombre,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     subtitle: Text(_formatMoney(p.precioVenta)),
                     trailing: const Icon(Icons.add_circle_outline),
                     onTap: () => _addCatalogProduct(p),
@@ -572,7 +540,10 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(widget.title, style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                widget.title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -580,7 +551,9 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: 'Cliente'),
                       child: Text(
-                        _selectedCustomer == null ? 'Seleccionar cliente' : _selectedCustomer!.fullName,
+                        _selectedCustomer == null
+                            ? 'Seleccionar cliente'
+                            : _selectedCustomer!.fullName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -589,7 +562,9 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                   const SizedBox(width: 12),
                   FilledButton(
                     onPressed: _pickCustomer,
-                    child: Text(_selectedCustomer == null ? 'Seleccionar' : 'Cambiar'),
+                    child: Text(
+                      _selectedCustomer == null ? 'Seleccionar' : 'Cambiar',
+                    ),
                   ),
                 ],
               ),
@@ -598,7 +573,9 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                 decoration: const InputDecoration(labelText: 'Fecha de venta'),
                 child: Row(
                   children: [
-                    Expanded(child: Text(DateFormat('yyyy-MM-dd').format(_soldAt))),
+                    Expanded(
+                      child: Text(DateFormat('yyyy-MM-dd').format(_soldAt)),
+                    ),
                     TextButton(
                       onPressed: () async {
                         final picked = await showDatePicker(
@@ -633,7 +610,8 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                             ),
                             Text(
                               _formatMoney(_total),
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ],
                         ),
@@ -641,15 +619,26 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                       const Divider(height: 1),
                       Expanded(
                         child: _items.isEmpty
-                            ? const Center(child: Text('Agrega productos desde la izquierda.'))
+                            ? const Center(
+                                child: Text(
+                                  'Agrega productos desde la izquierda.',
+                                ),
+                              )
                             : ListView.separated(
                                 itemCount: _items.length,
-                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
                                 itemBuilder: (context, i) {
                                   final it = _items[i];
                                   return ListTile(
-                                    title: Text(it.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    subtitle: Text('${it.quantity} × ${_formatMoney(it.unitPrice)}'),
+                                    title: Text(
+                                      it.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      '${it.quantity} × ${_formatMoney(it.unitPrice)}',
+                                    ),
                                     onTap: () => _editItemDetails(it),
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -657,16 +646,22 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
                                         IconButton(
                                           tooltip: 'Quitar',
                                           onPressed: () => _decQty(it),
-                                          icon: const Icon(Icons.remove_circle_outline),
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                          ),
                                         ),
                                         Text(
                                           it.quantity.toString(),
-                                          style: const TextStyle(fontWeight: FontWeight.w600),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                         IconButton(
                                           tooltip: 'Agregar',
                                           onPressed: () => _incQty(it),
-                                          icon: const Icon(Icons.add_circle_outline),
+                                          icon: const Icon(
+                                            Icons.add_circle_outline,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -682,19 +677,36 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
               TextField(
                 controller: _notesCtrl,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Notas (opcional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Notas (opcional)',
+                ),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _pickEvidenceFile,
-                    icon: const Icon(Icons.attach_file),
-                    label: Text('Evidencia (${_evidences.length})'),
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: _showEvidenceInstructions,
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Evidencia',
+                          prefixIcon: Icon(Icons.info_outline),
+                        ),
+                        child: const Text(
+                          'No se adjuntan archivos aquí. Ver instrucciones.',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: cs.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(999),
@@ -708,20 +720,29 @@ class _SalesRegisterDialogState extends ConsumerState<SalesRegisterDialog> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 10),
-                Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ],
               const SizedBox(height: 12),
               Row(
                 children: [
                   TextButton(
-                    onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(),
                     child: const Text('Cancelar'),
                   ),
                   const Spacer(),
                   FilledButton(
                     onPressed: _saving ? null : _submit,
                     child: _saving
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('Guardar'),
                   ),
                 ],
@@ -777,10 +798,12 @@ class _ActiveCustomerPickerDialog extends ConsumerStatefulWidget {
   const _ActiveCustomerPickerDialog();
 
   @override
-  ConsumerState<_ActiveCustomerPickerDialog> createState() => _ActiveCustomerPickerDialogState();
+  ConsumerState<_ActiveCustomerPickerDialog> createState() =>
+      _ActiveCustomerPickerDialogState();
 }
 
-class _ActiveCustomerPickerDialogState extends ConsumerState<_ActiveCustomerPickerDialog> {
+class _ActiveCustomerPickerDialogState
+    extends ConsumerState<_ActiveCustomerPickerDialog> {
   final _qCtrl = TextEditingController();
   Timer? _debounce;
 
@@ -816,7 +839,9 @@ class _ActiveCustomerPickerDialogState extends ConsumerState<_ActiveCustomerPick
     try {
       final repo = ref.read(customersRepositoryProvider);
       final res = await repo.getCustomers(q: q, limit: 30, offset: 0);
-      final active = res.items.where((e) => e.isActiveCustomer == true).toList(growable: false);
+      final active = res.items
+          .where((e) => e.isActiveCustomer == true)
+          .toList(growable: false);
       setState(() {
         _items = active;
         _loading = false;
@@ -863,7 +888,12 @@ class _ActiveCustomerPickerDialogState extends ConsumerState<_ActiveCustomerPick
                   final c = _items[i];
                   return ListTile(
                     title: Text(c.fullName),
-                    subtitle: Text([c.phone, c.status].where((s) => s.trim().isNotEmpty).join(' • ')),
+                    subtitle: Text(
+                      [
+                        c.phone,
+                        c.status,
+                      ].where((s) => s.trim().isNotEmpty).join(' • '),
+                    ),
                     onTap: () => Navigator.of(context).pop(c),
                   );
                 },

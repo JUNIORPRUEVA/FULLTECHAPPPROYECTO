@@ -11,6 +11,7 @@ import '../../../catalogo/state/catalog_providers.dart';
 import '../../../operaciones/state/operations_providers.dart';
 import '../../../../core/services/app_config.dart';
 import 'status_dialogs/required_schedule_form_dialog.dart';
+import 'followups/crm_followup_schedule_dialog.dart';
 
 String? _resolvePublicUrl(String? url) {
   if (url == null) return null;
@@ -308,7 +309,56 @@ class _ActionsSection extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 value: thread.followUp,
                 onChanged: (newVal) async {
-                  await onSave({'follow_up': newVal});
+                  final repo = ref.read(crmRepositoryProvider);
+
+                  if (newVal) {
+                    final products = await ref.read(crmProductsProvider.future);
+                    if (!context.mounted) return;
+                    final cfg = await showCrmFollowupScheduleDialog(
+                      context,
+                      chatDisplayName: thread.displayName ?? thread.phone ?? 'Chat',
+                      products: products,
+                      initialStatus: CrmStatuses.normalizeValue(thread.status),
+                      initialProductId: thread.productId,
+                    );
+                    if (cfg == null) return;
+
+                    final created = await repo.createChatFollowups(
+                      chatId: thread.id,
+                      runAt: cfg.runAtLocal,
+                      repeatCount: cfg.repeatCount,
+                      intervalMinutes: cfg.intervalMinutes,
+                      payload: cfg.toPayloadJson(),
+                      constraints: cfg.toConstraintsJson(),
+                    );
+
+                    if (!context.mounted) return;
+                    await onSave({'follow_up': true});
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Seguimiento programado ($created envíos)',
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+
+                  final cancelled =
+                      await repo.cancelChatFollowups(chatId: thread.id);
+                  await onSave({'follow_up': false});
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Seguimientos cancelados ($cancelled)'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                  }
                 },
                 title: Text(
                   'Seguimiento',

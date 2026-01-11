@@ -211,6 +211,26 @@ class PosTpvController extends StateNotifier<PosTpvState> {
     _schedulePersist();
   }
 
+  /// Adds or replaces a ticket (used by external modules like Cotizaciones → Ticket pendiente POS).
+  void importTicket(PosTicket ticket, {bool activate = true}) {
+    final nextId = ticket.id.trim();
+    if (nextId.isEmpty) return;
+
+    final tickets = [...state.tickets];
+    final idx = tickets.indexWhere((t) => t.id == nextId);
+    if (idx >= 0) {
+      tickets[idx] = ticket;
+    } else {
+      tickets.add(ticket);
+    }
+
+    state = state.copyWith(
+      tickets: tickets,
+      activeTicketId: activate ? nextId : state.activeTicketId,
+    );
+    _schedulePersist();
+  }
+
   void renameTicket(String id, String name) {
     final nextName = name.trim();
     if (nextName.isEmpty) return;

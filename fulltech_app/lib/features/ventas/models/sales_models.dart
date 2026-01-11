@@ -17,7 +17,14 @@ class SalesChannel {
   static const walkin = 'walkin';
   static const other = 'other';
 
-  static const all = <String>[whatsapp, instagram, facebook, call, walkin, other];
+  static const all = <String>[
+    whatsapp,
+    instagram,
+    facebook,
+    call,
+    walkin,
+    other,
+  ];
 }
 
 class SalesStatus {
@@ -114,7 +121,8 @@ class SalesRecord {
     return 0;
   }
 
-  factory SalesRecord.fromServerJson(Map<String, dynamic> json, {
+  factory SalesRecord.fromServerJson(
+    Map<String, dynamic> json, {
     required String empresaId,
     String syncStatus = SyncStatus.synced,
   }) {
@@ -137,21 +145,34 @@ class SalesRecord {
       id: (json['id'] ?? '').toString(),
       empresaId: empresaId,
       userId: (json['user_id'] ?? json['userId'] ?? '').toString(),
-      customerName: (json['customer_name'] as String?)?.trim().isEmpty == true ? null : json['customer_name'] as String?,
-      customerPhone: (json['customer_phone'] as String?)?.trim().isEmpty == true ? null : json['customer_phone'] as String?,
-      customerDocument: (json['customer_document'] as String?)?.trim().isEmpty == true ? null : json['customer_document'] as String?,
+      customerName: (json['customer_name'] as String?)?.trim().isEmpty == true
+          ? null
+          : json['customer_name'] as String?,
+      customerPhone: (json['customer_phone'] as String?)?.trim().isEmpty == true
+          ? null
+          : json['customer_phone'] as String?,
+      customerDocument:
+          (json['customer_document'] as String?)?.trim().isEmpty == true
+          ? null
+          : json['customer_document'] as String?,
       productOrService: (json['product_or_service'] ?? '').toString(),
       items: items,
       amount: _parseAmount(json['amount']),
-      paymentMethod: (json['payment_method'] ?? SalesPaymentMethod.other).toString(),
+      paymentMethod: (json['payment_method'] ?? SalesPaymentMethod.other)
+          .toString(),
       channel: (json['channel'] ?? SalesChannel.other).toString(),
       status: (json['status'] ?? SalesStatus.confirmed).toString(),
-      notes: (json['notes'] as String?)?.trim().isEmpty == true ? null : json['notes'] as String?,
+      notes: (json['notes'] as String?)?.trim().isEmpty == true
+          ? null
+          : json['notes'] as String?,
       soldAt: _parseDate(json['sold_at']),
-      evidenceRequired: json['evidence_required'] == true || json['evidence_required'] == 1,
+      evidenceRequired:
+          json['evidence_required'] == true || json['evidence_required'] == 1,
       evidenceCount: (json['evidence_count'] as num?)?.toInt() ?? 0,
       deleted: json['deleted'] == true || json['deleted'] == 1,
-      deletedAt: json['deleted_at'] == null ? null : DateTime.tryParse(json['deleted_at'].toString()),
+      deletedAt: json['deleted_at'] == null
+          ? null
+          : DateTime.tryParse(json['deleted_at'].toString()),
       createdAt: _parseDate(json['created_at']),
       updatedAt: _parseDate(json['updated_at']),
       syncStatus: syncStatus,
@@ -192,7 +213,8 @@ class SalesRecord {
       productOrService: (row['product_or_service'] ?? '') as String,
       items: items,
       amount: (row['amount'] as num).toDouble(),
-      paymentMethod: (row['payment_method'] ?? SalesPaymentMethod.other) as String,
+      paymentMethod:
+          (row['payment_method'] ?? SalesPaymentMethod.other) as String,
       channel: (row['channel'] ?? SalesChannel.other) as String,
       status: (row['status'] ?? SalesStatus.confirmed) as String,
       notes: row['notes'] as String?,
@@ -200,9 +222,13 @@ class SalesRecord {
       evidenceRequired: (row['evidence_required'] as int) == 1,
       evidenceCount: (row['evidence_count'] as int?) ?? 0,
       deleted: (row['deleted'] as int) == 1,
-      deletedAt: row['deleted_at'] == null ? null : DateTime.tryParse(row['deleted_at'] as String),
-      createdAt: DateTime.tryParse(row['created_at'] as String) ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(row['updated_at'] as String) ?? DateTime.now(),
+      deletedAt: row['deleted_at'] == null
+          ? null
+          : DateTime.tryParse(row['deleted_at'] as String),
+      createdAt:
+          DateTime.tryParse(row['created_at'] as String) ?? DateTime.now(),
+      updatedAt:
+          DateTime.tryParse(row['updated_at'] as String) ?? DateTime.now(),
       syncStatus: (row['sync_status'] ?? SyncStatus.pending) as String,
       lastError: row['last_error'] as String?,
     );
@@ -313,13 +339,16 @@ class SalesLineItem {
 
   factory SalesLineItem.fromJson(Map<String, dynamic> json) {
     final q = json['quantity'];
-    final p = json['unit_price'];
+    final p = json['unitPrice'] ?? json['unit_price'];
     return SalesLineItem(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
       quantity: q is num ? q.toInt() : int.tryParse(q?.toString() ?? '') ?? 1,
-      unitPrice: p is num ? p.toDouble() : double.tryParse(p?.toString() ?? '') ?? 0,
-      productId: (json['product_id'] ?? json['productId'])?.toString(),
+      unitPrice: p is num
+          ? p.toDouble()
+          : double.tryParse(p?.toString() ?? '') ?? 0,
+      productId: (json['productId'] ?? json['product_id'] ?? json['productId'])
+          ?.toString(),
     );
   }
 
@@ -328,8 +357,10 @@ class SalesLineItem {
       'id': id,
       'name': name,
       'quantity': quantity,
-      'unit_price': unitPrice,
-      if (productId != null && productId!.trim().isNotEmpty) 'product_id': productId,
+      // Backend schema expects camelCase keys.
+      'unitPrice': unitPrice,
+      if (productId != null && productId!.trim().isNotEmpty)
+        'productId': productId,
     };
   }
 }
@@ -355,7 +386,8 @@ class SalesEvidence {
     required this.lastError,
   });
 
-  factory SalesEvidence.fromServerJson(Map<String, dynamic> json, {
+  factory SalesEvidence.fromServerJson(
+    Map<String, dynamic> json, {
     required String saleId,
     String syncStatus = SyncStatus.synced,
   }) {
@@ -364,8 +396,12 @@ class SalesEvidence {
       saleId: saleId,
       type: (json['type'] ?? SalesEvidenceType.image).toString(),
       urlOrPath: (json['url_or_path'] ?? json['urlOrPath'] ?? '').toString(),
-      caption: (json['caption'] as String?)?.trim().isEmpty == true ? null : json['caption'] as String?,
-      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ?? DateTime.now(),
+      caption: (json['caption'] as String?)?.trim().isEmpty == true
+          ? null
+          : json['caption'] as String?,
+      createdAt:
+          DateTime.tryParse((json['created_at'] ?? '').toString()) ??
+          DateTime.now(),
       syncStatus: syncStatus,
       lastError: null,
     );
@@ -378,7 +414,8 @@ class SalesEvidence {
       type: row['type'] as String,
       urlOrPath: row['url_or_path'] as String,
       caption: row['caption'] as String?,
-      createdAt: DateTime.tryParse(row['created_at'] as String) ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(row['created_at'] as String) ?? DateTime.now(),
       syncStatus: (row['sync_status'] ?? SyncStatus.pending) as String,
       lastError: row['last_error'] as String?,
     );
@@ -403,7 +440,8 @@ class SalesEvidence {
       // Backend expects file_path/url/text; it maps to url_or_path.
       if (type == SalesEvidenceType.link) 'url': urlOrPath,
       if (type == SalesEvidenceType.text) 'text': urlOrPath,
-      if (type == SalesEvidenceType.image || type == SalesEvidenceType.pdf) 'file_path': urlOrPath,
+      if (type == SalesEvidenceType.image || type == SalesEvidenceType.pdf)
+        'file_path': urlOrPath,
       if (caption != null) 'mime_type': caption,
     };
   }

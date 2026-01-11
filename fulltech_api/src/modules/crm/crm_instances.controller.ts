@@ -22,10 +22,95 @@ function actorEmpresaId(req: Request): string {
   return empresaId;
 }
 
+function isUndefinedTableError(err: unknown, tableName: string): boolean {
+  const lower = tableName.toLowerCase();
+  const message = String((err as any)?.message ?? '');
+  const metaMessage = String((err as any)?.meta?.message ?? '');
+  const metaCode = String((err as any)?.meta?.code ?? '');
+
+  // Postgres undefined_table
+  if (metaCode === '42P01') return true;
+
+  const haystack = `${message}\n${metaMessage}`.toLowerCase();
+  return (
+    haystack.includes(`relation "${lower}" does not exist`) ||
+    haystack.includes(`table "${lower}" does not exist`) ||
+    haystack.includes(`no such table: ${lower}`)
+  );
+}
+
+async function ensureCrmMultiInstanceSchema(): Promise<void> {
+  // Fast path: table exists.
+  try {
+    await prisma.$queryRawUnsafe(`SELECT 1 FROM crm_instancias LIMIT 1`);
+    return;
+  } catch (e) {
+    if (!isUndefinedTableError(e, 'crm_instancias')) throw e;
+  }
+
+  // Self-heal for environments where SQL migrations were skipped.
+  await prisma.$executeRawUnsafe(`
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+    CREATE TABLE IF NOT EXISTS crm_instancias (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id UUID NOT NULL REFERENCES "Empresa"(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES "Usuario"(id) ON DELETE CASCADE,
+      nombre_instancia TEXT NOT NULL,
+      evolution_base_url TEXT NOT NULL,
+      evolution_api_key TEXT NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS crm_instancias_user_active_idx
+      ON crm_instancias(user_id, is_active)
+      WHERE is_active = TRUE;
+
+    CREATE INDEX IF NOT EXISTS crm_instancias_nombre_idx ON crm_instancias(nombre_instancia);
+    CREATE INDEX IF NOT EXISTS crm_instancias_empresa_idx ON crm_instancias(empresa_id);
+
+    ALTER TABLE crm_chats
+      ADD COLUMN IF NOT EXISTS instancia_id UUID REFERENCES crm_instancias(id) ON DELETE SET NULL;
+
+    ALTER TABLE crm_chats
+      ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES "Usuario"(id) ON DELETE SET NULL;
+
+    ALTER TABLE crm_chats
+      ADD COLUMN IF NOT EXISTS asignado_a_user_id UUID REFERENCES "Usuario"(id) ON DELETE SET NULL;
+
+    CREATE INDEX IF NOT EXISTS crm_chats_instancia_idx ON crm_chats(instancia_id);
+    CREATE INDEX IF NOT EXISTS crm_chats_owner_user_idx ON crm_chats(owner_user_id);
+    CREATE INDEX IF NOT EXISTS crm_chats_assigned_user_idx ON crm_chats(asignado_a_user_id);
+
+    ALTER TABLE crm_messages
+      ADD COLUMN IF NOT EXISTS instancia_id UUID REFERENCES crm_instancias(id) ON DELETE SET NULL;
+
+    CREATE INDEX IF NOT EXISTS crm_messages_instancia_idx ON crm_messages(instancia_id);
+
+    CREATE TABLE IF NOT EXISTS crm_chat_transfer_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      chat_id UUID NOT NULL REFERENCES crm_chats(id) ON DELETE CASCADE,
+      from_user_id UUID REFERENCES "Usuario"(id) ON DELETE SET NULL,
+      to_user_id UUID NOT NULL REFERENCES "Usuario"(id) ON DELETE CASCADE,
+      from_instancia_id UUID REFERENCES crm_instancias(id) ON DELETE SET NULL,
+      to_instancia_id UUID NOT NULL REFERENCES crm_instancias(id) ON DELETE CASCADE,
+      notes TEXT,
+      created_at TIMESTAMP(3) NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS crm_chat_transfer_events_chat_idx ON crm_chat_transfer_events(chat_id);
+    CREATE INDEX IF NOT EXISTS crm_chat_transfer_events_to_user_idx ON crm_chat_transfer_events(to_user_id);
+    CREATE INDEX IF NOT EXISTS crm_chat_transfer_events_created_at_idx ON crm_chat_transfer_events(created_at DESC);
+  `);
+}
+
 // ======================================
 // GET /api/crm/instances - List user instances
 // ======================================
 export async function listInstances(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const userId = actorUserId(req);
   const empresaId = actorEmpresaId(req);
 
@@ -45,6 +130,7 @@ export async function listInstances(req: Request, res: Response) {
 // GET /api/crm/instances/active - Get active instance
 // ======================================
 export async function getActiveInstance(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const userId = actorUserId(req);
   const empresaId = actorEmpresaId(req);
 
@@ -65,6 +151,7 @@ export async function getActiveInstance(req: Request, res: Response) {
 // GET /api/crm/instances/:id - Get instance by ID
 // ======================================
 export async function getInstance(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const userId = actorUserId(req);
   const empresaId = actorEmpresaId(req);
   const { id } = req.params;
@@ -89,6 +176,7 @@ export async function getInstance(req: Request, res: Response) {
 // POST /api/crm/instances - Create new instance
 // ======================================
 export async function createInstance(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const userId = actorUserId(req);
   const empresaId = actorEmpresaId(req);
 
@@ -135,6 +223,7 @@ export async function createInstance(req: Request, res: Response) {
 // PATCH /api/crm/instances/:id - Update instance
 // ======================================
 export async function updateInstance(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const userId = actorUserId(req);
   const empresaId = actorEmpresaId(req);
   const { id } = req.params;
@@ -207,6 +296,7 @@ export async function updateInstance(req: Request, res: Response) {
 // DELETE /api/crm/instances/:id - Delete instance
 // ======================================
 export async function deleteInstance(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const userId = actorUserId(req);
   const empresaId = actorEmpresaId(req);
   const { id } = req.params;
@@ -236,6 +326,7 @@ export async function deleteInstance(req: Request, res: Response) {
 // POST /api/crm/instances/test-connection - Test connection
 // ======================================
 export async function testConnection(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const parsed = crmInstanceTestConnectionSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ApiError(400, 'Invalid payload', parsed.error.flatten());
@@ -277,6 +368,7 @@ export async function testConnection(req: Request, res: Response) {
 // POST /api/crm/chats/:chatId/transfer - Transfer chat to another user
 // ======================================
 export async function transferChat(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const userId = actorUserId(req);
   const empresaId = actorEmpresaId(req);
   const { chatId } = req.params;
@@ -393,6 +485,7 @@ export async function transferChat(req: Request, res: Response) {
 // GET /api/crm/users - List users for transfer dropdown
 // ======================================
 export async function listUsersForTransfer(req: Request, res: Response) {
+  await ensureCrmMultiInstanceSchema();
   const empresaId = actorEmpresaId(req);
   const currentUserId = actorUserId(req);
 
@@ -400,16 +493,19 @@ export async function listUsersForTransfer(req: Request, res: Response) {
   const users = await prisma.$queryRawUnsafe<any[]>(
     `SELECT DISTINCT 
        u.id,
-       u.username,
+       u.name as username,
        u.email,
        i.id as instance_id,
        i.nombre_instancia
-     FROM users u
-     INNER JOIN crm_instancias i ON i.user_id = u.id AND i.is_active = TRUE
-     WHERE u.empresa_id = $1 AND u.id != $2
-     ORDER BY u.username`,
+     FROM "Usuario" u
+     INNER JOIN crm_instancias i 
+       ON i.user_id = u.id 
+      AND i.empresa_id = u.empresa_id
+      AND i.is_active = TRUE
+     WHERE u.empresa_id = $1::uuid AND u.id != $2::uuid
+     ORDER BY u.name`,
     empresaId,
-    currentUserId
+    currentUserId,
   );
 
   res.json({ items: users });

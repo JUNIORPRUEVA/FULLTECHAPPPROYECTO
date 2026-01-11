@@ -1,9 +1,9 @@
-import 'dart:math';
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:dio/dio.dart';
 import 'package:fulltech_app/core/storage/local_db_interface.dart';
 import 'package:fulltech_app/features/presupuesto/data/quotation_api.dart';
-import 'package:dio/dio.dart';
 
 class QuotationRepository {
   QuotationRepository({required QuotationApi api, required LocalDb db})
@@ -14,6 +14,14 @@ class QuotationRepository {
   final LocalDb _db;
 
   static const _syncModule = 'quotations';
+
+  double _asDouble(Object? value, {double fallback = 0}) {
+    if (value == null) return fallback;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? fallback;
+  }
 
   String _localId() {
     final millis = DateTime.now().millisecondsSinceEpoch;
@@ -49,6 +57,10 @@ class QuotationRepository {
     return _db.listCotizacionItems(quotationId: cotizacionId);
   }
 
+  Future<Map<String, dynamic>> getRemote(String quotationId) async {
+    return _api.getQuotation(quotationId);
+  }
+
   Future<void> deleteLocal(String cotizacionId) {
     return _db.deleteCotizacion(id: cotizacionId);
   }
@@ -58,15 +70,23 @@ class QuotationRepository {
     String? customerId,
     String? customerName,
     String status = 'draft',
-    String currency = 'MXN',
     String? notes,
     List<Map<String, dynamic>> items = const [],
   }) async {
+    final session = await _db.readSession();
+    if (session == null) {
+      throw StateError('missing_session');
+    }
+
     final id = _localId();
     final now = DateTime.now().toIso8601String();
 
-    final subtotal = _sumItems(items);
-    final total = subtotal;
+    final computed = _computeLocalTotals(items);
+    final subtotal = computed.subtotal;
+    final itbisEnabled = computed.itbisEnabled;
+    final itbisRate = computed.itbisRate;
+    final itbisAmount = computed.itbisAmount;
+    final total = computed.total;
 
     await _db.upsertCotizacion(
       row: {
@@ -75,43 +95,115 @@ class QuotationRepository {
         'numero': 'BORRADOR',
         'status': status,
         'customer_id': customerId,
-        'customer_name': customerName,
-        'currency': currency,
+        'customer_name': (customerName ?? '').toString(),
+        'customer_phone': null,
+        'customer_email': null,
+        'itbis_enabled': itbisEnabled ? 1 : 0,
+        'itbis_rate': itbisRate,
         'subtotal': subtotal,
-        'tax_total': 0.0,
+        'itbis_amount': itbisAmount,
         'total': total,
         'notes': notes,
+        'created_by_user_id': session.user.id,
         'created_at': now,
         'updated_at': now,
-        'synced_at': null,
-        'deleted_at': null,
+        'sync_status': 'local',
       },
     );
 
-    await _db.replaceCotizacionItems(quotationId: id, items: items);
+    await _db.replaceCotizacionItems(
+      quotationId: id,
+      items: computed.items
+          .map((row) {
+            final patched = <String, Object?>{...row};
+            patched['quotation_id'] = id;
+            return patched;
+          })
+          .toList(growable: false),
+    );
 
     return (await _db.getCotizacion(id: id))!;
   }
 
-  double _sumItems(List<Map<String, dynamic>> items) {
-    double sum = 0;
-    for (final it in items) {
-      final qty = (it['quantity'] ?? it['qty'] ?? 1);
-      final price = (it['price'] ?? it['unit_price'] ?? 0);
-      final q = qty is num
-          ? qty.toDouble()
-          : double.tryParse(qty.toString()) ?? 0;
-      final p = price is num
-          ? price.toDouble()
-          : double.tryParse(price.toString()) ?? 0;
-      sum += q * p;
+  _LocalTotals _computeLocalTotals(List<Map<String, dynamic>> rawItems) {
+    // Accept both legacy keys (name/quantity/price/total) and server keys
+    // (nombre/cantidad/unit_price/line_total).
+    final itbisEnabled = rawItems.isNotEmpty;
+    final itbisRate = 0.18;
+
+    double subtotal = 0;
+    final now = DateTime.now().toIso8601String();
+    final items = <Map<String, Object?>>[];
+
+    for (final raw in rawItems) {
+      final id = (raw['id'] ?? _localId()).toString();
+      final productId = raw['product_id'] ?? raw['productId'];
+
+      final nombre = (raw['nombre'] ?? raw['name'] ?? '').toString();
+
+      final cantidadRaw =
+          (raw['cantidad'] ?? raw['quantity'] ?? raw['qty'] ?? 1);
+      final unitPriceRaw =
+          (raw['unit_price'] ?? raw['unitPrice'] ?? raw['price'] ?? 0);
+      final unitCostRaw = (raw['unit_cost'] ?? raw['unitCost'] ?? 0);
+
+      final cantidad = cantidadRaw is num
+          ? cantidadRaw.toDouble()
+          : double.tryParse(cantidadRaw.toString()) ?? 0;
+      final unitPrice = unitPriceRaw is num
+          ? unitPriceRaw.toDouble()
+          : double.tryParse(unitPriceRaw.toString()) ?? 0;
+      final unitCost = unitCostRaw is num
+          ? unitCostRaw.toDouble()
+          : double.tryParse(unitCostRaw.toString()) ?? 0;
+
+      final discountPctRaw = raw['discount_pct'] ?? raw['discountPct'] ?? 0;
+      final discountPct = discountPctRaw is num
+          ? discountPctRaw.toDouble()
+          : double.tryParse(discountPctRaw.toString()) ?? 0;
+
+      final lineSubtotal = round2(cantidad * unitPrice);
+      final discountAmount = round2(lineSubtotal * (discountPct / 100));
+      final lineTotal = round2(lineSubtotal - discountAmount);
+
+      subtotal = round2(subtotal + lineTotal);
+
+      items.add({
+        'id': id,
+        // quotation_id is filled by replaceCotizacionItems caller
+        'quotation_id': raw['quotation_id']?.toString() ?? '',
+        'product_id': productId?.toString(),
+        'nombre': nombre.isEmpty ? 'Item' : nombre,
+        'cantidad': cantidad,
+        'unit_cost': unitCost,
+        'unit_price': unitPrice,
+        'discount_pct': discountPct,
+        'discount_amount': discountAmount,
+        'line_subtotal': lineSubtotal,
+        'line_total': lineTotal,
+        'created_at': (raw['created_at'] ?? raw['createdAt'] ?? now).toString(),
+      });
     }
-    return sum;
+
+    final itbisAmount = itbisEnabled ? round2(subtotal * itbisRate) : 0.0;
+    final total = round2(subtotal + itbisAmount);
+
+    return _LocalTotals(
+      items: items,
+      subtotal: subtotal,
+      itbisEnabled: itbisEnabled,
+      itbisRate: itbisRate,
+      itbisAmount: itbisAmount,
+      total: total,
+    );
   }
+
+  double round2(num n) => (n * 100).roundToDouble() / 100;
 
   /// Pulls from server and upserts into local DB.
   Future<void> refreshFromServer({
     required String empresaId,
+    required String userId,
     String? q,
     String? status,
     DateTime? from,
@@ -131,7 +223,11 @@ class QuotationRepository {
     final items = (data['items'] as List).cast<Map<String, dynamic>>();
     for (final qItem in items) {
       await _db.upsertCotizacion(
-        row: _mapServerQuotationToLocal(qItem, empresaId: empresaId),
+        row: _mapServerQuotationToLocal(
+          qItem,
+          empresaId: empresaId,
+          userId: userId,
+        ),
       );
 
       final serverItems =
@@ -152,10 +248,15 @@ class QuotationRepository {
   Future<Map<String, dynamic>> duplicateRemoteToLocal(
     String quotationId, {
     required String empresaId,
+    required String userId,
   }) async {
     final created = await _api.duplicateQuotation(quotationId);
     await _db.upsertCotizacion(
-      row: _mapServerQuotationToLocal(created, empresaId: empresaId),
+      row: _mapServerQuotationToLocal(
+        created,
+        empresaId: empresaId,
+        userId: userId,
+      ),
     );
 
     final serverItems =
@@ -176,21 +277,10 @@ class QuotationRepository {
 
   Future<void> deleteRemoteAndLocal(String quotationId) async {
     // Offline-first delete:
-    // - mark as deleted locally (so it disappears from lists)
+    // - remove locally so it disappears from lists
     // - try remote delete
     // - if remote fails due to connectivity, enqueue for later
-    final nowIso = DateTime.now().toIso8601String();
-
-    final existing = await _db.getCotizacion(id: quotationId);
-    if (existing != null) {
-      final patched = <String, Object?>{...existing};
-      patched['deleted_at'] = nowIso;
-      patched['updated_at'] = nowIso;
-      patched['sync_status'] = 'pending';
-      patched['last_error'] = null;
-      await _db.upsertCotizacion(row: patched);
-    }
-
+    await _db.deleteCotizacion(id: quotationId);
     try {
       await _api.deleteQuotation(quotationId);
     } on DioException catch (e) {
@@ -239,6 +329,7 @@ class QuotationRepository {
     // CRITICAL: Verify session exists before attempting any sync
     final session = await _db.readSession();
     if (session == null) return;
+    final userId = session.user.id;
 
     final items = await _db.getPendingSyncItems();
     for (final item in items) {
@@ -286,20 +377,29 @@ class QuotationRepository {
               (remote['customerEmail'] ??
               remote['customer_email'] ??
               base['customer_email']);
-          base['itbis_enabled'] =
-              ((remote['itbisEnabled'] ?? remote['itbis_enabled']) == true)
+          final itbisEnabled =
+              (remote['itbis_enabled'] ?? remote['itbisEnabled']);
+          base['itbis_enabled'] = (itbisEnabled == true || itbisEnabled == 1)
               ? 1
-              : (base['itbis_enabled'] ?? 0);
-          base['itbis_rate'] =
-              (remote['itbisRate'] ??
-              remote['itbis_rate'] ??
-              base['itbis_rate']);
-          base['subtotal'] = (remote['subtotal'] ?? base['subtotal']);
-          base['itbis_amount'] =
-              (remote['itbisAmount'] ??
-              remote['itbis_amount'] ??
-              base['itbis_amount']);
-          base['total'] = (remote['total'] ?? base['total']);
+              : (base['itbis_enabled'] ?? 1);
+          base['itbis_rate'] = _asDouble(
+            remote['itbis_rate'] ?? remote['itbisRate'] ?? base['itbis_rate'],
+            fallback: 0.18,
+          );
+          base['subtotal'] = _asDouble(
+            remote['subtotal'] ?? base['subtotal'],
+            fallback: 0,
+          );
+          base['itbis_amount'] = _asDouble(
+            remote['itbis_amount'] ??
+                remote['itbisAmount'] ??
+                base['itbis_amount'],
+            fallback: 0,
+          );
+          base['total'] = _asDouble(
+            remote['total'] ?? base['total'],
+            fallback: 0,
+          );
           base['notes'] = (remote['notes'] ?? base['notes']);
           base['created_at'] =
               (remote['createdAt'] ??
@@ -312,8 +412,8 @@ class QuotationRepository {
                       remote['updated_at'] ??
                       DateTime.now().toIso8601String())
                   .toString();
+          base['created_by_user_id'] = base['created_by_user_id'] ?? userId;
           base['sync_status'] = 'synced';
-          base['last_error'] = null;
           await _db.upsertCotizacion(row: base);
 
           // Best-effort: replace items if server returns them.
@@ -357,7 +457,6 @@ class QuotationRepository {
           if (existing != null) {
             final patched = <String, Object?>{...existing};
             patched['sync_status'] = 'error';
-            patched['last_error'] = e.toString();
             patched['updated_at'] = DateTime.now().toIso8601String();
             await _db.upsertCotizacion(row: patched);
           }
@@ -369,7 +468,12 @@ class QuotationRepository {
   Map<String, dynamic> _mapServerQuotationToLocal(
     Map<String, dynamic> q, {
     required String empresaId,
+    required String userId,
   }) {
+    final itbisEnabled = q['itbis_enabled'] ?? q['itbisEnabled'] ?? true;
+    final itbisRate = q['itbis_rate'] ?? q['itbisRate'] ?? 0.18;
+    final itbisAmount = q['itbis_amount'] ?? q['itbisAmount'] ?? 0;
+
     return {
       'id': q['id'],
       'empresa_id': empresaId,
@@ -377,23 +481,21 @@ class QuotationRepository {
       'status': q['status']?.toString() ?? 'draft',
       'customer_id': q['customerId'] ?? q['customer_id'],
       'customer_name': q['customerName'] ?? q['customer_name'],
-      'currency': q['currency']?.toString() ?? 'MXN',
-      'subtotal': (q['subtotal'] is num)
-          ? (q['subtotal'] as num).toDouble()
-          : double.tryParse('${q['subtotal']}') ?? 0.0,
-      'tax_total': (q['taxTotal'] ?? q['tax_total'] ?? 0.0) is num
-          ? (q['taxTotal'] ?? q['tax_total'] ?? 0.0 as num).toDouble()
-          : double.tryParse('${q['taxTotal'] ?? q['tax_total'] ?? 0.0}') ?? 0.0,
-      'total': (q['total'] is num)
-          ? (q['total'] as num).toDouble()
-          : double.tryParse('${q['total']}') ?? 0.0,
+      'customer_phone': q['customerPhone'] ?? q['customer_phone'],
+      'customer_email': q['customerEmail'] ?? q['customer_email'],
+      'itbis_enabled': (itbisEnabled == true || itbisEnabled == 1) ? 1 : 0,
+      'itbis_rate': _asDouble(itbisRate, fallback: 0.18),
+      'subtotal': _asDouble(q['subtotal'], fallback: 0.0),
+      'itbis_amount': _asDouble(itbisAmount, fallback: 0.0),
+      'total': _asDouble(q['total'], fallback: 0.0),
       'notes': q['notes'],
       'created_at':
           q['createdAt'] ?? q['created_at'] ?? DateTime.now().toIso8601String(),
       'updated_at':
           q['updatedAt'] ?? q['updated_at'] ?? DateTime.now().toIso8601String(),
-      'synced_at': DateTime.now().toIso8601String(),
-      'deleted_at': null,
+      'created_by_user_id':
+          q['created_by_user_id'] ?? q['createdByUserId'] ?? userId,
+      'sync_status': 'synced',
     };
   }
 
@@ -401,21 +503,69 @@ class QuotationRepository {
     Map<String, dynamic> it, {
     required String cotizacionId,
   }) {
+    final createdAt =
+        (it['created_at'] ??
+                it['createdAt'] ??
+                DateTime.now().toIso8601String())
+            .toString();
     return {
       'id': it['id'],
-      'cotizacion_id': cotizacionId,
+      'quotation_id': cotizacionId,
       'product_id': it['productId'] ?? it['product_id'],
-      'name': it['name'],
-      'description': it['description'],
-      'quantity': (it['quantity'] is num)
-          ? (it['quantity'] as num).toDouble()
-          : double.tryParse('${it['quantity']}') ?? 0.0,
-      'price': (it['price'] is num)
-          ? (it['price'] as num).toDouble()
-          : double.tryParse('${it['price']}') ?? 0.0,
-      'total': (it['total'] is num)
-          ? (it['total'] as num).toDouble()
-          : double.tryParse('${it['total']}') ?? 0.0,
+      'nombre': (it['nombre'] ?? it['name'] ?? '').toString(),
+      'cantidad': (it['cantidad'] is num)
+          ? (it['cantidad'] as num).toDouble()
+          : double.tryParse('${it['cantidad'] ?? it['quantity']}') ?? 0.0,
+      'unit_cost': (it['unit_cost'] is num)
+          ? (it['unit_cost'] as num).toDouble()
+          : double.tryParse('${it['unit_cost'] ?? it['unitCost'] ?? 0}') ?? 0.0,
+      'unit_price': (it['unit_price'] is num)
+          ? (it['unit_price'] as num).toDouble()
+          : double.tryParse('${it['unit_price'] ?? it['unitPrice'] ?? 0}') ??
+                0.0,
+      'discount_pct': (it['discount_pct'] is num)
+          ? (it['discount_pct'] as num).toDouble()
+          : double.tryParse(
+                  '${it['discount_pct'] ?? it['discountPct'] ?? 0}',
+                ) ??
+                0.0,
+      'discount_amount': (it['discount_amount'] is num)
+          ? (it['discount_amount'] as num).toDouble()
+          : double.tryParse(
+                  '${it['discount_amount'] ?? it['discountAmount'] ?? 0}',
+                ) ??
+                0.0,
+      'line_subtotal': (it['line_subtotal'] is num)
+          ? (it['line_subtotal'] as num).toDouble()
+          : double.tryParse(
+                  '${it['line_subtotal'] ?? it['lineSubtotal'] ?? 0}',
+                ) ??
+                0.0,
+      'line_total': (it['line_total'] is num)
+          ? (it['line_total'] as num).toDouble()
+          : double.tryParse(
+                  '${it['line_total'] ?? it['lineTotal'] ?? it['total'] ?? 0}',
+                ) ??
+                0.0,
+      'created_at': createdAt,
     };
   }
+}
+
+class _LocalTotals {
+  final List<Map<String, Object?>> items;
+  final double subtotal;
+  final bool itbisEnabled;
+  final double itbisRate;
+  final double itbisAmount;
+  final double total;
+
+  _LocalTotals({
+    required this.items,
+    required this.subtotal,
+    required this.itbisEnabled,
+    required this.itbisRate,
+    required this.itbisAmount,
+    required this.total,
+  });
 }

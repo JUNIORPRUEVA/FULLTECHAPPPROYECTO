@@ -21,6 +21,8 @@ class SalesRepository {
 
   static const _syncModule = 'sales';
 
+  bool _didRequeueErroredItems = false;
+
   Future<List<SalesRecord>> listLocal({
     required String empresaId,
     String? q,
@@ -304,6 +306,16 @@ class SalesRepository {
     final session = await _db.readSession();
     if (session == null) return;
 
+    // One-time self-heal: let previously errored items retry after app updates.
+    if (!_didRequeueErroredItems) {
+      _didRequeueErroredItems = true;
+      try {
+        await _db.requeueErroredSyncItems(module: _syncModule);
+      } catch (_) {
+        // ignore
+      }
+    }
+
     final items = await _db.getPendingSyncItems();
     for (final item in items) {
       if (item.module != _syncModule) continue;
@@ -406,7 +418,7 @@ class SalesRepository {
               'type': type,
               if (type == SalesEvidenceType.link) 'url': value,
               if (type == SalesEvidenceType.text) 'text': value,
-              };
+            };
           }
 
           await _api.addEvidence(saleId, evidencePayload);
@@ -574,7 +586,7 @@ class EvidenceDraft {
     this.bytes = const [],
     this.localPath,
   }) : isFile = true,
-        value = '';
+       value = '';
 
   const EvidenceDraft.value({required this.type, required this.value})
     : isFile = false,

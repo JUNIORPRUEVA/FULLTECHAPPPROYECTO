@@ -1,8 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fulltech_app/core/routing/app_routes.dart';
 import 'package:fulltech_app/core/widgets/module_page.dart';
 import 'package:fulltech_app/features/auth/state/auth_providers.dart';
 import 'package:fulltech_app/features/cotizaciones/state/cotizaciones_providers.dart';
+import 'package:fulltech_app/modules/pos/models/pos_models.dart';
+import 'package:fulltech_app/modules/pos/models/pos_ticket.dart';
+import 'package:fulltech_app/modules/pos/state/pos_providers.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -20,6 +25,13 @@ class _CotizacionesListScreenState
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _items = const [];
+
+  String _friendlyError(Object e, {required String fallback}) {
+    if (kDebugMode) {
+      debugPrint('[Cotizaciones] $fallback: $e');
+    }
+    return fallback;
+  }
 
   @override
   void initState() {
@@ -43,27 +55,42 @@ class _CotizacionesListScreenState
       return;
     }
     final empresaId = session.user.empresaId;
+    final userId = session.user.id;
 
     setState(() {
       _loading = true;
       _error = null;
     });
 
-    try {
-      final repo = ref.read(quotationRepositoryProvider);
+    final repo = ref.read(quotationRepositoryProvider);
 
-      // 1) Show local immediately
+    // 1) Show local immediately (never blocked by server errors)
+    try {
       final local = await repo.listLocal(
         empresaId: empresaId,
         q: _qCtrl.text,
         limit: 50,
         offset: 0,
       );
-      setState(() => _items = local);
+      if (mounted) setState(() => _items = local);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = _friendlyError(
+            e,
+            fallback: 'No se pudo leer las cotizaciones guardadas localmente.',
+          );
+          _loading = false;
+        });
+      }
+      return;
+    }
 
-      // 2) Best-effort refresh from server
+    // 2) Best-effort refresh from server
+    try {
       await repo.refreshFromServer(
         empresaId: empresaId,
+        userId: userId,
         q: _qCtrl.text,
         limit: 50,
         offset: 0,
@@ -76,15 +103,24 @@ class _CotizacionesListScreenState
         offset: 0,
       );
 
-      setState(() {
-        _items = refreshed;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _items = refreshed;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      // Keep showing local data; surface the error as a warning.
+      if (mounted) {
+        setState(() {
+          _error = _friendlyError(
+            e,
+            fallback:
+                'No se pudo sincronizar con el servidor. Mostrando datos locales.',
+          );
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -131,20 +167,32 @@ class _CotizacionesListScreenState
     }
 
     try {
+      final session = await ref.read(localDbProvider).readSession();
+      if (session == null) {
+        throw StateError('missing_session');
+      }
       await ref
           .read(quotationRepositoryProvider)
-          .duplicateRemoteToLocal(id, empresaId: session.user.empresaId);
+          .duplicateRemoteToLocal(
+            id,
+            empresaId: session.user.empresaId,
+            userId: session.user.id,
+          );
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('✅ Cotización duplicada')));
+        ).showSnackBar(const SnackBar(content: Text('Cotización duplicada')));
       }
       await _load();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('❌ Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _friendlyError(e, fallback: 'No se pudo duplicar la cotización.'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -175,12 +223,12 @@ class _CotizacionesListScreenState
 
     try {
       final repo = ref.read(quotationRepositoryProvider);
-      final result = await repo.convertToTicket(id);
+      await repo.convertToTicket(id);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Cotización convertida a ticket'),
+            content: Text('Cotización convertida a ticket'),
             duration: Duration(seconds: 3),
           ),
         );
@@ -196,12 +244,142 @@ class _CotizacionesListScreenState
       }
     } catch (e) {
       if (context.mounted) {
-        final message = e.toString().contains('already converted')
-            ? '⚠️ Esta cotización ya fue convertida'
-            : '❌ Error: $e';
+        final message = _friendlyError(
+          e,
+          fallback: 'No se pudo convertir a ticket.',
+        );
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+  }
+
+  Future<void> _sendToPosTicket(BuildContext context, String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pasar a Ticket Pendiente (POS)'),
+        content: const Text(
+          'Esto crear\xe1 un ticket pendiente en el TPV para esta cotizaci\xf3n.\n\n'
+          'Luego podr\xe1s cobrarlo desde POS.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final quoteRepo = ref.read(quotationRepositoryProvider);
+      final full = await quoteRepo.getRemote(id);
+      final items = (full['items'] as List?)?.cast<Map>() ?? const [];
+
+      bool isUuid(String s) =>
+          RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+              .hasMatch(s);
+
+      final drafts = <PosSaleItemDraft>[];
+      for (final raw in items) {
+        final m = raw.cast<String, dynamic>();
+        final productId = (m['product_id'] ?? '').toString();
+        if (!isUuid(productId)) {
+          throw StateError(
+            'La cotizaci\xf3n contiene items sin producto vinculado. Abre el TPV y agr\xe9galos manualmente.',
+          );
+        }
+
+        final nombre = (m['nombre'] ?? '').toString();
+        final qty = (m['cantidad'] as num?)?.toDouble() ?? 0;
+        final unitPrice = (m['unit_price'] as num?)?.toDouble() ?? 0;
+        final disc = (m['discount_amount'] as num?)?.toDouble() ?? 0;
+
+        drafts.add(
+          PosSaleItemDraft(
+            product: PosProduct(
+              id: productId,
+              nombre: nombre.isEmpty ? 'Producto' : nombre,
+              precioVenta: unitPrice,
+              costPrice: (m['unit_cost'] as num?)?.toDouble() ?? 0,
+              stockQty: 0,
+              minStock: 0,
+              maxStock: 0,
+              allowNegativeStock: false,
+              lowStock: false,
+              suggestedReorderQty: 0,
+              categoria: null,
+              imagenUrl: null,
+            ),
+            qty: qty <= 0 ? 0 : qty,
+            unitPrice: unitPrice < 0 ? 0 : unitPrice,
+            discountAmount: disc < 0 ? 0 : disc,
+          ),
+        );
+      }
+
+      if (drafts.isEmpty) {
+        throw StateError('La cotizaci\xf3n no tiene items.');
+      }
+
+      final customerName = (full['customer_name'] ?? '').toString().trim();
+      final numero = (full['numero'] ?? '').toString().trim();
+      final title = [
+        if (numero.isNotEmpty) 'Cot $numero',
+        if (customerName.isNotEmpty) customerName,
+      ].join(' - ');
+
+      final ticket = PosTicket(
+        id: 'quote-$id',
+        name: title.isEmpty ? 'Cotizaci\xf3n' : title,
+        isCustomName: true,
+        customerId: (full['customer_id'] ?? '').toString().trim().isEmpty
+            ? null
+            : (full['customer_id'] ?? '').toString(),
+        customerName: customerName.isEmpty ? null : customerName,
+        customerPhone: (full['customer_phone'] ?? '').toString().trim().isEmpty
+            ? null
+            : (full['customer_phone'] ?? '').toString(),
+        customerRnc: (full['customer_rnc'] ?? '').toString().trim().isEmpty
+            ? null
+            : (full['customer_rnc'] ?? '').toString(),
+        discountType: PosDiscountType.fixed,
+        discountValue: 0,
+        itbisEnabled: full['itbis_enabled'] == true,
+        itbisRate: (full['itbis_rate'] as num?)?.toDouble() ?? 0.18,
+        ncfEnabled: false,
+        selectedNcfDocType: null,
+        warrantyEnabled: false,
+        selectedWarrantyId: null,
+        selectedWarrantyName: null,
+        items: drafts,
+      );
+
+      ref.read(posTpvControllerProvider.notifier).importTicket(ticket);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ticket pendiente creado en POS')),
+        );
+        context.go(AppRoutes.pos);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _friendlyError(e, fallback: 'No se pudo pasar a Ticket POS.'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -258,11 +436,25 @@ class _CotizacionesListScreenState
     if (res == null) return;
 
     final repo = ref.read(quotationRepositoryProvider);
-    final resp = await repo.sendRemote(
-      id,
-      channel: res['channel'] as String,
-      to: (res['to'] as String).isEmpty ? null : (res['to'] as String),
-    );
+    Map<String, dynamic> resp;
+    try {
+      resp = await repo.sendRemote(
+        id,
+        channel: res['channel'] as String,
+        to: (res['to'] as String).isEmpty ? null : (res['to'] as String),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _friendlyError(e, fallback: 'No se pudo generar el envío.'),
+            ),
+          ),
+        );
+      }
+      return;
+    }
 
     final url = resp['url']?.toString();
     if (url == null || url.isEmpty) return;
@@ -270,7 +462,12 @@ class _CotizacionesListScreenState
     final uri = Uri.tryParse(url);
     if (uri == null) return;
 
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el enlace de envío.')),
+      );
+    }
   }
 
   @override
@@ -308,96 +505,136 @@ class _CotizacionesListScreenState
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                ? Center(child: Text(_error!))
                 : _items.isEmpty
-                ? const Center(child: Text('Sin cotizaciones'))
-                : ListView.separated(
-                    itemCount: _items.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final it = _items[index];
-                      final id = it['id']?.toString() ?? '';
-                      final status = it['status']?.toString() ?? '';
-                      final isConverted = status == 'converted';
-
-                      return ListTile(
-                        title: Text(it['numero']?.toString() ?? ''),
-                        subtitle: Text(
-                          '${it['customer_name'] ?? ''} • ${it['status'] ?? ''}',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (!isConverted)
-                              IconButton(
-                                tooltip: 'Editar',
-                                onPressed: id.isEmpty
-                                    ? null
-                                    : () => _edit(context, id),
-                                icon: const Icon(Icons.edit),
-                              ),
-                            if (!isConverted)
-                              IconButton(
-                                tooltip: 'Convertir a Ticket',
-                                onPressed: id.isEmpty
-                                    ? null
-                                    : () => _convertToTicket(context, id),
-                                icon: const Icon(Icons.point_of_sale),
-                              ),
-                            PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'ver') {
-                                  context.go('/cotizaciones/$id');
-                                } else if (value == 'editar') {
-                                  _edit(context, id);
-                                } else if (value == 'duplicar') {
-                                  await _duplicate(context, id);
-                                } else if (value == 'convertir' &&
-                                    !isConverted) {
-                                  await _convertToTicket(context, id);
-                                } else if (value == 'enviar') {
-                                  await _send(context, id);
-                                } else if (value == 'eliminar') {
-                                  await _confirmDelete(context, id);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'ver',
-                                  child: Text('Ver Detalle'),
-                                ),
-                                if (!isConverted)
-                                  const PopupMenuItem(
-                                    value: 'editar',
-                                    child: Text('Editar'),
-                                  ),
-                                const PopupMenuItem(
-                                  value: 'duplicar',
-                                  child: Text('Duplicar'),
-                                ),
-                                if (!isConverted)
-                                  const PopupMenuItem(
-                                    value: 'convertir',
-                                    child: Text('Convertir a Ticket'),
-                                  ),
-                                const PopupMenuItem(
-                                  value: 'enviar',
-                                  child: Text('Enviar'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'eliminar',
-                                  child: Text('Eliminar'),
-                                ),
-                              ],
+                ? (_error != null
+                      ? Center(child: Text(_error!))
+                      : const Center(child: Text('Sin cotizaciones')))
+                : Column(
+                    children: [
+                      if (_error != null)
+                        MaterialBanner(
+                          content: Text(
+                            _error!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          leading: const Icon(Icons.warning_amber_rounded),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          actions: [
+                            TextButton(
+                              onPressed: () => setState(() => _error = null),
+                              child: const Text('Cerrar'),
                             ),
                           ],
                         ),
-                        onTap: id.isEmpty
-                            ? null
-                            : () => context.go('/cotizaciones/$id'),
-                      );
-                    },
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: _items.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final it = _items[index];
+                            final id = it['id']?.toString() ?? '';
+                            final status = it['status']?.toString() ?? '';
+                            final isConverted = status == 'converted';
+
+                            return ListTile(
+                              title: Text(it['numero']?.toString() ?? ''),
+                              subtitle: Text(
+                                '${it['customer_name'] ?? ''} • ${it['status'] ?? ''}',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!isConverted)
+                                    IconButton(
+                                      tooltip: 'Editar',
+                                      onPressed: id.isEmpty
+                                          ? null
+                                          : () => _edit(context, id),
+                                      icon: const Icon(Icons.edit),
+                                    ),
+                                  if (!isConverted)
+                                    IconButton(
+                                      tooltip: 'Convertir a Ticket',
+                                      onPressed: id.isEmpty
+                                          ? null
+                                          : () => _convertToTicket(context, id),
+                                      icon: const Icon(Icons.point_of_sale),
+                                    ),
+                                  if (!isConverted)
+                                    IconButton(
+                                      tooltip: 'Pasar a Ticket POS',
+                                      onPressed: id.isEmpty
+                                          ? null
+                                          : () => _sendToPosTicket(context, id),
+                                      icon: const Icon(Icons.shopping_bag_outlined),
+                                    ),
+                                  PopupMenuButton<String>(
+                                    onSelected: (value) async {
+                                      if (value == 'ver') {
+                                        context.go('/cotizaciones/$id');
+                                      } else if (value == 'editar') {
+                                        _edit(context, id);
+                                      } else if (value == 'duplicar') {
+                                        await _duplicate(context, id);
+                                      } else if (value == 'convertir' &&
+                                          !isConverted) {
+                                        await _convertToTicket(context, id);
+                                      } else if (value == 'pos_ticket' &&
+                                          !isConverted) {
+                                        await _sendToPosTicket(context, id);
+                                      } else if (value == 'enviar') {
+                                        await _send(context, id);
+                                      } else if (value == 'eliminar') {
+                                        await _confirmDelete(context, id);
+                                      }
+                                    },
+                                    itemBuilder: (context) => [
+                                      const PopupMenuItem(
+                                        value: 'ver',
+                                        child: Text('Ver Detalle'),
+                                      ),
+                                      if (!isConverted)
+                                        const PopupMenuItem(
+                                          value: 'editar',
+                                          child: Text('Editar'),
+                                        ),
+                                      const PopupMenuItem(
+                                        value: 'duplicar',
+                                        child: Text('Duplicar'),
+                                      ),
+                                      if (!isConverted)
+                                        const PopupMenuItem(
+                                          value: 'convertir',
+                                          child: Text('Convertir a Ticket'),
+                                        ),
+                                      if (!isConverted)
+                                        const PopupMenuItem(
+                                          value: 'pos_ticket',
+                                          child: Text('Pasar a Ticket POS'),
+                                        ),
+                                      const PopupMenuItem(
+                                        value: 'enviar',
+                                        child: Text('Enviar'),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'eliminar',
+                                        child: Text('Eliminar'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              onTap: id.isEmpty
+                                  ? null
+                                  : () => context.go('/cotizaciones/$id'),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
           ),
         ],

@@ -20,6 +20,7 @@ import maintenanceRouter from '../modules/maintenance/maintenance.routes';
 import payrollRouter from '../modules/payroll/payroll.routes';
 import { quotationsRouter } from '../modules/quotations/quotations.routes';
 import { lettersRouter } from '../modules/letters/letters.routes';
+import { cartasRouter } from '../modules/cartas/cartas.routes';
 import { operationsRouter } from '../modules/operations/operations.routes';
 import { rulesRouter } from '../modules/rules/rules.routes';
 import { posRouter } from '../modules/pos/pos.routes';
@@ -55,6 +56,7 @@ apiRouter.use('/', maintenanceRouter); // maintenance, warranty, inventory-audit
 apiRouter.use('/', payrollRouter); // payroll (admin) + my/payroll (employee)
 apiRouter.use('/quotations', quotationsRouter);
 apiRouter.use('/letters', lettersRouter);
+apiRouter.use('/cartas', cartasRouter);
 apiRouter.use('/operations', operationsRouter);
 apiRouter.use('/rules', rulesRouter);
 apiRouter.use('/admin', adminRouter);

@@ -7,6 +7,13 @@ CREATE TABLE IF NOT EXISTS letters (
   user_id uuid NOT NULL,
   quotation_id uuid NULL,
 
+  -- Carta feature: generated from Presupuesto (matches Prisma schema)
+  presupuesto_id uuid NULL,
+  cliente_id uuid NULL,
+  user_instructions text NULL,
+  ai_content_json jsonb NULL,
+  pdf_path text NULL,
+
   customer_name text NOT NULL,
   customer_phone text NULL,
   customer_email text NULL,
@@ -19,6 +26,13 @@ CREATE TABLE IF NOT EXISTS letters (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- If letters table already existed, ensure newer columns exist.
+ALTER TABLE letters ADD COLUMN IF NOT EXISTS presupuesto_id uuid;
+ALTER TABLE letters ADD COLUMN IF NOT EXISTS cliente_id uuid;
+ALTER TABLE letters ADD COLUMN IF NOT EXISTS user_instructions text;
+ALTER TABLE letters ADD COLUMN IF NOT EXISTS ai_content_json jsonb;
+ALTER TABLE letters ADD COLUMN IF NOT EXISTS pdf_path text;
 
 -- Foreign keys (best-effort)
 DO $$

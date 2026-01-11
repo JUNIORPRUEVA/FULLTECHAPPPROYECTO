@@ -11,6 +11,8 @@ export const companySettingsSchema = z.object({
   pais: z.string().max(120).optional().nullable(),
   email: z.string().email().max(180).optional().nullable(),
   sitio_web: z.string().max(200).url().optional().nullable(),
+  instagram_url: z.string().max(200).optional().nullable(),
+  facebook_url: z.string().max(200).optional().nullable(),
   nombre_representante: z.string().max(180).optional().nullable(),
   cargo_representante: z.string().max(180).optional().nullable(),
   otros_detalles: z.string().max(2000).optional().nullable(),

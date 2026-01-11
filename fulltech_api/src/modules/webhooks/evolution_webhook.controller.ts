@@ -162,7 +162,9 @@ export async function evolutionWebhook(req: Request, res: Response) {
 async function processWebhookEvent(body: any, eventId: string | null) {
   const now = new Date();
   const parsed = parseEvolutionWebhook(body);
-  const empresaId = env.DEFAULT_EMPRESA_ID;
+  // By default, fall back to DEFAULT_EMPRESA_ID for legacy/single-tenant setups.
+  // For multi-instance setups, we will derive empresaId from crm_instancias to ensure correct tenant routing.
+  let empresaId = env.DEFAULT_EMPRESA_ID;
 
   // ========================================================
   // INSTANCE DETECTION - Extract instance name from payload
@@ -181,14 +183,28 @@ async function processWebhookEvent(body: any, eventId: string | null) {
   if (instanceName && instanceName.trim()) {
     try {
       const instances = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, user_id FROM crm_instancias WHERE nombre_instancia = $1 AND is_active = TRUE LIMIT 1`,
+        `SELECT id, user_id, empresa_id
+         FROM crm_instancias
+         WHERE nombre_instancia = $1 AND is_active = TRUE
+         ORDER BY updated_at DESC
+         LIMIT 2`,
         instanceName.trim()
       );
       
       if (instances.length > 0) {
         instanciaId = instances[0].id;
         instanceOwnerId = instances[0].user_id;
-        console.log('[WEBHOOK] Instance matched:', { instanceName, instanciaId, instanceOwnerId });
+        // Route event to the same empresa as the instance. This is critical so the user can see incoming messages.
+        if (instances[0].empresa_id) {
+          empresaId = instances[0].empresa_id;
+        }
+        if (instances.length > 1) {
+          console.warn('[WEBHOOK] Multiple active instances share the same nombre_instancia across empresas; using the most recently updated.', {
+            instanceName,
+            picked: instances[0]?.id,
+          });
+        }
+        console.log('[WEBHOOK] Instance matched:', { instanceName, instanciaId, instanceOwnerId, empresaId });
       } else {
         console.warn('[WEBHOOK] Instance not found or inactive:', instanceName);
       }
@@ -326,6 +342,8 @@ async function processWebhookEvent(body: any, eventId: string | null) {
       ? placeholderForType(messageType)
       : null;
 
+  const mediaUrlToStore = hasMedia ? parsed.mediaUrl!.trim() : null;
+
   const preview = (textToStore ?? `[${messageType}]`).slice(0, 180);
 
   console.log('[WEBHOOK] Processing message:', {
@@ -422,6 +440,7 @@ async function processWebhookEvent(body: any, eventId: string | null) {
         direction,
         message_type: messageType,
         text: textToStore,
+        media_url: mediaUrlToStore,
         remote_message_id: parsed.messageId?.trim() || null,
         status,
         timestamp: createdAt,

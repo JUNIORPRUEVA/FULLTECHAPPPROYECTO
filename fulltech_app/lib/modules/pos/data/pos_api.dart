@@ -361,4 +361,107 @@ class PosApi {
     final items = (data['data'] as List?)?.cast<Map>() ?? const [];
     return items.map((e) => e.cast<String, dynamic>()).toList();
   }
+
+  // === Cashbox (Caja) ===
+
+  Future<Map<String, dynamic>> getCurrentCashbox() async {
+    final res = await _dio.get(
+      '/pos/caja/actual',
+      options: Options(extra: {'offlineCache': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<List<Map<String, dynamic>>> listSales({
+    String? status,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final res = await _dio.get(
+      '/pos/sales',
+      queryParameters: {
+        if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+        if (from != null) 'from': from.toIso8601String(),
+        if (to != null) 'to': to.toIso8601String(),
+      },
+      options: Options(extra: {'offlineCache': true}),
+    );
+
+    final data = (res.data as Map?)?.cast<String, dynamic>() ?? const {};
+    final items = (data['data'] as List?)?.cast<Map>() ?? const [];
+    return items.map((e) => e.cast<String, dynamic>()).toList();
+  }
+
+  Future<Map<String, dynamic>> getSale(String saleId) async {
+    final res = await _dio.get(
+      '/pos/sales/$saleId',
+      options: Options(extra: {'offlineCache': true}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> openCashbox({
+    double openingAmount = 0,
+    String? note,
+  }) async {
+    final res = await _dio.post(
+      '/pos/caja/abrir',
+      data: {
+        'opening_amount': openingAmount,
+        if (note != null) 'note': note,
+      },
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> postCashboxMovement({
+    required String type,
+    required double amount,
+    String? reason,
+  }) async {
+    final res = await _dio.post(
+      '/pos/caja/movimiento',
+      data: {
+        'type': type,
+        'amount': amount,
+        if (reason != null) 'reason': reason,
+      },
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Map<String, dynamic>> closeCashbox({
+    required double countedCash,
+    String? note,
+  }) async {
+    final res = await _dio.post(
+      '/pos/caja/cerrar',
+      data: {
+        'counted_cash': countedCash,
+        if (note != null) 'note': note,
+      },
+      options: Options(extra: {'offlineQueue': false}),
+    );
+    return (res.data as Map).cast<String, dynamic>();
+  }
+
+  Future<List<Map<String, dynamic>>> listCashboxClosures({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final res = await _dio.get(
+      '/pos/caja/cierres',
+      queryParameters: {
+        if (from != null) 'from': from.toIso8601String(),
+        if (to != null) 'to': to.toIso8601String(),
+      },
+      options: Options(extra: {'offlineCache': false}),
+    );
+
+    final data = (res.data as Map?)?.cast<String, dynamic>() ?? const {};
+    final items = (data['data'] as List?)?.cast<Map>() ?? const [];
+    return items.map((e) => e.cast<String, dynamic>()).toList();
+  }
 }

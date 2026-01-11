@@ -58,6 +58,12 @@ import {
   transferChat,
   updateInstance,
 } from './crm_instances.controller';
+import {
+  cancelChatFollowups,
+  createBulkFollowups,
+  createChatFollowups,
+  listChatFollowups,
+} from './crm_followups.controller';
 
 export const crmRouter = Router();
 
@@ -97,6 +103,11 @@ crmRouter.patch('/purchased-clients/:clientId', expressAsyncHandler(updatePurcha
 crmRouter.delete('/purchased-clients/:clientId', expressAsyncHandler(deletePurchasedClient));
 crmRouter.get('/chats/:chatId', expressAsyncHandler(getChat));
 crmRouter.get('/chats/:chatId/messages', expressAsyncHandler(listChatMessages));
+// Follow-ups (scheduled messages)
+crmRouter.get('/chats/:chatId/followups', expressAsyncHandler(listChatFollowups));
+crmRouter.post('/chats/:chatId/followups', expressAsyncHandler(createChatFollowups));
+crmRouter.delete('/chats/:chatId/followups', expressAsyncHandler(cancelChatFollowups));
+crmRouter.post('/followups/bulk', expressAsyncHandler(createBulkFollowups));
 crmRouter.patch('/chats/:chatId/messages/:messageId', expressAsyncHandler(editChatMessage));
 crmRouter.delete('/chats/:chatId/messages/:messageId', expressAsyncHandler(deleteChatMessage));
 crmRouter.post('/chats/:chatId/status', expressAsyncHandler(postChatStatus));

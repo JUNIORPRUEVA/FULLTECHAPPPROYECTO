@@ -11,6 +11,9 @@ class AppRoutes {
   static const cotizaciones = '/cotizaciones';
   static const informeCotizaciones = '/informe-cotizaciones';
   static const crearCartas = '/crear-cartas';
+  static const cartas = '/cartas';
+  static String cartaDetail(String id) => '$cartas/$id';
+  static String cartaPdf(String id) => '$cartas/$id/pdf';
   static const operaciones = '/operaciones';
   static String operacionesDetail(String id) => '$operaciones/$id';
   static const operacionesAgenda = '/operaciones/agenda';
@@ -18,6 +21,9 @@ class AppRoutes {
   static const nomina = '/nomina';
   static const ventas = '/ventas';
   static const pos = '/pos';
+  static const posCaja = '/pos/caja';
+  static const posNcf = '/pos/ncf';
+  static const posSales = '/pos/sales';
   static const posPurchases = '/pos/purchases';
   static const posSuppliers = '/pos/suppliers';
   static const posInventory = '/pos/inventory';

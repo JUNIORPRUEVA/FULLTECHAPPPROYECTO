@@ -35,6 +35,9 @@ class AppSidebar extends ConsumerWidget {
       if (!loaded) return true;
 
       if (route == AppRoutes.pos) return can('pos.sell');
+      if (route == AppRoutes.posCaja) return can('pos.cashbox.manage');
+      if (route == AppRoutes.posNcf) return can('pos.sell');
+      if (route == AppRoutes.posSales) return can('pos.sell');
       if (route == AppRoutes.posPurchases) return can('pos.purchases.manage');
       if (route == AppRoutes.posInventory) return can('pos.inventory.adjust');
       if (route == AppRoutes.posReports) return can('pos.reports.view');

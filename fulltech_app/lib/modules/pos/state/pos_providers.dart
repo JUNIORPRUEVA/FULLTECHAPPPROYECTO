@@ -20,3 +20,11 @@ final posTpvControllerProvider = StateNotifierProvider<PosTpvController, PosTpvS
   final repo = ref.watch(posRepositoryProvider);
   return PosTpvController(repo: repo);
 });
+
+final posCashboxOpenProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final repo = ref.watch(posRepositoryProvider);
+  final data = await repo.getCurrentCashbox();
+  if (data == null) return false;
+  final cashbox = (data['cashbox'] as Map?)?.cast<String, dynamic>();
+  return (cashbox?['status'] ?? '').toString().toUpperCase() == 'OPEN';
+});

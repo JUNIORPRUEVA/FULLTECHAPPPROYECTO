@@ -11,19 +11,22 @@ export type EvolutionActionResult = {
   raw: any;
 };
 
-function applyDefaultCountryCode(digitsOnly: string): string {
+function applyDefaultCountryCode(digitsOnly: string, defaultCountryCode: string): string {
   const d = String(digitsOnly ?? '').replace(/\D+/g, '');
   if (!d) return d;
   // If it already looks like E.164 without '+', keep it.
   // For NANP destinations, if we have 10 digits, prefix with default country code.
   if (d.length === 10) {
-    const cc = (env.EVOLUTION_DEFAULT_COUNTRY_CODE ?? '1').replace(/\D+/g, '') || '1';
+    const cc = String(defaultCountryCode ?? '1').replace(/\D+/g, '') || '1';
     return `${cc}${d}`;
   }
   return d;
 }
 
-function normalizeDestNumber(opts: { toPhone?: string; toWaId?: string }): string {
+function normalizeDestNumber(
+  opts: { toPhone?: string; toWaId?: string },
+  config: { defaultCountryCode: string; numberAsJid: boolean },
+): string {
   const phone = (opts.toPhone ?? '').trim();
   const wa = (opts.toWaId ?? '').trim();
 
@@ -31,8 +34,8 @@ function normalizeDestNumber(opts: { toPhone?: string; toWaId?: string }): strin
   // If we have a phone number, prefer it over the LID value.
   if (wa && /@lid$/i.test(wa) && phone) {
     const digits = phone.replace(/[^0-9]/g, '') || phone;
-    const normalized = applyDefaultCountryCode(digits);
-    return env.EVOLUTION_NUMBER_AS_JID ? `${normalized}@s.whatsapp.net` : normalized;
+    const normalized = applyDefaultCountryCode(digits, config.defaultCountryCode);
+    return config.numberAsJid ? `${normalized}@s.whatsapp.net` : normalized;
   }
 
   if (wa) {
@@ -40,34 +43,49 @@ function normalizeDestNumber(opts: { toPhone?: string; toWaId?: string }): strin
     const at = wa.indexOf('@');
     const base = at >= 0 ? wa.slice(0, at) : wa;
     const digits = base.replace(/[^0-9]/g, '') || base;
-    const normalized = applyDefaultCountryCode(digits);
-    return env.EVOLUTION_NUMBER_AS_JID ? `${normalized}@s.whatsapp.net` : normalized;
+    const normalized = applyDefaultCountryCode(digits, config.defaultCountryCode);
+    return config.numberAsJid ? `${normalized}@s.whatsapp.net` : normalized;
   }
 
   if (!phone) throw new Error('Missing destination (toPhone or toWaId)');
   const digits = phone.replace(/[^0-9]/g, '') || phone;
-  const normalized = applyDefaultCountryCode(digits);
-  return env.EVOLUTION_NUMBER_AS_JID ? `${normalized}@s.whatsapp.net` : normalized;
+  const normalized = applyDefaultCountryCode(digits, config.defaultCountryCode);
+  return config.numberAsJid ? `${normalized}@s.whatsapp.net` : normalized;
 }
 
 export class EvolutionClient {
   private readonly _http: AxiosInstance;
+  private readonly _instanceName: string;
+  private readonly _defaultCountryCode: string;
+  private readonly _numberAsJid: boolean;
 
   private _instance(): string {
-    return (env.EVOLUTION_INSTANCE ?? env.EVOLUTION_INSTANCE_ID ?? '').trim();
+    return this._instanceName;
   }
 
-  constructor() {
-    if (!env.EVOLUTION_BASE_URL || env.EVOLUTION_BASE_URL.trim().length === 0) {
+  constructor(options?: {
+    baseUrl?: string;
+    apiKey?: string;
+    instanceName?: string;
+    defaultCountryCode?: string;
+    numberAsJid?: boolean;
+  }) {
+    const baseUrl = String(options?.baseUrl ?? env.EVOLUTION_BASE_URL ?? '').trim();
+    if (!baseUrl) {
       throw new Error('EVOLUTION_BASE_URL is not configured');
     }
 
+    this._instanceName = String(options?.instanceName ?? env.EVOLUTION_INSTANCE ?? env.EVOLUTION_INSTANCE_ID ?? '').trim();
+    this._defaultCountryCode = String(options?.defaultCountryCode ?? env.EVOLUTION_DEFAULT_COUNTRY_CODE ?? '1').trim();
+    this._numberAsJid = Boolean(options?.numberAsJid ?? env.EVOLUTION_NUMBER_AS_JID);
+
+    const apiKey = String(options?.apiKey ?? env.EVOLUTION_API_KEY ?? '').trim();
     this._http = axios.create({
-      baseURL: env.EVOLUTION_BASE_URL,
+      baseURL: baseUrl,
       timeout: 20000,
       headers: {
-        ...(env.EVOLUTION_API_KEY && env.EVOLUTION_API_KEY.trim().length > 0
-          ? { apikey: env.EVOLUTION_API_KEY.trim() }
+        ...(apiKey
+          ? { apikey: apiKey }
           : null),
         'Content-Type': 'application/json',
       },
@@ -148,7 +166,10 @@ export class EvolutionClient {
   }): Promise<EvolutionSendResult> {
     const url = '/message/sendText';
 
-    const number = normalizeDestNumber({ toPhone, toWaId });
+    const number = normalizeDestNumber(
+      { toPhone, toWaId },
+      { defaultCountryCode: this._defaultCountryCode, numberAsJid: this._numberAsJid },
+    );
 
     const trimmed = String(text ?? '').trim();
     if (!trimmed) throw new Error('Text message is empty');
@@ -186,7 +207,10 @@ export class EvolutionClient {
   }): Promise<EvolutionSendResult> {
     const url = '/message/sendMedia';
 
-    const number = normalizeDestNumber({ toPhone, toWaId });
+    const number = normalizeDestNumber(
+      { toPhone, toWaId },
+      { defaultCountryCode: this._defaultCountryCode, numberAsJid: this._numberAsJid },
+    );
 
     const payload = {
       number,
@@ -229,7 +253,10 @@ export class EvolutionClient {
 
     const name = String(fileName ?? '').trim() || 'document.pdf';
     const mt = String(mimeType ?? '').trim() || 'application/pdf';
-    const number = normalizeDestNumber({ toPhone, toWaId });
+    const number = normalizeDestNumber(
+      { toPhone, toWaId },
+      { defaultCountryCode: this._defaultCountryCode, numberAsJid: this._numberAsJid },
+    );
 
     // Many Evolution deployments accept either raw base64, or a data URL.
     const dataUrl = trimmedB64.startsWith('data:')
@@ -331,7 +358,10 @@ export class EvolutionClient {
 
     // Some Evolution deployments need the chat JID/number for delete operations.
     // We'll provide both "number" (normalized destination) and "remoteJid".
-    const number = normalizeDestNumber({ toPhone, toWaId });
+    const number = normalizeDestNumber(
+      { toPhone, toWaId },
+      { defaultCountryCode: this._defaultCountryCode, numberAsJid: this._numberAsJid },
+    );
     const remoteJid = (toWaId ?? '').trim();
 
     const paths = [
@@ -372,7 +402,10 @@ export class EvolutionClient {
     const trimmed = String(text ?? '').trim();
     if (!trimmed) throw new Error('Text is empty');
 
-    const number = normalizeDestNumber({ toPhone, toWaId });
+    const number = normalizeDestNumber(
+      { toPhone, toWaId },
+      { defaultCountryCode: this._defaultCountryCode, numberAsJid: this._numberAsJid },
+    );
     const remoteJid = (toWaId ?? '').trim();
 
     const paths = [

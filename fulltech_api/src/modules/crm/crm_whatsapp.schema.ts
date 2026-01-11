@@ -131,3 +131,48 @@ export const crmChatStatusSchema = z.object({
 export const crmPostSaleStateSchema = z.object({
   state: z.enum(['NORMAL', 'GARANTIA', 'SOLUCION_GARANTIA', 'CLIENTE_MOLESTO', 'VIP']),
 });
+
+// =====================
+// Follow-ups (scheduled messages)
+// =====================
+
+const crmFollowupPayloadSchema = z.object({
+  type: z.enum(['text', 'image']),
+  text: z.string().max(4000).optional().nullable(),
+  mediaUrl: z.string().max(4000).optional().nullable(),
+});
+
+const crmFollowupConstraintsSchema = z
+  .object({
+    status: z.string().max(50).optional().nullable(),
+    productId: z.string().uuid().optional().nullable(),
+  })
+  .optional()
+  .nullable();
+
+export const crmCreateChatFollowupsSchema = z.object({
+  runAt: z.string().min(1),
+  repeatCount: z.coerce.number().int().min(1).max(50).optional().default(1),
+  intervalMinutes: z.coerce.number().int().min(1).max(60 * 24 * 30).optional().default(24 * 60),
+  payload: crmFollowupPayloadSchema,
+  constraints: crmFollowupConstraintsSchema,
+});
+
+export const crmBulkFollowupsSchema = z.object({
+  filter: z
+    .object({
+      status: z.string().max(50).optional().nullable(),
+      productId: z.string().uuid().optional().nullable(),
+      lastMessageFrom: z.string().optional().nullable(),
+      lastMessageTo: z.string().optional().nullable(),
+    })
+    .optional()
+    .default({}),
+  schedule: z.object({
+    runAt: z.string().min(1),
+    repeatCount: z.coerce.number().int().min(1).max(50).optional().default(1),
+    intervalMinutes: z.coerce.number().int().min(1).max(60 * 24 * 30).optional().default(24 * 60),
+  }),
+  payload: crmFollowupPayloadSchema,
+  constraints: crmFollowupConstraintsSchema,
+});

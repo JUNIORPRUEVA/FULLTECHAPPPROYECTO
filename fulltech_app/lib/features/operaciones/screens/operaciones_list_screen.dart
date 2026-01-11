@@ -75,6 +75,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen>
     messenger.showSnackBar(const SnackBar(content: Text(_readOnlyMessage)));
   }
 
+  // ignore: unused_element
   Widget _guardedAction({
     required BuildContext context,
     required bool allowed,
@@ -118,6 +119,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen>
     return DateTime(date.year, date.month, date.day);
   }
 
+  // ignore: unused_element
   String _typeLabelFor(int tabIndex, OperationsJob job) {
     final tipo = job.tipoTrabajo.trim().toUpperCase();
     switch (tipo) {
@@ -147,6 +149,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen>
     return id;
   }
 
+  // ignore: unused_element
   Color _estadoColor(BuildContext context, String estado) {
     final cs = Theme.of(context).colorScheme;
     final e = estado.trim().toUpperCase();
@@ -156,6 +159,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen>
     return const Color(0xFF0D47A1);
   }
 
+  // ignore: unused_element
   String _estadoLabel(String estado) {
     switch (estado.trim().toUpperCase()) {
       case 'PENDIENTE':
@@ -175,6 +179,7 @@ class _OperacionesListScreenState extends ConsumerState<OperacionesListScreen>
     }
   }
 
+  // ignore: unused_element
   Future<String?> _promptRequiredText({
     required BuildContext context,
     required String title,

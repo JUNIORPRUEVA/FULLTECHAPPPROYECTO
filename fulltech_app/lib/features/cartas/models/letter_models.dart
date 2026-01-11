@@ -4,6 +4,11 @@ class Letter {
   final String empresaId;
   final String userId;
   final String? quotationId;
+  // Carta-from-Presupuesto fields (optional; present when using /api/cartas)
+  final String? presupuestoId;
+  final String? clienteId;
+  final String? pdfPath;
+  final String? userInstructions;
   final String customerName;
   final String? customerPhone;
   final String? customerEmail;
@@ -19,6 +24,10 @@ class Letter {
     required this.empresaId,
     required this.userId,
     this.quotationId,
+    this.presupuestoId,
+    this.clienteId,
+    this.pdfPath,
+    this.userInstructions,
     required this.customerName,
     this.customerPhone,
     this.customerEmail,
@@ -36,6 +45,10 @@ class Letter {
       empresaId: json['empresa_id'] as String,
       userId: json['user_id'] as String,
       quotationId: json['quotation_id'] as String?,
+      presupuestoId: json['presupuesto_id'] as String?,
+      clienteId: json['cliente_id'] as String?,
+      pdfPath: json['pdf_path'] as String?,
+      userInstructions: json['user_instructions'] as String?,
       customerName: json['customer_name'] as String,
       customerPhone: json['customer_phone'] as String?,
       customerEmail: json['customer_email'] as String?,
@@ -54,6 +67,10 @@ class Letter {
       'empresa_id': empresaId,
       'user_id': userId,
       'quotation_id': quotationId,
+      'presupuesto_id': presupuestoId,
+      'cliente_id': clienteId,
+      'pdf_path': pdfPath,
+      'user_instructions': userInstructions,
       'customer_name': customerName,
       'customer_phone': customerPhone,
       'customer_email': customerEmail,
@@ -154,6 +171,44 @@ class CreateLetterRequest {
       'subject': subject,
       'body': body,
       'status': status,
+    };
+  }
+}
+
+class GenerateCartaRequest {
+  final String presupuestoId;
+  final bool attachQuotation;
+  final String? cotizacionId;
+  final String? clienteId;
+  final String? customerName;
+  final String? customerPhone;
+  final String letterType;
+  final String subject;
+  final String userInstructions;
+
+  const GenerateCartaRequest({
+    required this.presupuestoId,
+    required this.attachQuotation,
+    this.cotizacionId,
+    this.clienteId,
+    this.customerName,
+    this.customerPhone,
+    required this.letterType,
+    required this.subject,
+    required this.userInstructions,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'presupuestoId': presupuestoId,
+      'attachQuotation': attachQuotation,
+      if (cotizacionId != null) 'cotizacionId': cotizacionId,
+      if (clienteId != null) 'clienteId': clienteId,
+      if (customerName != null) 'customerName': customerName,
+      if (customerPhone != null) 'customerPhone': customerPhone,
+      'letterType': letterType,
+      'subject': subject,
+      'userInstructions': userInstructions,
     };
   }
 }

@@ -83,7 +83,10 @@ enum LetterType {
   AGRADECIMIENTO
   SEGUIMIENTO
   CONFIRMACION_INSTALACION
+  CONFIRMACION_SERVICIO
   RECORDATORIO_PAGO
+  COTIZACION_FORMAL
+  DISCULPA_INCIDENCIA
   RECHAZO
   PERSONALIZADA
 }
@@ -511,6 +514,8 @@ model CompanySettings {
   pais                 String?
   email                String?
   sitio_web            String?
+  instagram_url        String?
+  facebook_url         String?
   nombre_representante String?
   cargo_representante  String?
   otros_detalles       String?
@@ -631,6 +636,7 @@ model Producto {
 model PosSale {
   id                 String   @id @default(uuid()) @db.Uuid
   empresa_id         String   @db.Uuid
+  cashbox_id         String?  @db.Uuid
   invoice_no         String
   invoice_type       String
   ncf                String?
@@ -651,10 +657,13 @@ model PosSale {
   updated_at         DateTime @default(now())
 
   items PosSaleItem[]
+  cashbox PosCashbox? @relation(fields: [cashbox_id], references: [id], onDelete: SetNull)
+  ncf_used PosFiscalNcfUsed?
 
   @@unique([empresa_id, invoice_no])
   @@index([empresa_id, created_at(sort: Desc)])
   @@index([status])
+  @@index([cashbox_id])
   @@map("pos_sales")
 }
 
@@ -708,6 +717,22 @@ model PosFiscalSequence {
 
   @@unique([empresa_id, doc_type])
   @@map("pos_fiscal_sequences")
+}
+
+model PosFiscalNcfUsed {
+  id         String   @id @default(uuid()) @db.Uuid
+  empresa_id  String   @db.Uuid
+  sale_id     String   @unique @db.Uuid
+  ncf         String
+  doc_type    String
+  user_id     String?  @db.Uuid
+  created_at  DateTime @default(now())
+
+  sale PosSale @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+
+  @@index([empresa_id, created_at(sort: Desc)])
+  @@index([ncf])
+  @@map("pos_fiscal_ncf_used")
 }
 
 model PosSupplier {
@@ -1318,6 +1343,13 @@ model Letter {
 
   quotation_id String? @map("quotation_id") @db.Uuid
 
+  // Carta feature: generated from Presupuesto
+  presupuesto_id    String? @db.Uuid
+  cliente_id        String? @db.Uuid
+  user_instructions String?
+  ai_content_json   Json?   @db.JsonB
+  pdf_path          String?
+
   customer_name  String
   customer_phone String?
   customer_email String?
@@ -1452,6 +1484,7 @@ model CrmChatMessage {
   direction         String
   message_type      String
   text              String?
+  media_url         String?
   remote_message_id String?
   quoted_message_id String?
   status            String   @default("received")
@@ -1469,6 +1502,96 @@ model CrmChatMessage {
   @@index([empresa_id])
   @@index([instancia_id])
   @@map("crm_messages")
+}
+
+model PosCashbox {
+  id             String   @id @default(uuid()) @db.Uuid
+  empresa_id      String   @db.Uuid
+  user_id         String   @db.Uuid
+  status          String   @default("OPEN")
+  opened_at       DateTime @default(now())
+  closed_at       DateTime?
+  opening_amount  Decimal  @default(0) @db.Decimal(14, 2)
+  counted_cash    Decimal? @db.Decimal(14, 2)
+  note            String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now())
+
+  movements PosCashboxMovement[]
+  closures  PosCashboxClosure[]
+  sales     PosSale[]
+
+  @@index([empresa_id])
+  @@index([user_id])
+  @@index([status])
+  @@index([opened_at(sort: Desc)])
+  @@map("pos_cashboxes")
+}
+
+model PosCashboxMovement {
+  id         String   @id @default(uuid()) @db.Uuid
+  empresa_id  String   @db.Uuid
+  cashbox_id  String   @db.Uuid
+  user_id     String   @db.Uuid
+  type        String
+  amount      Decimal  @db.Decimal(14, 2)
+  reason      String?
+  created_at  DateTime @default(now())
+
+  cashbox PosCashbox @relation(fields: [cashbox_id], references: [id], onDelete: Cascade)
+
+  @@index([empresa_id])
+  @@index([cashbox_id])
+  @@index([created_at(sort: Desc)])
+  @@map("pos_cashbox_movements")
+}
+
+model PosCashboxClosure {
+  id         String   @id @default(uuid()) @db.Uuid
+  empresa_id  String   @db.Uuid
+  cashbox_id  String   @db.Uuid
+  user_id     String   @db.Uuid
+  summary_json Json    @db.JsonB
+  created_at  DateTime @default(now())
+
+  cashbox PosCashbox @relation(fields: [cashbox_id], references: [id], onDelete: Cascade)
+
+  @@index([empresa_id])
+  @@index([cashbox_id])
+  @@index([created_at(sort: Desc)])
+  @@map("pos_cashbox_closures")
+}
+
+model CrmFollowupTask {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresa_id       String   @db.Uuid
+  chat_id          String   @db.Uuid
+  instancia_id     String?  @db.Uuid
+
+  run_at           DateTime @db.Timestamptz(6)
+  payload          Json     @db.JsonB
+  constraints      Json?    @db.JsonB
+
+  created_by_user_id String? @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  processing_at    DateTime? @db.Timestamptz(6)
+  processing_by    String?
+
+  attempts         Int      @default(0)
+  last_error       String?
+
+  sent_at          DateTime? @db.Timestamptz(6)
+  skipped_at       DateTime? @db.Timestamptz(6)
+  skip_reason      String?
+
+  @@index([empresa_id])
+  @@index([chat_id])
+  @@index([run_at])
+  @@index([sent_at])
+  @@index([skipped_at])
+  @@index([processing_at])
+  @@map("crm_followup_tasks")
 }
 
 model CrmWebhookEvent {

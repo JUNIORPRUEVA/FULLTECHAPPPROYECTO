@@ -92,6 +92,7 @@ class CrmRemoteDataSource {
     throw error;
   }
 
+  // ignore: unused_element
   Future<Map<String, dynamic>> _uploadCrmFile(PlatformFile file) async {
     Future<Map<String, dynamic>> doUpload(PlatformFile f) async {
       final multipart = await _toMultipart(f);
@@ -1146,6 +1147,85 @@ class CrmRemoteDataSource {
     } catch (e) {
       if (kDebugMode) debugPrint('[CRM] Error saving config: $e');
       rethrow;
+    }
+  }
+
+  // Follow-ups (scheduled messages)
+  Future<int> createChatFollowups({
+    required String chatId,
+    required DateTime runAt,
+    required int repeatCount,
+    required int intervalMinutes,
+    required Map<String, dynamic> payload,
+    Map<String, dynamic>? constraints,
+  }) async {
+    if (kDebugMode) {
+      debugPrint('[CRM][HTTP] POST /crm/chats/$chatId/followups');
+    }
+    try {
+      final res = await _dio.post(
+        '/crm/chats/$chatId/followups',
+        data: {
+          'runAt': runAt.toUtc().toIso8601String(),
+          'repeatCount': repeatCount,
+          'intervalMinutes': intervalMinutes,
+          'payload': payload,
+          if (constraints != null) 'constraints': constraints,
+        },
+      );
+      final data = res.data;
+      if (data is Map<String, dynamic>) {
+        return (data['created'] as int?) ?? 0;
+      }
+      return 0;
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'CREATE_FOLLOWUPS');
+    }
+  }
+
+  Future<int> cancelChatFollowups({required String chatId}) async {
+    if (kDebugMode) {
+      debugPrint('[CRM][HTTP] DELETE /crm/chats/$chatId/followups');
+    }
+    try {
+      final res = await _dio.delete('/crm/chats/$chatId/followups');
+      final data = res.data;
+      if (data is Map<String, dynamic>) {
+        return (data['cancelled'] as int?) ?? 0;
+      }
+      return 0;
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'CANCEL_FOLLOWUPS');
+    }
+  }
+
+  Future<Map<String, dynamic>> createBulkFollowups({
+    required DateTime runAt,
+    required int repeatCount,
+    required int intervalMinutes,
+    required Map<String, dynamic> payload,
+    required Map<String, dynamic> filter,
+    Map<String, dynamic>? constraints,
+  }) async {
+    if (kDebugMode) debugPrint('[CRM][HTTP] POST /crm/followups/bulk');
+    try {
+      final res = await _dio.post(
+        '/crm/followups/bulk',
+        data: {
+          'filter': filter,
+          'schedule': {
+            'runAt': runAt.toUtc().toIso8601String(),
+            'repeatCount': repeatCount,
+            'intervalMinutes': intervalMinutes,
+          },
+          'payload': payload,
+          if (constraints != null) 'constraints': constraints,
+        },
+      );
+      final data = res.data;
+      return (data is Map<String, dynamic>) ? data : <String, dynamic>{};
+    } catch (e) {
+      _rethrowAsFriendly(e, op: 'BULK_FOLLOWUPS');
     }
   }
 

@@ -48,6 +48,12 @@ abstract class LocalDb {
   Future<void> markSyncItemSent(String id);
   Future<void> markSyncItemError(String id);
 
+  /// Moves errored sync items (status=2) back to pending (status=0) for a module.
+  ///
+  /// This is useful when an app update fixes a payload/validation issue and we
+  /// want previously failed items to retry.
+  Future<void> requeueErroredSyncItems({required String module});
+
   /// Generic local cache store.
   ///
   /// This is used by offline-first modules to cache server snapshots locally.

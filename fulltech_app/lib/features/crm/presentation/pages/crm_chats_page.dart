@@ -14,6 +14,7 @@ import '../widgets/chat_list_item_pro.dart';
 import '../widgets/chat_thread_view.dart';
 import '../widgets/crm_outbound_message_dialog.dart';
 import '../widgets/right_panel_crm.dart';
+import '../widgets/followups/crm_bulk_followup_dialog.dart';
 
 class CrmChatsPage extends ConsumerStatefulWidget {
   const CrmChatsPage({super.key});
@@ -157,6 +158,62 @@ class _CrmChatsPageState extends ConsumerState<CrmChatsPage> {
               ),
             ),
           ),
+          if (_isRightPanelOpen)
+            Positioned(
+              bottom: 10,
+              left: 10,
+              right: 10,
+              child: SizedBox(
+                height: 44,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    try {
+                      final products = await ref.read(crmProductsProvider.future);
+                      if (!context.mounted) return;
+                      final cfg = await showCrmBulkFollowupDialog(
+                        context,
+                        products: products,
+                        currentStatus: filters.status,
+                        currentProductId: filters.productId,
+                      );
+                      if (cfg == null) return;
+
+                      final repo = ref.read(crmRepositoryProvider);
+                      final result = await repo.createBulkFollowups(
+                        runAt: cfg.runAtLocal,
+                        repeatCount: cfg.repeatCount,
+                        intervalMinutes: cfg.intervalMinutes,
+                        payload: cfg.toPayloadJson(),
+                        filter: cfg.toFilterJson(),
+                        constraints: cfg.toConstraintsJson(),
+                      );
+
+                      if (!context.mounted) return;
+                      final created = result['created'];
+                      final chats = result['chats'];
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Seguimientos programados: $created envíos (${chats ?? 0} chats)',
+                          ),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error programando seguimientos: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.campaign),
+                  label: const Text('Seguimientos generales'),
+                ),
+              ),
+            ),
         ],
       ),
     );
